@@ -1,0 +1,14 @@
+node_modules
+dist/
+dist-install/
+_game_backup/
+.DS_Store
+dist-pkg/
+dist-win/
+assets/probe/ref/
+
+# your own name / identity for this app (see mesh.local.example.json) — never committed
+mesh.local.json
+# team- or machine-specific add-ons (loaded only if present)
+local/
+build-info.json

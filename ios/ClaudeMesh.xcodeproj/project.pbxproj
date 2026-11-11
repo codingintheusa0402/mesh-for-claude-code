@@ -1,0 +1,349 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		7B6B395B3F65FA1A4D6BD07B /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA5D514243AF693EA05152F5 /* PairingView.swift */; };
+		7D976FCD638A52789F8E2A2F /* ClaudeMeshApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC4E92689E57CC8886D7CEAD /* ClaudeMeshApp.swift */; };
+		CF7ACCACA3ADBA28F9D4D0FA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 87035641B479C67301CC9E12 /* Assets.xcassets */; };
+		D550CC7701F686B29013EFB7 /* MeshScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D4966B1DC3EA93D9B8E3F3 /* MeshScreen.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		218BCABC5DB3298492BBC7E9 /* ClaudeMesh.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ClaudeMesh.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6B81B444A86F8B4F1C60341D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		87035641B479C67301CC9E12 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AA5D514243AF693EA05152F5 /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingView.swift; sourceTree = "<group>"; };
+		CC4E92689E57CC8886D7CEAD /* ClaudeMeshApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeMeshApp.swift; sourceTree = "<group>"; };
+		D4D4966B1DC3EA93D9B8E3F3 /* MeshScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshScreen.swift; sourceTree = "<group>"; };
+		"TEMP_3372F649-34AF-40C8-9F50-ED96340E0868" /* Mesh.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Mesh.xcconfig; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		7F278E558B8109F4159DE7F8 /* ClaudeMesh */ = {
+			isa = PBXGroup;
+			children = (
+				87035641B479C67301CC9E12 /* Assets.xcassets */,
+				CC4E92689E57CC8886D7CEAD /* ClaudeMeshApp.swift */,
+				6B81B444A86F8B4F1C60341D /* Info.plist */,
+				D4D4966B1DC3EA93D9B8E3F3 /* MeshScreen.swift */,
+				AA5D514243AF693EA05152F5 /* PairingView.swift */,
+			);
+			path = ClaudeMesh;
+			sourceTree = "<group>";
+		};
+		DBD47253B60A63082B5645E3 = {
+			isa = PBXGroup;
+			children = (
+				7F278E558B8109F4159DE7F8 /* ClaudeMesh */,
+				DD742281634BC63CE8C4105E /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		DD742281634BC63CE8C4105E /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				218BCABC5DB3298492BBC7E9 /* ClaudeMesh.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		"TEMP_58FC06D9-EBAD-41C4-AE5D-D6C65EFDA4FF" /* ios */ = {
+			isa = PBXGroup;
+			children = (
+				"TEMP_3372F649-34AF-40C8-9F50-ED96340E0868" /* Mesh.xcconfig */,
+			);
+			path = ios;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A50591D51E521B942E314609 /* ClaudeMesh */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 57877D2825FF54250BFFC107 /* Build configuration list for PBXNativeTarget "ClaudeMesh" */;
+			buildPhases = (
+				D29D7D6BFFCD3BC6DDBD042D /* Sources */,
+				D1D2BF15F9BB0DFEA1695888 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ClaudeMesh;
+			packageProductDependencies = (
+			);
+			productName = ClaudeMesh;
+			productReference = 218BCABC5DB3298492BBC7E9 /* ClaudeMesh.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		FE76250C6914A1865215BB94 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					A50591D51E521B942E314609 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 086B7505948594B4740B3D81 /* Build configuration list for PBXProject "ClaudeMesh" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = DBD47253B60A63082B5645E3;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = DD742281634BC63CE8C4105E /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A50591D51E521B942E314609 /* ClaudeMesh */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D1D2BF15F9BB0DFEA1695888 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF7ACCACA3ADBA28F9D4D0FA /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D29D7D6BFFCD3BC6DDBD042D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7D976FCD638A52789F8E2A2F /* ClaudeMeshApp.swift in Sources */,
+				D550CC7701F686B29013EFB7 /* MeshScreen.swift in Sources */,
+				7B6B395B3F65FA1A4D6BD07B /* PairingView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		16540FA8E260EB927EB3C6DA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		99D2566ACFD1F951D032ECAD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = "TEMP_3372F649-34AF-40C8-9F50-ED96340E0868" /* Mesh.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ClaudeMesh/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "$(MESH_NAME)";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Scan the pairing QR code shown in $(MESH_NAME) on your Mac, and take photos to attach to a session.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Connect to $(MESH_NAME) running on your Mac.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record a video to attach to a session.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach photos and videos to a session.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MESH_BUNDLE_ID)";
+				PRODUCT_NAME = "$(MESH_NAME)";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		9F44B8C6EEE40AB5BB81A4A5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		D3CBD46148947CEE6CDFFFB5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = "TEMP_3372F649-34AF-40C8-9F50-ED96340E0868" /* Mesh.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ClaudeMesh/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "$(MESH_NAME)";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Scan the pairing QR code shown in $(MESH_NAME) on your Mac, and take photos to attach to a session.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Connect to $(MESH_NAME) running on your Mac.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record a video to attach to a session.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach photos and videos to a session.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MESH_BUNDLE_ID)";
+				PRODUCT_NAME = "$(MESH_NAME)";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		086B7505948594B4740B3D81 /* Build configuration list for PBXProject "ClaudeMesh" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				16540FA8E260EB927EB3C6DA /* Debug */,
+				9F44B8C6EEE40AB5BB81A4A5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		57877D2825FF54250BFFC107 /* Build configuration list for PBXNativeTarget "ClaudeMesh" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				99D2566ACFD1F951D032ECAD /* Debug */,
+				D3CBD46148947CEE6CDFFFB5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = FE76250C6914A1865215BB94 /* Project object */;
+}

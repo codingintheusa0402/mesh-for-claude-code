@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mesh for Claude Code">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" id="manifest">
+<title>Mesh for Claude Code</title>
+<link rel="stylesheet" href="/xterm.css">
+<link rel="stylesheet" href="/phone.css">
+<link rel="stylesheet" href="/usage-view.css">
+</head>
+<body data-view="mesh">
+<header id="top">
+  <img src="/icon.png" class="logo" alt="">
+  <span class="brand">Mesh for Claude Code</span>
+  <span id="hostTag" class="hosttag hidden"></span>
+  <span class="spacer"></span>
+  <span id="conn" class="conn" title="connection"></span>
+  <span id="vnc" class="vnc hidden"></span>
+  <span id="today" class="today"></span>
+</header>
+
+<main id="stage">
+  <canvas id="mesh"></canvas>
+  <div id="hint">Tap a session · pinch to zoom · drag the sun to spin · tap it for its menu</div>
+</main>
+
+<section id="split" aria-label="Session"><div id="switch"></div><div id="pane"></div></section>
+<section id="grid" aria-label="All live sessions"></section>
+
+<section id="sheet" class="sheet hidden"><div class="grab"></div><div id="sheetBody"></div></section>
+
+<nav id="tabs">
+  <button data-tab="mesh" class="on"><b>◎</b>Mesh</button>
+  <button data-tab="split"><b>◐</b>Split</button>
+  <button data-tab="grid"><b>▦</b>Grid</button>
+  <button data-tab="history"><b>↺</b>All sessions</button>
+  <button data-tab="term" id="termTab" class="hidden"><b>›_</b>Terminal</button>
+</nav>
+<div id="kbBar"><button id="kbDone">Done</button></div>
+<div id="toast"></div>
+<div id="offline" class="hidden"></div>
+
+<script src="/app-name.js"></script>
+<script src="/xterm.js"></script>
+<script src="/mesh.js"></script>
+<script src="/mother.js"></script>
+<script src="/bubbles.js"></script>
+<script src="/organism.js"></script>
+<script src="/portal.js"></script>
+<script src="/probe.js"></script>
+<script src="/blackhole.js"></script>
+<script src="/endurance.js"></script>
+<script src="/handles.js"></script>
+<script src="/probe-life.js"></script>
+<script src="/probe-tidy.js"></script>
+<script type="module" src="/three3d.js"></script>
+<script src="/md.js"></script>
+<script src="/term-stamps.js"></script>
+<script src="/usage-view.js"></script>
+<script src="/phone.js"></script>
+</body>
+</html>

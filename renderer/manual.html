@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
+<title>Mesh for Claude Code Manual</title>
+<script src="app-name.js"></script>
+<!-- Help ▸ Manual (main.js). The gallery pictures in manual/ are the app's own renderer, each object drawn
+     alone on black (2026-10-27). -->
+<style>
+  :root { --bg: #000; --card: #0b0c12; --line: #1d2030; --text: #e9ecf7; --dim: #9aa3bf; --accent: #ffd59e; --cool: #8fd3ff; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.6 -apple-system, system-ui, sans-serif; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 36px 28px 80px; }
+  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 18px; }
+  h1 { margin: 0; font-size: 30px; letter-spacing: -.01em; }
+  header p { margin: 4px 0 0; color: var(--dim); max-width: 620px; }
+  nav { display: flex; gap: 6px; flex-wrap: wrap; }
+  nav a { color: var(--dim); text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 12.5px; }
+  nav a:hover { color: var(--text); border-color: #3a4060; }
+  h2 { font-size: 20px; margin: 44px 0 6px; }
+  h2 + .lead { color: var(--dim); margin: 0 0 18px; }
+  h3 { font-size: 15px; margin: 22px 0 6px; color: var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+  .card.wide { grid-column: span 2; }
+  .card img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #05060c; display: block; }
+  .card.wide img { aspect-ratio: 560 / 300; }
+  .card img.faint { filter: brightness(3.2) contrast(1.3); }
+  .card .t { padding: 12px 14px 14px; }
+  .card h4 { margin: 0 0 4px; font-size: 14.5px; }
+  .card p { margin: 0 0 6px; color: var(--dim); font-size: 13px; }
+  .card p b { color: var(--text); font-weight: 600; }
+  .card .do { color: var(--cool); }
+  .sw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 4px 0 2px; vertical-align: 0; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 8px 36px; }
+  ul { margin: 6px 0 0; padding-left: 18px; } li { margin: 3px 0; }
+  kbd { font: 600 11.5px -apple-system, system-ui, sans-serif; border: 1px solid #343a55; border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; background: #10121b; color: var(--text); }
+  table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 600; }
+  .note { color: var(--dim); font-size: 12.5px; }
+  @media (max-width: 640px) { .card.wide { grid-column: span 1; } .wrap { padding: 24px 16px 60px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1 data-app-name>Mesh for Claude Code Manual</h1>
+    <p>Every Claude Code session on this Mac (and the paired one) as a living solar system: what each object means, and everything you can do with it.</p>
+  </div>
+  <nav><a href="#objects">Objects</a><a href="#saver">Screen saver</a><a href="#basics">Basics</a><a href="#mesh">Moving round</a><a href="#size">Size &amp; place</a><a href="#probe">The probe</a><a href="#bin">Ending sessions</a><a href="#menus">Menus &amp; keys</a></nav>
+</header>
+
+<h2 id="objects">The objects</h2>
+<p class="lead">Each picture is drawn by the app itself. Hover the mesh to find them; most of them react to the pointer.</p>
+<div class="grid">
+  <div class="card"><img src="manual/mother.webp" alt="The mother star"><div class="t"><h4>Mother star</h4>
+    <p>The centre of the system: your Claude plan. Its layers age like a real star as usage is spent. The white-hot core is the all-models weekly limit, the body is the 5-hour session limit and the rim is the current model's weekly limit. Each goes from bright white to vivid red as it runs out.</p>
+    <p>The flares and waves count down to the session reset: light blue, then magenta, then vivid red over the last 4 hours. The usage card underneath shows the numbers.</p>
+    <p class="do">Click it to broadcast a message to several sessions at once.</p></div></div>
+  <div class="card"><img src="manual/session-opus.webp" alt="An Opus session"><div class="t"><h4>Session · Opus</h4>
+    <p>One Claude Code session. Its colour shows the model: <span class="sw" style="background:#4fd0ff"></span>Opus is a cyan rim around a violet nebula.</p>
+    <p><b>Size</b> grows with total spend. <b>Spin</b> speeds up with the token burn. <b>Brightness</b> follows how recently and how often it runs. It darkens as today's spend grows.</p>
+    <p class="do">Click to open it · right-click for commands · drag to give it its own orbit.</p></div></div>
+  <div class="card"><img src="manual/session-sonnet.webp" alt="A Sonnet session"><div class="t"><h4>Session · Sonnet</h4>
+    <p><span class="sw" style="background:#8dff5a"></span>A lime rim around a fibrous green nebula.</p></div></div>
+  <div class="card"><img src="manual/session-haiku.webp" alt="A Haiku session"><div class="t"><h4>Session · Haiku</h4>
+    <p><span class="sw" style="background:#ffb347"></span>An amber rim around an orange nebula.</p></div></div>
+  <div class="card"><img src="manual/session-fable.webp" alt="A Fable session"><div class="t"><h4>Session · Fable</h4>
+    <p><span class="sw" style="background:#ff4fd8"></span>A magenta rim around a red, flame-like nebula.</p></div></div>
+  <div class="card"><img src="manual/session-server.webp" alt="A session using the server"><div class="t"><h4>Session · uses the server</h4>
+    <p><span class="sw" style="background:#e055dc"></span>A session that works with the 24/7 server: thick violet glass and a dense swarm of golden sparks.</p>
+    <p class="do">The session panel's Colour picker can give any bubble one of five other colours (Aurora, Nebula, Solar, Rose, Glacier).</p></div></div>
+  <div class="card"><img src="manual/label.webp" alt="A bubble with its name tag"><div class="t"><h4>Name tag &amp; health</h4>
+    <p>Under each bubble: its name, model, tokens today and its state. <span class="sw" style="background:#7dffc4"></span>working · <span class="sw" style="background:#ffcf6b"></span>waiting for you / silent mid-task · <span class="sw" style="background:#ff6b7d"></span>errors (the rim turns red too) · <span class="sw" style="background:#7c86b8"></span>idle.</p></div></div>
+  <div class="card"><img src="manual/nova.webp" alt="A finish flare"><div class="t"><h4>Finish flare</h4>
+    <p>When a session finishes its prompt it flares like a new star: a white-hot flash, a shockwave ring, light rays and sparks in its own colour (about 3 seconds).</p></div></div>
+  <div class="card"><img src="manual/roots.webp" alt="Session roots"><div class="t"><h4>Roots</h4>
+    <p>What a session has running for it, as tendrils over the top: <span class="sw" style="background:#7dd3fc"></span>loops · <span class="sw" style="background:#c4b5fd"></span>cron jobs · <span class="sw" style="background:#fcd34d"></span>monitors · <span class="sw" style="background:#86efac"></span>sub-agents · <span class="sw" style="background:#f9a8d4"></span>skills.</p>
+    <p>A root is fully lit while active and fades over about 30 minutes without activity. Hover a bubble to read their names.</p></div></div>
+  <div class="card"><img src="manual/links.webp" alt="Lines to the mother star"><div class="t"><h4>Lines to the mother star</h4>
+    <p>Token streams. While a session works, a bundle of strands runs from it to the star. More and thicker strands mean a heavier load, and the colour runs from blue through yellow and orange to red as it works harder.</p>
+    <p class="do">Window ▸ Lines to the mother star hides the resting lines; the strand bundles of sessions burning tokens still show.</p></div></div>
+  <div class="card wide"><img class="faint" src="manual/ring.webp" alt="The orbit ring"><div class="t"><h4>Orbit ring</h4>
+    <p>The plane the sessions orbit in, seen tilted. Its far half passes behind the star and its near half in front.</p>
+    <p class="do">Window ▸ Orbit lines hides it, along with the hand-placed orbits and the trails.</p></div></div>
+  <div class="card wide"><img src="manual/spinband.webp" alt="The orbit control disk"><div class="t"><h4>Orbit control disk (spin band)</h4>
+    <p>The grab zone around the ring, with ticks that turn as the system spins.</p>
+    <p class="do">Drag along it sideways to spin the whole system (flick it to let it coast). Drag up or down to tilt it up to ±15°. Everything rides the turn and the tilt: the bubbles, the groups, the probe, and the Endurance and the black hole, which are bodies out in the orbit plane. They swing round to the far side, smaller and behind the star, and back to the near side, bigger and in front. Window ▸ Orbit control disk hides it; spinning still works.</p></div></div>
+  <div class="card wide"><img src="manual/trails.webp" alt="Orbit trails"><div class="t"><h4>Orbit trails</h4>
+    <p>A fading trail behind each session in its own colour, showing where and which way it goes. A session you placed by hand also shows its own orbit ellipse.</p></div></div>
+  <div class="card"><img src="manual/portal.webp" alt="A group portal"><div class="t"><h4>Group portal</h4>
+    <p>A session group: a burning sling-ring portal with sigils turning behind it. Its sessions ride the ring as small satellites around the group's own main bubble.</p>
+    <p class="do">Click the main bubble to open or close the group · drag it to move the whole group.</p></div></div>
+  <div class="card"><img src="manual/probe.webp" alt="The probe droid"><div class="t"><h4>Probe droid</h4>
+    <p>Patrols the system: rides the orbit, roams, and every few minutes hovers over a bubble and scans it with a tractor beam, then reports what it found. It's an ex-con working off his time as the Mesh probe, and he talks like it. <a href="#probe" style="color:var(--cool)">More ›</a></p>
+    <p class="do">Hover to stop it · click for its commands.</p></div></div>
+  <div class="card"><img src="manual/blackhole.webp" alt="The black hole"><div class="t"><h4>Black hole</h4>
+    <p>The bin, ray-traced live like Gargantua: light bends round the hole, so you see the far side of the disk over the top and its underside as a ring below.</p>
+    <p class="do">Drop a session on it to end it (<code>/exit</code>) · drag to move it · ⌘-drag to turn it any way round.</p></div></div>
+  <div class="card"><img src="manual/endurance.webp" alt="The Endurance"><div class="t"><h4>Endurance</h4>
+    <p>The probe's home, a ring station modelled in 3-D with real self-shadowing. It spins and slowly swings through every angle. The probe docks on its hub to sleep when nothing has worked for 5 minutes.</p>
+    <p class="do">Drag to move it · ⌘-drag to turn it.</p></div></div>
+  <div class="card wide"><img src="manual/system.webp" alt="The whole system"><div class="t"><h4>The whole system</h4>
+    <p>All of it together. The map reaches half a window past every edge, so zoom out to see objects you've moved off-screen.</p></div></div>
+</div>
+
+<h2 id="basics">Basics</h2>
+<div class="cols">
+  <div>
+    <h3>Views</h3>
+    <ul>
+      <li><b>Mesh</b> <kbd>⌘1</kbd>: only the system.</li>
+      <li><b>Split</b> <kbd>⌘2</kbd>: the system above the in-app terminals.</li>
+      <li><b>Grid</b> <kbd>⌘3</kbd>: all terminals tiled.</li>
+      <li><b>Simple</b> <kbd>⌘P</kbd>: no animation or motion, best over Screen Sharing or VNC.</li>
+      <li><kbd>⌘0</kbd> shows or hides the Sessions sidebar. Drag its edge to resize it; double-click the edge to reset.</li>
+    </ul>
+    <h3>Sessions</h3>
+    <ul>
+      <li><b>Click</b> a bubble or a sidebar row to open its panel: its terminal and an input box.</li>
+      <li><b>Right-click</b> (or ⋯ on a row) for slash commands, your skills, Rename and Convert to agent.</li>
+      <li><b>Press and hold</b> a bubble for its details.</li>
+      <li><b>+ New</b> starts a Claude session or a shell in the app, in a folder and with a model you pick.</li>
+      <li><b>All sessions</b> in the sidebar lists past conversations; pick one to resume it.</li>
+    </ul>
+  </div>
+  <div>
+    <h3>Top bar</h3>
+    <ul>
+      <li>Counts of working, idle and needing-attention sessions, and API errors in the last hour.</li>
+      <li>Plan usage left: the 5-hour session and the week.</li>
+      <li>Schedules: when each job runs, on the Mac or the server.</li>
+      <li>📱 <b>iPhone</b>: scan the QR code to use <span data-app-name>Mesh for Claude Code</span> on your phone. Drag bubbles there too, and tap the probe for its menu.</li>
+      <li>🔔 <b>Notifications</b> when a session finishes or errors.</li>
+    </ul>
+    <h3>Two Macs</h3>
+    <ul><li>Sessions running on the paired Mac show up in the same system, tagged with that Mac's name. You can open and control them from here.</li></ul>
+  </div>
+</div>
+
+<h2 id="mesh">Moving round the system</h2>
+<div class="cols">
+  <ul>
+    <li><b>Zoom:</b> pinch or scroll.</li>
+    <li><b>Pan:</b> drag empty space.</li>
+    <li><b>Reset the view:</b> double-click empty space.</li>
+    <li><b>Burst:</b> click empty space for a shockwave that pushes the drifting motes.</li>
+  </ul>
+  <ul>
+    <li><b>Move a session's orbit:</b> drag its bubble anywhere.</li>
+    <li><b>Tilt its orbit:</b> <kbd>⌘</kbd>-drag the bubble.</li>
+    <li><b>Back to the automatic orbit:</b> double-click the bubble.</li>
+    <li><b>Spin / tilt everything:</b> drag along the spin band (sideways / up and down).</li>
+  </ul>
+</div>
+
+<h2 id="size">Size &amp; place</h2>
+<p class="lead">Hold <kbd>Shift</kbd> and scroll over an object to resize it. Scroll up to grow it; a tip shows the size. Over empty space, Shift-scroll still zooms.</p>
+<table>
+  <tr><th>Object</th><th>Size range</th><th>Move</th><th>Turn</th></tr>
+  <tr><td>Mother star</td><td>60–300% (never past 42% of the window; the bubbles keep their size; a bigger star pulls harder)</td><td>·</td><td>·</td></tr>
+  <tr><td>Session bubble</td><td>50–200%, each its own</td><td>drag (its orbit)</td><td>⌘-drag tilts its orbit</td></tr>
+  <tr><td>Probe</td><td>50–220%</td><td>Stay here (menu)</td><td>·</td></tr>
+  <tr><td>Black hole</td><td>50–300% (a bigger hole pulls harder)</td><td>drag</td><td>⌘-drag, any way round</td></tr>
+  <tr><td>Endurance</td><td>50–220%</td><td>drag</td><td>⌘-drag, any way round</td></tr>
+</table>
+<p class="note">Sizes and spots are kept per Mac. Window ▸ Reset sizes &amp; positions puts everything back.</p>
+
+<h2 id="probe">The probe</h2>
+<div class="cols">
+  <div>
+    <h3>What it does on its own</h3>
+    <ul>
+      <li>Rides the orbit or roams round the ring. Every 75 seconds it scans a bubble with its tractor beam (1 in 4 times the mother star) and says what it found: what the session is doing, the question it's waiting on, the error, or how long since it finished. On the star it gives the health of Claude Code and <span data-app-name>Mesh for Claude Code</span>.</li>
+      <li>It flies straight to an "incident" session whenever that session posts a new reply.</li>
+      <li>If it strays too close to the mother star, the star's gravity catches it. It's dragged round the star in a tightening, quickening orbit, behind it and in front, tumbling, with its engines sputtering. Then it fights free with a full burn and goes back to exactly what it was doing.</li>
+      <li>When nothing has worked for 5 minutes it flies home to the Endurance, gives a health report and dozes off. It wakes when a session starts working.</li>
+      <li><b>Grab it</b> (press and drag): it's hauled along on a short tether and fights you the whole way. Its nose points away, its engine blasts back at you, and it curses. Let go and it bolts.</li>
+      <li><b>Losing it:</b> if it's dropped on or strays into the black hole, or the mother star's pull wins (rare; likelier with a bigger star), it's destroyed. The Endurance builds a new one in 60 seconds at its hub, live in 3-D: the shell is printed, the parts are fitted and welded by robot arms, it's painted, powered on and checked. Then Probe Mk II (III, IV…) launches with a new paint job.</li>
+      <li>Its speech bubble stays while your pointer is on it. The text can be copied and the links open in your browser.</li>
+    </ul>
+  </div>
+  <div>
+    <h3>Its menu (click it)</h3>
+    <ul>
+      <li><b>Ask me to find…</b>: say what you need, in any words or in Korean. It finds the running session for it (flies there and opens it) or your installed skill (starts a new session running it). If nothing fits it asks <i>Make one?</i>: Yes starts a session for it, No ends the conversation.</li>
+      <li><b>Scan a session…</b>: pick any bubble or the mother star.</li>
+      <li><b>Check what needs me</b>: visits every session that's waiting, erroring or stuck, one by one.</li>
+      <li><b>Health check</b> · <b>Say the last report again</b>.</li>
+      <li><b>Stay here</b> / <b>Resume patrol</b> · <b>Take a nap</b> (15 min) / <b>Wake up</b>.</li>
+    </ul>
+  </div>
+</div>
+
+<h2 id="bin">Ending a session: the black hole</h2>
+<ul>
+  <li>Drag a session's bubble onto the black hole. The disk flares, a dashed ring shows where to let go, and the bubble starts shedding a stream into the disk.</li>
+  <li>Let go and the hole eats it like a star. The bubble falls in, stretches, and is torn into a stream: half wraps round the hole and half is flung away. The stream crosses itself in flashes, settles into the disk and fades as it sinks. The disk flares, with brief jets at the peak.</li>
+  <li><code>/exit</code> is sent once the bubble is fully torn apart. Until then, <b>Undo</b> under the hole pulls it back out.</li>
+  <li>Groups and view-only sessions bounce off. A session that doesn't exit within 30 seconds comes back out.</li>
+</ul>
+
+<h2 id="saver">Screen saver</h2>
+<ul>
+  <li>After 3 minutes without any keyboard or mouse input on the Mac, while <span data-app-name>Mesh for Claude Code</span> is on screen, the camera takes over: a slow push across the system as it turns, dolly-ins on the mother star, tracking shots following sessions round their orbits, the probe sent to scan one and followed in, the group portals, the black hole and the Endurance, cut together with fades. No captions.</li>
+  <li>Any key or mouse movement ends it and the view eases back to exactly where you had it. It doesn't run in the mini window, Simple mode, Grid view or on the iPhone.</li>
+  <li>Window ▸ Screen saver after 3 min idle switches it off.</li>
+</ul>
+
+<h2 id="menus">Menus &amp; keys</h2>
+<div class="cols">
+  <ul>
+    <li><b>View ▸ Mesh</b>: switch individual effects on and off (starfield, the star's flames, the ring, trails, link strands, name tags, sparks, roots, finish flare, portal sigils and sparks, the probe, the black hole, the Endurance).</li>
+    <li><b>Window ▸ Show</b>: the top-bar items and side panels, one by one.</li>
+    <li><b>Window ▸ Orbit lines</b> · <b>Lines to the mother star</b> · <b>Orbit control disk</b> · <b>Screen saver after 3 min idle</b>, <b>Reset sizes &amp; positions</b>, and <b>Reopen last sessions without asking</b>.</li>
+    <li><b>Help ▸ Manual</b>: this page.</li>
+  </ul>
+  <table>
+    <tr><th>Keys &amp; gestures</th><th></th></tr>
+    <tr><td><kbd>⌘0</kbd> <kbd>⌘1</kbd> <kbd>⌘2</kbd> <kbd>⌘3</kbd></td><td>sidebar · Mesh · Split · Grid</td></tr>
+    <tr><td><kbd>⌘P</kbd></td><td>Simple mode</td></tr>
+    <tr><td><kbd>Shift</kbd> + scroll</td><td>resize the object under the pointer</td></tr>
+    <tr><td><kbd>⌘</kbd> + drag</td><td>tilt an orbit · turn the Endurance or the black hole</td></tr>
+    <tr><td>double-click</td><td>reset the view · a bubble back to its automatic orbit</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>close the probe's menu</td></tr>
+  </table>
+</div>
+</div>
+</body>
+</html>

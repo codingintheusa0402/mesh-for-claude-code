@@ -1,0 +1,139 @@
+{
+  "name": "mesh-for-claude-code",
+  "version": "1.0.0",
+  "description": "Mission control for Claude Code sessions",
+  "license": "MIT",
+  "author": "",
+  "homepage": "https://github.com/codingintheusa0402/mesh-for-claude-code",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codingintheusa0402/mesh-for-claude-code.git"
+  },
+  "keywords": [],
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "rebuild": "electron-rebuild -f -w node-pty",
+    "dist": "electron-builder --mac --dir",
+    "install-app": "bash install.sh",
+    "dist:win": "electron-builder --win nsis --x64",
+    "dist:mac-pkg": "bash installer/build-mac-pkg.sh"
+  },
+  "type": "commonjs",
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-serialize": "0.14.0",
+    "@xterm/xterm": "^6.0.0",
+    "animejs": "^4.5.0",
+    "node-pty": "^1.1.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  },
+  "allowScripts": {
+    "electron@44.5.1": true,
+    "node-pty@1.1.0": true
+  },
+  "productName": "Mesh for Claude Code",
+  "build": {
+    "appId": "dev.meshforclaudecode.app",
+    "productName": "Mesh for Claude Code",
+    "mac": {
+      "target": "dir",
+      "category": "public.app-category.developer-tools",
+      "identity": null,
+      "icon": "build/icon.icns",
+      "extendInfo": {
+        "NSDesktopFolderUsageDescription": "Claude Code sessions run inside Mesh for Claude Code and work with files on your Desktop.",
+        "NSDocumentsFolderUsageDescription": "Claude Code sessions run inside Mesh for Claude Code and work with files in Documents.",
+        "NSDownloadsFolderUsageDescription": "Claude Code sessions run inside Mesh for Claude Code and work with files in Downloads.",
+        "NSRemovableVolumesUsageDescription": "Claude Code sessions run inside Mesh for Claude Code and may use files on external drives.",
+        "NSNetworkVolumesUsageDescription": "Claude Code sessions run inside Mesh for Claude Code and may use files on network drives.",
+        "NSAppleEventsUsageDescription": "Mesh for Claude Code controls Claude Code sessions running in Terminal."
+      }
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "mesh-name.js",
+      "mesh.local.json",
+      "local/**",
+      "collector.js",
+      "core.js",
+      "transcript-stamps.js",
+      "mcp-activity.js",
+      "project-folders.js",
+      "folder-mirror.js",
+      "updater.js",
+      "build-info.json",
+      "ollama-engine.js",
+      "project-cards.js",
+      "live-cdp.js",
+      "live-job.js",
+      "phone-server.js",
+      "peer.js",
+      "handoff.js",
+      "hangar-main.js",
+      "tmux-panes.js",
+      "fs-guard.js",
+      "archify.js",
+      "archify-preload.js",
+      "hermes-sessions.js",
+      "session-refresh.js",
+      "calendar.js",
+      "usage-core.js",
+      "usage-main.js",
+      "usage-proc.js",
+      "renderer/**",
+      "phone/**",
+      "build/icon.png",
+      "build/icon-ios.png",
+      "node_modules/**",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/node-pty/**",
+      "phone/**",
+      "renderer/**"
+    ],
+    "extraResources": [
+      {
+        "from": "installer",
+        "to": "installer",
+        "filter": [
+          "bootstrap.ps1",
+          "bootstrap-mac.sh"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "Mesh-for-Claude-Code-Setup-${version}-x64.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Mesh for Claude Code",
+      "include": "installer/nsis-bootstrap.nsh",
+      "installerLanguages": [
+        "en_US",
+        "ko_KR"
+      ],
+      "language": "1033"
+    }
+  }
+}

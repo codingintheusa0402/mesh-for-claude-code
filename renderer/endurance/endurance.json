@@ -1,0 +1,20 @@
+{
+ "frames": 48,
+ "cols": 8,
+ "cell": 320,
+ "turn": 180,
+ "ortho": 2.4328843451689703,
+ "ringR": 1.0,
+ "elev": 32.0,
+ "hubFront": 0.3,
+ "navLights": [
+  {
+   "module": 3,
+   "color": "green"
+  },
+  {
+   "module": 9,
+   "color": "red"
+  }
+ ]
+}

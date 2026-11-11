@@ -1,0 +1,7 @@
+// The iPhone app's name and identity. Public defaults here; put your own in Local.xcconfig (gitignored), e.g.
+//   MESH_NAME = My Mesh
+//   MESH_BUNDLE_ID = com.example.mymesh.ios
+//   DEVELOPMENT_TEAM = ABCDE12345
+MESH_NAME = Mesh for Claude Code
+MESH_BUNDLE_ID = dev.meshforclaudecode.ios
+#include? "Local.xcconfig"

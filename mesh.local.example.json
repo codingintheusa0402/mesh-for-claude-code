@@ -1,0 +1,8 @@
+{
+  "name": "My Mesh",
+  "appId": "com.example.mymesh",
+  "dataDir": "My Mesh",
+  "signId": "Mesh Local Signing",
+  "tmuxSession": "mesh",
+  "guideUrl": ""
+}

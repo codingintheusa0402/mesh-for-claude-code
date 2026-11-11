@@ -1,0 +1,67 @@
+name: Build
+
+# Every push and pull request: build the app for macOS (Apple Silicon + Intel) and Windows, launch each packaged
+# build and check it renders (scripts/smoke.js). A tag v* also publishes the installers as a GitHub Release.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            name: macOS (Apple Silicon)
+            args: --mac dmg zip --arm64
+            exe: 'dist/mac-arm64/Mesh for Claude Code.app/Contents/MacOS/Mesh for Claude Code'
+          - os: macos-15-intel
+            name: macOS (Intel)
+            args: --mac dmg zip --x64
+            exe: 'dist/mac/Mesh for Claude Code.app/Contents/MacOS/Mesh for Claude Code'
+          - os: windows-latest
+            name: Windows
+            args: --win nsis --x64
+            exe: 'dist/win-unpacked/Mesh for Claude Code.exe'
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder ${{ matrix.args }} -c.mac.identity=- --publish never
+      - name: Smoke test (launch the packaged app)
+        shell: bash
+        run: node scripts/smoke.js "${{ matrix.exe }}" "smoke-${{ runner.os }}-${{ runner.arch }}.png"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            smoke-*.png
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+          if-no-files-found: ignore
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes || true
+          gh release upload "$GITHUB_REF_NAME" dist/*.dmg dist/*.zip dist/*.exe --clobber 2>/dev/null || gh release upload "$GITHUB_REF_NAME" $(ls dist/*.dmg dist/*.zip dist/*.exe 2>/dev/null) --clobber

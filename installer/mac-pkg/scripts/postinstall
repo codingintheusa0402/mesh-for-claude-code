@@ -1,0 +1,11 @@
+#!/bin/bash
+# .pkg postinstall (runs as root): install Claude Code for the logged-in user if it's missing, with the official
+# installer. Output goes to /var/log/install.log (Installer › Window › Installer Log). __APP_NAME__ is filled in at build.
+APP_NAME="__APP_NAME__"
+APP="/Applications/$APP_NAME.app"
+xattr -dr com.apple.quarantine "$APP" 2>/dev/null
+U="$(stat -f%Su /dev/console)"
+[ -z "$U" ] || [ "$U" = root ] && exit 0
+H="$(dscl . -read "/Users/$U" NFSHomeDirectory 2>/dev/null | awk '{print $2}')"
+sudo -u "$U" -H env HOME="$H" APP_NAME="$APP_NAME" /bin/bash "$APP/Contents/Resources/installer/bootstrap-mac.sh" 2>&1 | sed "s/^/[$APP_NAME] /"
+exit 0

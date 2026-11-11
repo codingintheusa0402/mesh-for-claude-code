@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' blob:">
+<title>Mesh for Claude Code</title>
+<script src="app-name.js"></script>
+<link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="dock.css">
+<link rel="stylesheet" href="usage-view.css">
+</head>
+<body data-view="split">
+<header id="top">
+  <button id="drawerBtn" class="icon-btn on" title="Sessions (⌘0)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.75" y="5" width="16.5" height="14" rx="2.25"/><path d="M9.25 5v14"/></svg></button>
+  <div class="brand"><img class="logo" src="icon.png" alt=""><span class="bname" data-app-name>Mesh for Claude Code</span></div>
+  <div id="miniUsage" class="mini-usage" title="Plan usage left"></div>
+  <div id="models" class="models"></div>
+  <div id="cal" class="cal" title="Today in Google Calendar"></div>
+  <div class="spacer"></div>
+  <div id="health" class="health"></div>
+  <div class="seg" id="viewSeg">
+    <button data-view="mesh" title="Mesh only (⌘1)">Mesh</button>
+    <button data-view="split" title="Mesh + terminals (⌘2)">Split</button>
+    <button data-view="grid" title="All terminals tiled (⌘3)">Grid</button>
+  </div>
+  <button id="usagePill" class="hpill" title="Open Token usage"></button>
+  <button id="simpleBtn" class="icon-btn" title="Simple mode — no animation or motion, best over Screen Sharing / VNC (⌘P)">Simple</button>
+  <button id="schedBtn" class="icon-btn on" title="Schedules — when each job runs, on the Mac or the server"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12.75" r="7.75"/><path d="M12 8.5v4.25l2.75 1.75M9.75 2.75h4.5"/></svg></button>
+  <button id="vncBtn" class="icon-btn on vnc-btn" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.75" y="4.25" width="18.5" height="12.5" rx="2"/><path d="M8.5 20.25h7M12 16.75v3.5"/></svg><span></span></button>
+  <button id="phoneBtn" class="icon-btn on" data-app-name title="Use Mesh for Claude Code on your iPhone"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.75" y="2.75" width="10.5" height="18.5" rx="2.5"/><path d="M10.75 18.25h2.5"/></svg></button>
+  <button id="bell" class="icon-btn on" title="Notify when a session finishes or errors"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 16.25V11a6 6 0 0 0-12 0v5.25L4.75 18h14.5z"/><path d="M10 20.75a2.1 2.1 0 0 0 4 0"/><path class="off" d="M4 3.5l16 17"/></svg></button>
+  <button id="newBtn" class="primary">+ New</button>
+</header>
+
+<div id="body">
+  <aside id="side">
+    <div class="side-h">Sessions <span id="sessCount"></span></div>
+    <div id="list"></div>
+    <div id="agentsBox" style="display:none"><div class="side-h">Agents <span id="agCount"></span></div><div id="agList"></div></div>
+    <div class="side-h">Today</div>
+    <div id="today" class="today"></div>
+    <div class="side-h hist-h">All sessions <span id="hCount"></span><label class="hauto" title="Also show automated claude -p runs"><input type="checkbox" id="hAuto"> auto</label></div>
+    <input id="hSearch" placeholder="Search sessions…  (click to resume)">
+    <div id="hList"></div>
+  </aside>
+    <div id="sideHandle" title="Drag to resize the sidebar · double-click to reset"></div>
+
+  <main id="main">
+    <section id="meshWrap">
+      <canvas id="mesh"></canvas>
+      <div id="board"></div>
+      <div id="meshHint">Click a session to control it · right-click for commands · click the mother star to broadcast (drag it to spin the system) · drag a session to change its orbit (⌘-drag tilts it) · pinch or scroll to zoom · double-click to reset</div>
+      <div id="loading">Reading transcripts…</div>
+    </section>
+    <div id="dockHandle"></div>
+    <section id="dock">
+      <div id="tabs"></div>
+      <div id="terms"><div id="noTerms"><div>No in-app terminals yet. <b>+ New</b> starts a Claude session or shell here.<br>Sessions already running in Terminal.app appear in the mesh and can be controlled from their panel.</div></div></div>
+    </section>
+    <nav id="rail" aria-label="Sessions"></nav>
+  </main>
+
+  <aside id="panel" class="hidden">
+    <div id="panelBody"></div>
+  </aside>
+</div>
+
+<div id="modal" class="hidden">
+  <div class="card" id="modalCard"></div>
+</div>
+<div id="toast"></div>
+
+<script src="../node_modules/@xterm/xterm/lib/xterm.js"></script>
+<script src="../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+<script src="../node_modules/@xterm/addon-serialize/lib/addon-serialize.js"></script>
+<script src="mesh.js"></script>
+<script src="mother.js"></script>
+<script src="bubbles.js"></script>
+<script src="organism.js"></script>
+<script src="portal.js"></script>
+<script src="springboard.js"></script>
+<script src="probe.js"></script>
+<script src="probe-lines.js"></script>
+<script src="blackhole.js"></script>
+<script src="endurance.js"></script>
+<script src="handles.js"></script>
+<script src="probe-life.js"></script>
+<script src="probe-tidy.js"></script>
+<script src="probe-deliver.js"></script>
+<script src="probe-crew.js"></script>
+<script src="probe-manual.js"></script>
+<script src="../node_modules/animejs/dist/bundles/anime.umd.min.js"></script>
+<script src="cine.js"></script>
+<script src="cine-stories.js"></script>
+<script src="cine-films.js"></script>
+<script type="module" src="three3d.js"></script>
+<script src="term-stamps.js"></script>
+<script src="dock.js"></script>
+<script src="app.js"></script>
+<script src="folder-pods.js"></script>
+<script src="project-cards-ui.js"></script>
+<script src="refresh-ui.js"></script>
+<script src="cleanup.js"></script>
+<script src="usage-view.js"></script>
+<script src="dock-setup.js"></script>
+<script src="live-panels.js"></script>
+<script src="commands.js"></script>
+<script src="pixel-icons.js"></script>
+<script src="hangar.js"></script>
+<script src="history.js"></script>
+<script src="md.js"></script>
+<script src="details.js"></script>
+<script src="schedules-ui.js"></script>
+</body>
+</html>

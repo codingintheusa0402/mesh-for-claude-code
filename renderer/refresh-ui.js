@@ -1,0 +1,52 @@
+// Session refresh (session-refresh.js in the main process): the settings dialog (app menu ▸ Session Refresh…, or a session's
+// menu), "Refresh now" in each session's menu, and a refreshed session keeping its place on the mesh (its orbit moves to the
+// new session id, which the snapshot links to the old one as prevSid).
+(() => {
+  const api = window.api.refresh;
+  const MODE = [['nightly', 'Nightly'], ['weekends', 'Weekends only'], ['sunday', 'Sundays only'], ['exclude', 'Never']];
+  const ago = t => { if (!t) return 'never'; const m = Math.round((Date.now() - t) / 60e3); return m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : new Date(t).toLocaleString(); };
+
+  async function open(onPeer = false) {
+    const d = await api.get(onPeer).catch(e => ({ err: e.message }));
+    const peerOn = !!(snap && snap.peer && snap.peer.online), here = snap && snap.peer && snap.peer.selfLabel || 'This Mac', there = snap && snap.peer && snap.peer.label || 'Other Mac';
+    if (!d || d.err) return toast("Couldn't read the refresh settings: " + ((d && d.err) || 'no answer'));
+    modal(`<h2>Session refresh</h2>
+      ${peerOn ? `<div class="choice" id="rfWhere"><button data-p="0" class="${onPeer ? '' : 'on'}">${esc(here)}</button><button data-p="1" class="${onPeer ? 'on' : ''}">${esc(there)}</button></div>` : ''}
+      <div class="pdim" style="margin:8px 0 10px">Long sessions get slow and costly. A refresh has the session write HANDOFF.md, starts a fresh one with the same name, folder, engine and model, has it read the handoff, and closes the old one (its transcript is archived). Never while a session works, waits for you, runs background tasks or holds text you typed.</div>
+      <label class="chk"><input type="checkbox" id="rfOn" ${d.enabled ? 'checked' : ''}> Refresh sessions automatically</label>
+      <label>Nightly at</label><input type="time" id="rfTime" value="${esc(d.time || '04:00')}" style="width:120px">
+      <div class="pdim" style="margin-top:4px">Also when a session's context passes about 60 % or its tokens today are far above its normal (Nightly sessions only).</div>
+      <table class="psched" style="margin-top:12px"><tr><th>Session</th><th>When</th><th>Last refresh</th><th>Now</th><th></th></tr>
+        ${d.list.map(s => `<tr><td>${esc(s.name)} <span class="pdim">${s.kind === 'hermes' ? 'Hermes' : 'Claude'} · ${Math.round(100 * s.ctx)}%</span></td>
+          <td><select data-s="${esc(s.name)}">${MODE.map(([k, l]) => `<option value="${k}" ${k === s.mode ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
+          <td>${esc(ago(s.last && s.last.at))}</td><td class="pdim">${esc(s.why || 'ready')}</td>
+          <td><button data-now="${esc(s.sid)}" ${s.why ? 'disabled' : ''}>Refresh now</button></td></tr>`).join('')}</table>
+      ${d.running ? `<div class="pdim" style="margin-top:8px">Refreshing ${esc(d.running.name)} (${esc(d.running.step)})…</div>` : ''}
+      <div class="pdim" style="margin-top:8px">Log: ${esc((d.log || "").replace(/^\/Users\/[^/]+/, "~"))}</div>
+      <div class="btns" style="justify-content:flex-end"><button id="mCancel">Close</button></div>`);
+    $('#modalCard').classList.add('wide');
+    document.querySelectorAll('#rfWhere button').forEach(b => b.onclick = () => open(b.dataset.p === '1'));
+    $('#rfOn').onchange = async e => { await api.set({ enabled: e.target.checked }, onPeer); toast(`Session refresh ${e.target.checked ? 'on' : 'off'}`); };
+    $('#rfTime').onchange = async e => { await api.set({ time: e.target.value }, onPeer); toast('Nightly refresh at ' + e.target.value); };
+    document.querySelectorAll('select[data-s]').forEach(sel => sel.onchange = async () => { await api.set({ session: sel.dataset.s, mode: sel.value }, onPeer); toast(`${sel.dataset.s}: ${sel.selectedOptions[0].text}`); });
+    document.querySelectorAll('button[data-now]').forEach(b => b.onclick = () => now(b.dataset.now));
+  }
+  async function now(sid) {
+    const s = (snap.sessions || []).find(x => x.sid === sid); closeModal();
+    toast(`Refreshing ${s ? s.name : 'session'}: handoff first, this takes a few minutes`);
+    const r = await api.now(sid).catch(e => ({ ok: false, err: e.message }));
+    toast(r && r.ok ? `${s ? s.name : 'Session'} refreshed` : `Not refreshed: ${(r && r.err) || 'unknown'}`);
+  }
+  api.onOpen(() => open(false));
+  window.openRefresh = open; window.refreshNow = now;
+
+  // a refreshed session keeps its orbit: copy the old id's saved orbit to the new id once
+  const moved = new Set();
+  window.refreshMigrate = sessions => {
+    for (const s of sessions || []) {
+      if (!s.prevSid || moved.has(s.sid)) continue; moved.add(s.sid);
+      try { const o = viz.loadOrbits(); const k = s.onPeer ? s.prevSid : s.prevSid; if (o[k] && !o[s.sid]) { o[s.sid] = o[k]; viz.saveOrbits(); } } catch { }
+      try { const m = store.get('sessEngine', {}); if (m[s.prevSid] && !m[s.sid]) { m[s.sid] = m[s.prevSid]; store.set('sessEngine', m); } } catch { }
+    }
+  };
+})();
