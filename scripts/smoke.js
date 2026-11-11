@@ -6,7 +6,8 @@ const fs = require('fs'), os = require('os'), path = require('path');
 const [exe, shot = 'smoke.png'] = process.argv.slice(2);
 const PORT = 9555, data = fs.mkdtempSync(path.join(os.tmpdir(), 'mesh-smoke-'));
 const env = { ...process.env, MESH_QA: '1', MESH_NO_UPDATE: '1', MESH_USERDATA: data, MESH_NO_FSGUARD: '1' };
-const app = spawn(exe, [`--remote-debugging-port=${PORT}`], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+// SMOKE_APP=<source folder> runs a source checkout with the Electron binary given as <exe>
+const app = spawn(exe, [...(process.env.SMOKE_APP ? [process.env.SMOKE_APP] : []), `--remote-debugging-port=${PORT}`], { env, stdio: ['ignore', 'pipe', 'pipe'] });
 let log = '', exited = null;
 app.stdout.on('data', d => { log += d; process.stdout.write(d); });
 app.stderr.on('data', d => { log += d; process.stderr.write(d); });
@@ -26,7 +27,7 @@ const fail = m => { console.error('SMOKE FAIL:', m); try { app.kill(); } catch {
   ws.onmessage = e => { const m = JSON.parse(e.data); if (wait[m.id]) wait[m.id](m); };
   await new Promise(r => ws.onopen = r);
   const call = (method, params = {}) => new Promise(r => { const i = ++id; wait[i] = r; ws.send(JSON.stringify({ id: i, method, params })); });
-  const ev = async x => (await call('Runtime.evaluate', { expression: x, returnByValue: true })).result.result.value;
+  const ev = async x => (await call('Runtime.evaluate', { expression: x, returnByValue: true, awaitPromise: true })).result.result.value;
   let ok = false;
   for (let i = 0; i < 30 && !ok; i++) { ok = await ev(`/New/.test(document.body.innerText) && !!document.querySelector('canvas')`); if (!ok) await sleep(1000); }
   // a built-in terminal works: open a shell the way "+ New" does, run a command, read its output back
