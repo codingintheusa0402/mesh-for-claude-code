@@ -906,6 +906,10 @@ function closeTerm(id, really) {
 }
 
 function activate(id) {
+  // leaving a tab: remember whether you were reading its newest output. Only now, while it is still on screen, is that
+  // reliable: a hidden terminal has no size, so xterm loses track of following the output while it is hidden and came
+  // back mid-scroll (2026-11-11, a Hermes session showed an old part of its run instead of the end)
+  { const prev = terms.get(activeTerm); if (prev && activeTerm !== id && prev.el.classList.contains('on') && prev.el.offsetHeight) { const b = prev.term.buffer.active; prev.pinned = b.viewportY >= b.baseY; } }
   { const t = terms.get(id); if (t && t.tabHidden) { t.tabHidden = false; t.el.classList.remove('tab-hidden'); $('#noTerms').style.display = 'none'; layoutGrid(); } }
   activeTerm = id;
   { const s = snap.sessions.find(x => termOf(x) === id); if (s) seen(s.sid); }
@@ -916,7 +920,7 @@ function activate(id) {
   // repaint the one now shown: output written while its tab was hidden (a mirror's first screen arrives that way) is in
   // the buffer but was never drawn, and nothing redraws it until the grid or the font changes (2026-11-10: a MacBook
   // session opened on the mini stayed blank until you went to another tab and back)
-  requestAnimationFrame(() => { fitAll(); const t = terms.get(id); if (t) { try { t.term.refresh(0, t.term.rows - 1); } catch { } t.term.focus(); } });
+  requestAnimationFrame(() => { fitAll(); const t = terms.get(id); if (t) { try { if (t.pinned !== false) t.term.scrollToBottom(); t.term.refresh(0, t.term.rows - 1); } catch { } t.term.focus(); } });   // back at the end unless you had scrolled up
   // a mirror shown before its first screen came (just attached, or the link dropped): ask for it now, not on the next tick
   { const t = terms.get(id); if (t && t.peer && !t.inited) setTimeout(() => { if (terms.get(id) === t && !t.inited) { t.attached = true; window.api.peerTerm.open(id); } }, 1200); }
 }
