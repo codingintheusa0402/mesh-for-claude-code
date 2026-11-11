@@ -50,10 +50,11 @@ You need [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) ins
 ### macOS (Apple Silicon or Intel)
 
 1. Download the `.dmg` for your Mac from the **[latest release](https://github.com/codingintheusa0402/mesh-for-claude-code/releases/latest)** (`arm64` = Apple Silicon, `x64` = Intel) and drag the app to Applications.
-2. The app isn't notarized yet, so the first time, **right-click the app → Open → Open**. Or run:
+2. The app isn't notarized yet, so macOS blocks the first launch. Either run this once in Terminal:
    ```bash
    xattr -dr com.apple.quarantine "/Applications/Mesh for Claude Code.app"
    ```
+   or open the app once, then go to **System Settings → Privacy & Security** and click **Open Anyway**.
 3. Recommended: `brew install tmux`. Sessions you start from Mesh then live in tmux and survive app restarts and updates.
 
 ### Windows 10 / 11 (x64)
