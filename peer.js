@@ -14,7 +14,18 @@ const http = require('http');
 
 const POLL_MS = 4000, OFFLINE_KEEP_MS = 7 * 24 * 3600 * 1000;
 const MISSES_OFFLINE = 3;                   // one slow/failed poll is a hiccup; three in a row (~12 s) is offline
-const PREFIX = 'peer:';                     // terminal ids of the peer's panes, as seen by the phone
+const PREFIX = 'peer:';
+// A terminal stream can die without closing (Wi-Fi change, sleep, a Tailscale re-route): no data, no 'end', and the
+// mirror sits frozen for good, typing included (2026-11-11). The host sends ": ping" every 15 s (phone-server.js); once
+// a stream has shown a ping, 40 s of silence drops it and the window reconnects. A host without pings is never cut off.
+const SILENT_MAX = 40e3;
+function watchStream(up, { silentMax = SILENT_MAX } = {}) {
+  let armed = false, last = Date.now();
+  up.on('data', c => { last = Date.now(); if (!armed && /(^|\n): ping/.test(String(c))) armed = true; });
+  const t = setInterval(() => { if (armed && Date.now() - last > silentMax) { clearInterval(t); up.silent = true; up.destroy(); } }, Math.min(10e3, silentMax / 4));
+  up.on('close', () => clearInterval(t));
+  return up;
+}                     // terminal ids of the peer's panes, as seen by the phone
 
 function createPeer({ userData, selfKind }) {
   const file = path.join(userData, 'peer.json');
@@ -98,17 +109,17 @@ function createPeer({ userData, selfKind }) {
     }).then(r => r.json),
     // pipe the peer's terminal SSE stream for terminal `id` (with the peer: prefix) into `res`
     async pipeTerm(id, res, onClose) {
-      const up = await request('GET', '/api/term/' + encodeURIComponent(id.slice(PREFIX.length)), { stream: true, timeout: 0 });
+      const up = watchStream(await request('GET', '/api/term/' + encodeURIComponent(id.slice(PREFIX.length)), { stream: true, timeout: 0 }));
       res.writeHead(up.statusCode, { 'Content-Type': up.headers['content-type'] || 'text/event-stream', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
       up.pipe(res);
       onClose(() => up.destroy());
     },
     // raw SSE response of the peer's terminal `id` (with the peer: prefix), for the desktop window's mirror
-    openTerm: id => request('GET', '/api/term/' + encodeURIComponent(id.slice(PREFIX.length)), { stream: true, timeout: 0 }),
+    openTerm: id => request('GET', '/api/term/' + encodeURIComponent(id.slice(PREFIX.length)), { stream: true, timeout: 0 }).then(up => watchStream(up)),
     upload: (name, b64) => request('POST', '/api/upload', { body: { name, b64 }, timeout: 30000 }).then(r => r.json),
     termResize: (id, cols, rows) => request('POST', '/api/term/' + encodeURIComponent(id.slice(PREFIX.length)), { body: { resize: { cols, rows } } }).then(r => r.json),
     termWrite: (id, data) => request('POST', '/api/term/' + encodeURIComponent(id.slice(PREFIX.length)), { body: { data } }).then(r => r.json),
   };
 }
 
-module.exports = { createPeer, PEER_PREFIX: PREFIX };
+module.exports = { createPeer, watchStream, PEER_PREFIX: PREFIX };

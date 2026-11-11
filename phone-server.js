@@ -113,6 +113,8 @@ function createPhoneServer(ctx) {
       if (peer && peer.ownsTerm(id)) return peer.pipeTerm(id, res, fn => req.on('close', fn)).catch(e => json(res, 502, { error: e.message }));
       const pt = ctx.ptys.get(id); if (!pt) return json(res, 404, { error: 'no such terminal' });
       sse(res);
+      const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch { } }, 15e3);   // lets the other side see a dead connection (peer.js watchStream)
+      req.on('close', () => clearInterval(ping));
       if (ctx.termOpen) await ctx.termOpen(id);                           // server: start streaming the tmux pane
       // listen first and hold output back until init went out, so nothing falls between the snapshot and the stream
       let held = [];
