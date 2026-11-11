@@ -53,7 +53,8 @@
         "NSRemovableVolumesUsageDescription": "Claude Code sessions run inside Mesh for Claude Code and may use files on external drives.",
         "NSNetworkVolumesUsageDescription": "Claude Code sessions run inside Mesh for Claude Code and may use files on network drives.",
         "NSAppleEventsUsageDescription": "Mesh for Claude Code controls Claude Code sessions running in Terminal."
-      }
+      },
+      "artifactName": "Mesh-for-Claude-Code-${version}-${arch}.${ext}"
     },
     "files": [
       "main.js",

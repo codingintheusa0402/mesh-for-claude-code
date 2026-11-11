@@ -29,6 +29,20 @@ const fail = m => { console.error('SMOKE FAIL:', m); try { app.kill(); } catch {
   const ev = async x => (await call('Runtime.evaluate', { expression: x, returnByValue: true })).result.result.value;
   let ok = false;
   for (let i = 0; i < 30 && !ok; i++) { ok = await ev(`/New/.test(document.body.innerText) && !!document.querySelector('canvas')`); if (!ok) await sleep(1000); }
+  // a built-in terminal works: open a shell the way "+ New" does, run a command, read its output back
+  const term = await ev(`new Promise(res => {
+    let out = '', id = null; const t = setTimeout(() => res({ ok: false, id, out: out.slice(-300) }), 30000);
+    // the typed command never contains the digits; only the shell's own output does
+    const cmd = /Win/.test(navigator.platform) ? 'Write-Output ("MESH_SMOKE_" + (6*7))\\r' : 'echo MESH_SMOKE_$((6*7))\\r';
+    window.api.pty.onData((i, d) => { if (i !== id) return; out += d; if (/MESH_SMOKE_42/.test(out)) { clearTimeout(t); res({ ok: true, id, shell: cmd.split(' ')[0] }); } });
+    window.api.pty.spawn({ kind: 'shell', title: 'smoke', cols: 100, rows: 30 }).then(p => {
+      id = p && p.id; if (!id) { clearTimeout(t); return res({ ok: false, err: 'no terminal id', p }); }
+      setTimeout(() => window.api.pty.write(id, cmd), 3000);
+      setTimeout(() => window.api.pty.write(id, cmd), 9000);
+    });
+  })`);
+  console.log('terminal:', JSON.stringify(term));
+  if (!term || !term.ok) fail('built-in terminal did not run a command');
   await sleep(4000);
   const r = await call('Page.captureScreenshot', { format: 'png' });
   fs.writeFileSync(shot, Buffer.from(r.result.data, 'base64'));
