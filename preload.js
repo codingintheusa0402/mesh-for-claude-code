@@ -92,7 +92,7 @@ contextBridge.exposeInMainWorld('api', {
   handoff: { move: sid => ipcRenderer.invoke('handoff:move', sid), onStart: cb => ipcRenderer.on('handoff:start', (_e, x) => cb(x)), onProgress: cb => ipcRenderer.on('handoff:progress', (_e, x) => cb(x)) },
   pathForFile: f => webUtils.getPathForFile(f),
   history: () => ipcRenderer.invoke('hist:list'),
-  archify: { open: (sid, name) => ipcRenderer.invoke('archify:open', sid, name) },
+  codemap: { open: (sid, name) => ipcRenderer.invoke('codemap:open', sid, name) },
   historyTrash: sid => ipcRenderer.invoke('hist:trash', sid),
   sched: {
     list: () => ipcRenderer.invoke('sched:list'),

@@ -1,0 +1,95 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Code map</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data:">
+<style>
+:root { --bg: #0b0d14; --panel: #12151f; --line: rgba(255,255,255,.09); --text: #e8ebf4; --dim: #8a93ad; --acc: #8fb8ff; --ok: #5be3a4; --warn: #e0a458; --bad: #ff6b6b; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif; }
+body { display: flex; flex-direction: column; }
+header { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); -webkit-app-region: drag; }
+header .t { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+header .n { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+header .n .k { color: var(--dim); font-weight: 500; margin-right: 6px; }
+header .m { color: var(--dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill { display: inline-block; padding: 0 7px; border-radius: 9px; border: 1px solid var(--line); font-size: 11px; margin-left: 6px; }
+.pill.warn { color: var(--warn); border-color: rgba(224,164,88,.45); } .pill.ok { color: var(--ok); border-color: rgba(91,227,164,.35); }
+button { -webkit-app-region: no-drag; background: #1b2030; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; white-space: nowrap; }
+button:hover { border-color: rgba(143,184,255,.5); } button.pri { background: #2a3a66; border-color: rgba(143,184,255,.45); }
+[hidden] { display: none !important; }
+main { flex: 1; position: relative; min-height: 0; }
+.card { position: absolute; inset: 0; display: grid; place-items: center; }
+.card .box { width: min(560px, 90vw); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 26px 28px; }
+.card h2 { margin: 0 0 6px; font-size: 17px; } .card p { margin: 6px 0; color: var(--dim); }
+.card code { background: #0e1119; padding: 2px 6px; border-radius: 5px; color: #c9d2ea; }
+.step { margin-top: 16px; padding: 10px 12px; border-radius: 8px; background: #0e1119; font: 12px/1.4 ui-monospace, Menlo, monospace; color: #c9d2ea; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar { height: 3px; border-radius: 2px; background: #1b2030; overflow: hidden; margin-top: 14px; }
+.bar i { display: block; height: 100%; width: 35%; background: linear-gradient(90deg, transparent, var(--acc), transparent); animation: run 1.6s linear infinite; }
+@keyframes run { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+.err { color: var(--bad); }
+.row { display: flex; gap: 8px; margin-top: 18px; }
+</style></head>
+<body>
+<header>
+  <div class="t"><div class="n"><span class="k">Code map</span><span id="name"></span></div><div class="m" id="meta">Loading…</div></div>
+  <button id="regen" hidden title="Re-read the code (seconds)">Rebuild</button>
+  <button id="hstop" hidden>Cancel</button>
+  <button id="report" hidden title="Key concepts, surprising links and suggested questions (GRAPH_REPORT.md)">Report</button>
+  <button id="browser" hidden>Open in browser</button>
+  <button id="reveal" hidden>Show in Finder</button>
+</header>
+<main>
+  <div class="card" id="card" hidden><div class="box">
+    <h2 id="ch"></h2><p id="cp"></p><div class="step" id="cs" hidden></div><div class="bar" id="cb" hidden><i></i></div>
+    <div class="row"><button class="pri" id="go" hidden>Build the map</button><button id="stop" hidden>Cancel</button></div>
+  </div></div>
+</main>
+<script>
+const q = new URLSearchParams(location.search), sid = q.get('sid'), $ = id => document.getElementById(id);
+$('name').textContent = q.get('name') || '';
+if (/Win/.test(navigator.platform)) $('reveal').textContent = 'Show in Explorer';
+const ago = t => { const m = Math.round((Date.now() - t) / 60e3); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago'; };
+const n = x => x >= 1000 ? (x / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(x);
+let st = null, timer = null;
+// the graph is drawn by Mesh in its own view right below this header (main.js codemap:show)
+const show = file => window.cmap.show(file, document.querySelector('header').getBoundingClientRect().bottom);
+addEventListener('resize', () => st && show(st.ok && st.html ? st.html : null));
+async function load() {
+  st = await window.cmap.status(sid).catch(e => ({ ok: false, err: e.message }));
+  render();
+  clearTimeout(timer); if (st && (st.running || st.queued)) timer = setTimeout(load, 1500);   // the other Mac's build has no push: poll while it works
+}
+function render() {
+  const card = (h, p, o = {}) => { $('card').hidden = false; $('ch').textContent = h; $('cp').innerHTML = ''; $('cp').append(p || ''); $('cp').className = o.err ? 'err' : '';
+    $('cs').hidden = !o.step; $('cs').textContent = o.step || ''; $('cb').hidden = !o.busy; $('go').hidden = !o.go; $('stop').hidden = !o.busy; };
+  if (!st || !st.ok) { $('meta').textContent = ''; show(null); return card("Can't show a code map", (st && st.err) || 'unknown error', { err: true }); }
+  document.title = 'Code map · ' + st.name;
+  const where = (st.project || '').replace(/^(\/Users|C:\\Users)[\\/][^\\/]+/i, '~') + (st.remote ? ' · on ' + st.remote : '');
+  const parts = [where];
+  if (st.meta && st.meta.nodes) parts.push(`${n(st.meta.nodes)} items · ${n(st.meta.edges)} links · ${st.meta.communities} areas`);
+  if (st.meta && st.meta.at) parts.push('built ' + ago(st.meta.at));
+  $('meta').innerHTML = ''; $('meta').append(parts.join(' · '));
+  const pill = (t, c) => { const s = document.createElement('span'); s.className = 'pill ' + (c || ''); s.textContent = t; $('meta').append(s); };
+  if (st.own) pill('shared with its sessions');
+  if (st.behind > 0) pill(st.behind + ' commit' + (st.behind > 1 ? 's' : '') + ' behind', 'warn');
+  else if (st.behind === 0 && st.html) pill('up to date', 'ok');
+  if (st.running) pill('rebuilding…');
+  $('regen').hidden = !!(st.running || st.queued) || !st.html; $('hstop').hidden = !(st.html && (st.running || st.queued));
+  $('browser').hidden = !st.html; $('reveal').hidden = !st.html; $('report').hidden = !st.report;
+  if (st.html) { $('card').hidden = true; show(st.html); return; }
+  show(null);
+  if (st.running) return card('Mapping ' + st.name + '…', 'Graphify reads the code on this machine, then names its main areas. Usually under a minute; big projects take a few.', { step: st.running.step, busy: true });
+  if (st.queued) return card('Waiting for another map', 'One build at a time on each machine; this one starts next.', { busy: true });
+  if (st.installed === false) { const p = document.createElement('span'); p.append('Code map uses Graphify. Install it once in a terminal, then try again: '); const c = document.createElement('code'); c.textContent = 'uv tool install graphifyy'; p.append(c); return card('Graphify is not installed', p, { go: true }); }
+  card(st.lastError ? 'The last build did not finish' : 'No map yet', st.lastError || 'Map this project\'s code: every file, function and module, how they connect, and the main areas.', { go: true, err: !!st.lastError });
+}
+const build = async () => { const r = await window.cmap.generate(sid); if (r && r.ok === false) { st = { ok: true, ...st, lastError: r.err }; } load(); };
+$('go').onclick = build; $('regen').onclick = build;
+$('hstop').onclick = async () => { await window.cmap.cancel(sid); setTimeout(load, 600); };
+$('stop').onclick = async () => { await window.cmap.cancel(sid); setTimeout(load, 600); };
+$('browser').onclick = () => st && st.html && window.cmap.browser(st.html);
+$('report').onclick = () => st && st.report && window.cmap.browser(st.report);
+$('reveal').onclick = () => st && st.html && window.cmap.reveal(st.html);
+window.cmap.onChanged(() => load());
+load();
+</script>
+</body></html>

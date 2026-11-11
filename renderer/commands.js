@@ -111,7 +111,7 @@ async function openCmdMenu(sid, x, y) {
   const s = snap.sessions.find(q => q.sid === sid); if (!s) return;
   const refreshCmds = s.pane || s.onPeer ? [{ cmd: 'Refresh now', desc: 'Handoff, then a fresh session with the same name, folder and model', group: 'Session', grp: 'refresh' },
     { cmd: 'Session refresh…', desc: 'Nightly refresh, per-session schedule, last refresh times', group: 'Session', grp: 'refreshcfg' }] : [];
-  const all = [{ cmd: 'Archify', desc: "Interactive diagram of this session's project (maps it the first time)", group: 'Project', grp: 'archify' },
+  const all = [{ cmd: 'Code map', desc: "Interactive map of this session's project code: files, functions, how they connect (Graphify, builds in seconds)", group: 'Project', grp: 'codemap' },
     ...(s.onPeer ? [] : [{ cmd: 'Project card', desc: 'How this project runs: rules, checks, to-dos, schedule', group: 'Project', grp: 'card' }]), ...refreshCmds, ...groupCmds(s), ...await commandsFor(s)];
   const el = document.createElement('div'); el.id = 'cmdMenu';
   el.innerHTML = `<div class="cm-h"><span class="hdot h-${s.health}"></span>${esc(s.name)}</div>
@@ -152,7 +152,7 @@ function groupCmds(s) {
 }
 async function pickCmd(s, it) {
   if (!it.grp) return runCommand(s, it);
-  if (it.grp === 'archify') return window.api.archify.open(s.sid, s.name).then(r => r && r.ok === false && toast("Archify: " + (r.err || 'could not open')));
+  if (it.grp === 'codemap') return window.api.codemap.open(s.sid, s.name).then(r => r && r.ok === false && toast("Code map: " + (r.err || 'could not open')));
   if (it.grp === 'card') return window.openProjectCard && window.openProjectCard(s.sid);
   if (it.grp === 'refresh') return window.refreshNow && window.refreshNow(s.sid);
   if (it.grp === 'refreshcfg') return window.openRefresh && window.openRefresh(!!s.onPeer);

@@ -656,68 +656,71 @@ ipcMain.handle('cards:get', (_e, sid, force) => { const s = localSessions().find
   return peerLink && peerLink.owns(sid) ? peerLink.forward('GET', '/api/card', undefined, { sid, ...(force ? { force: '1' } : {}) }, 20000).catch(() => null) : null; });
 ipcMain.handle('cards:open', (_e, p) => { const f = cards.safeFile(p); return f ? shell.openPath(f) : 'not a file in your home folder'; });
 ipcMain.handle('cards:ask', (_e, sid) => sendToSession(sid, CARD_ASK));
-// ---------------- Archify: an interactive diagram of a session's project (archify.js) ----------------
-const archify = require('./archify').createArchify({
-  home: HOME, claudeBin: () => core.resolveClaude(), env: () => cleanEnv(),
-  projectOf: (sid, cwd) => { if (process.env.MESH_ARCHIFY_PROJECT) return process.env.MESH_ARCHIFY_PROJECT;   // QA
+// ---------------- Code map: an interactive knowledge graph of a session's project (codemap.js, Graphify) ----------------
+const codemap = require('./codemap').createCodemap({
+  home: HOME, env: () => cleanEnv(),
+  projectOf: (sid, cwd) => { if (process.env.MESH_CODEMAP_PROJECT) return process.env.MESH_CODEMAP_PROJECT;   // QA
     const a = refresher ? refresher.aliasOf(sid) : sid; const f = projFolders.folders([{ sid: a, cwd: cwd || (liveSession(sid) || {}).cwd }])[a]; return f ? f.path : null; },
   onChange: (project, ev) => {
-    for (const w of archWins.values()) if (!w.isDestroyed()) w.webContents.send('archify:changed');
-    if (ev && ev.done && Notification.isSupported()) new Notification({ title: 'Archify', body: `The diagram of ${path.basename(project)} is ready.` }).show();
-    if (ev && ev.error && Notification.isSupported()) new Notification({ title: 'Archify', body: `${path.basename(project)}: ${ev.error}`.slice(0, 200) }).show();
+    for (const w of cmWins.values()) if (!w.isDestroyed()) w.webContents.send('codemap:changed');
+    if (ev && ev.error && ev.error !== 'Cancelled' && Notification.isSupported()) new Notification({ title: 'Code map', body: `${path.basename(project)}: ${ev.error}`.slice(0, 200) }).show();
   },
 });
-const archWins = new Map();     // sid -> viewer window
-const archCall = (sid, op) => {
-  if (peerSess(sid)) return op === 'status' || op === 'html' ? peerLink.forward('GET', op === 'html' ? '/api/archify/html' : '/api/archify', undefined, { sid }, 60e3).catch(e => ({ ok: false, err: `${peerLink.label()}: ${e.message}` }))
-    : peerLink.forward('POST', '/api/archify', { sid, op }, undefined, 60e3).catch(e => ({ ok: false, err: `${peerLink.label()}: ${e.message}` }));
+const cmWins = new Map();       // sid -> viewer window
+const cmAllowed = new Set();    // files the viewer may show / open: only the graph and report Mesh itself reported
+const cmCall = (sid, op) => {
+  if (peerSess(sid)) return op === 'status' || op === 'html' ? peerLink.forward('GET', op === 'html' ? '/api/codemap/html' : '/api/codemap', undefined, { sid }, 60e3).catch(e => ({ ok: false, err: `${peerLink.label()}: ${e.message}` }))
+    : peerLink.forward('POST', '/api/codemap', { sid, op }, undefined, 60e3).catch(e => ({ ok: false, err: `${peerLink.label()}: ${e.message}` }));
   const cwd = (liveSession(sid) || {}).cwd;
-  return op === 'status' ? archify.status(sid, cwd) : op === 'html' ? archify.htmlOf(sid, cwd) : op === 'generate' ? archify.generate(sid, cwd) : op === 'cancel' ? archify.cancel(sid, cwd) : { ok: false };
+  return op === 'status' ? codemap.status(sid, cwd) : op === 'html' ? codemap.htmlOf(sid, cwd) : op === 'generate' ? codemap.generate(sid, cwd) : op === 'cancel' ? codemap.cancel(sid, cwd) : { ok: false };
 };
-const archStatus = async (_e, sid) => {
-  const st = await archCall(sid, 'status');
-  // the other Mac's diagram is copied here, so the viewer can load it (and "Open in browser" works on this Mac)
+const cmStatus = async (_e, sid) => {
+  const st = await cmCall(sid, 'status');
+  // the other Mac's map is copied here, so the viewer can load it (and "Open in browser" works on this Mac)
   if (st && st.ok && st.html && peerSess(sid)) {
-    const local = path.join(archify.OUT, '_from-peer', String(st.project || sid).replace(/[^\w.-]+/g, '_').slice(-120) + '.html');
+    const local = path.join(codemap.OUT, '_from-peer', String(st.project || sid).replace(/[^\w.-]+/g, '_').slice(-120) + '.html');
     const stamp = (st.meta && st.meta.at) || 0, have = (() => { try { return fs.statSync(local).mtimeMs >= stamp; } catch { return false; } })();
-    if (!have) { const h = await archCall(sid, 'html'); if (h && h.ok) { fs.mkdirSync(path.dirname(local), { recursive: true }); fs.writeFileSync(local, h.html); } }
-    st.html = fs.existsSync(local) ? local : null; st.remote = peerLink.label();
+    if (!have) { const h = await cmCall(sid, 'html'); if (h && h.ok) { fs.mkdirSync(path.dirname(local), { recursive: true }); fs.writeFileSync(local, h.html); } }
+    st.html = fs.existsSync(local) ? local : null; st.report = null; st.remote = peerLink.label();
   }
+  if (st && st.ok) for (const f of [st.html, st.report]) if (f) cmAllowed.add(f);
   return st;
 };
-ipcMain.handle('archify:status', archStatus);
-ipcMain.handle('archify:show', (e, file, top) => {
-  const w = BrowserWindow.fromWebContents(e.sender); if (!w || !w.archView) return;
-  const a = w.archView; if (top > 0) a.top = Math.round(top);
+const cmOk = p => !!p && (cmAllowed.has(p) || p.startsWith(codemap.OUT + path.sep));
+ipcMain.handle('codemap:status', cmStatus);
+ipcMain.handle('codemap:show', (e, file, top) => {
+  const w = BrowserWindow.fromWebContents(e.sender); if (!w || !w.cmView) return;
+  const a = w.cmView; if (top > 0) a.top = Math.round(top);
   const [cw, ch] = w.getContentSize(); a.view.setBounds({ x: 0, y: a.top, width: cw, height: Math.max(0, ch - a.top) });
-  if (!file || !file.startsWith(archify.OUT)) { a.view.setVisible(false); return; }
+  if (!cmOk(file) || !/\.html$/.test(file)) { a.view.setVisible(false); return; }
   a.view.setVisible(true);
   const key = file + '|' + (() => { try { return fs.statSync(file).mtimeMs; } catch { return 0; } })();
   if (a.file !== key) { a.file = key; a.view.webContents.loadFile(file); }
 });
-ipcMain.handle('archify:generate', (_e, sid) => archCall(sid, 'generate'));
-ipcMain.handle('archify:cancel', (_e, sid) => archCall(sid, 'cancel'));
-ipcMain.handle('archify:reveal', (_e, p) => { if (p && p.startsWith(archify.OUT)) shell.showItemInFolder(p); });
-ipcMain.handle('archify:browser', (_e, p) => { if (p && p.startsWith(archify.OUT)) return shell.openExternal(require('url').pathToFileURL(p).href); });
-// open the viewer; a project without a diagram starts one right away
-ipcMain.handle('archify:open', async (_e, sid, name) => {
-  const w0 = archWins.get(sid); if (w0 && !w0.isDestroyed()) { w0.show(); w0.focus(); return { ok: true }; }
-  const st = await archStatus(null, sid);
-  if (st && st.ok && !st.html && !st.running && !st.queued) await archCall(sid, 'generate');
-  const w = new BrowserWindow({ width: 1280, height: 860, title: 'Archify · ' + (name || ''), backgroundColor: '#0b0d14',
-    webPreferences: { preload: path.join(__dirname, 'archify-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
-  archWins.set(sid, w); w.on('closed', () => archWins.delete(sid));
+ipcMain.handle('codemap:generate', (_e, sid) => cmCall(sid, 'generate'));
+ipcMain.handle('codemap:cancel', (_e, sid) => cmCall(sid, 'cancel'));
+ipcMain.handle('codemap:reveal', (_e, p) => { if (cmOk(p)) shell.showItemInFolder(p); });
+ipcMain.handle('codemap:browser', (_e, p) => { if (cmOk(p)) return /\.html$/.test(p) ? shell.openExternal(require('url').pathToFileURL(p).href) : shell.openPath(p); });
+// open the viewer; a project without a map, or with commits newer than its map, is (re)built right away (seconds)
+ipcMain.handle('codemap:open', async (_e, sid, name) => {
+  const w0 = cmWins.get(sid); if (w0 && !w0.isDestroyed()) { w0.show(); w0.focus(); return { ok: true }; }
+  const st = await cmStatus(null, sid);
+  if (st && st.ok === false && !st.project) return st;
+  if (st && st.ok && (!st.html || st.behind > 0) && !st.running && !st.queued) await cmCall(sid, 'generate');
+  const w = new BrowserWindow({ width: 1280, height: 860, title: 'Code map · ' + (name || ''), backgroundColor: '#0b0d14',
+    webPreferences: { preload: path.join(__dirname, 'codemap-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  cmWins.set(sid, w); w.on('closed', () => cmWins.delete(sid));
   w.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
-  // the diagram itself: its own view below the header, no preload and its own session, so its scripts (third-party,
-  // generated) can use storage normally but can't reach Mesh. The header page says what to show and how tall it is.
+  // the graph itself: its own view below the header, no preload and its own session, so its scripts (third-party,
+  // generated) can use storage and load their library normally but can't reach Mesh. The header page says what to show.
   const { WebContentsView } = require('electron');
-  const view = new WebContentsView({ webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'archify' } });
+  const view = new WebContentsView({ webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'codemap' } });
   view.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   view.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); } });
-  view.setVisible(false); w.contentView.addChildView(view); w.archView = { view, top: 64, file: null };
-  const lay = () => { if (w.isDestroyed()) return; const [cw, ch] = w.getContentSize(); view.setBounds({ x: 0, y: w.archView.top, width: cw, height: Math.max(0, ch - w.archView.top) }); };
+  view.setVisible(false); w.contentView.addChildView(view); w.cmView = { view, top: 64, file: null };
+  const lay = () => { if (w.isDestroyed()) return; const [cw, ch] = w.getContentSize(); view.setBounds({ x: 0, y: w.cmView.top, width: cw, height: Math.max(0, ch - w.cmView.top) }); };
   w.on('resize', lay); lay();
-  w.loadFile(path.join(__dirname, 'renderer', 'archify.html'), { query: { sid, name: name || '' } });
+  w.loadFile(path.join(__dirname, 'renderer', 'codemap.html'), { query: { sid, name: name || '' } });
   return { ok: true };
 });
 ipcMain.handle('folder:open', (_e, p) => projFolders.safe(p) ? shell.openPath(p).then(err => ({ ok: !err, err })) : { ok: false, err: 'not a folder in your home folder' });
@@ -1044,7 +1047,7 @@ function initPhone() {
     termOpen: id => panes.has(id) ? panes.open(id) : null, termClose: id => { if (panes.has(id)) panes.close(id); },
     getSnap: () => lastSnap,
     getHistory: () => scanHistory(),
-    archify: { status: sid => archCall(sid, 'status'), html: sid => archCall(sid, 'html'), op: (sid, op) => ['generate', 'cancel'].includes(op) ? archCall(sid, op) : { ok: false } },
+    codemap: { status: sid => cmCall(sid, 'status'), html: sid => cmCall(sid, 'html'), op: (sid, op) => ['generate', 'cancel'].includes(op) ? cmCall(sid, op) : { ok: false } },
     details: sid => sessionDetails(sid),
     stamps: sid => stampsFor(core.findTranscript(sid)),
     usage: usageBoard,

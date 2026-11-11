@@ -79,9 +79,9 @@ function createPhoneServer(ctx) {
     }
     if (p === '/api/local-snapshot') { peerPolledAt = Date.now(); const snapNow = ctx.getSnap(); if (!snapNow) return json(res, 503, { error: 'starting' }); return json(res, 200, { ...snapNow, caps: ['upload', 'resize'] }); }   // caps: what this build accepts from the peer   // for the peer (never merged)
     if (p === '/api/history') return json(res, 200, await ctx.getHistory());
-    if ((p === '/api/archify' || p === '/api/archify/html') && ctx.archify && req.method === 'GET') {     // Archify diagrams, for the other Mac (archify.js)
+    if ((p === '/api/codemap' || p === '/api/codemap/html') && ctx.codemap && req.method === 'GET') {     // Code maps, for the other Mac (codemap.js)
       const sid = u.searchParams.get('sid') || '';
-      return json(res, 200, await (p === '/api/archify' ? ctx.archify.status(sid) : ctx.archify.html(sid)));
+      return json(res, 200, await (p === '/api/codemap' ? ctx.codemap.status(sid) : ctx.codemap.html(sid)));
     }
     if (p === '/api/details') {
       const sid = u.searchParams.get('sid') || '';
@@ -167,7 +167,7 @@ function createPhoneServer(ctx) {
       if (b.inventory) return json(res, 200, ctx.refresh.inventory());
       return json(res, 200, b.now ? await ctx.refresh.now(String(b.sid || '')) : ctx.refresh.set(b));
     }
-    if (p === '/api/archify' && ctx.archify) return json(res, 200, await ctx.archify.op(String(b.sid || ''), String(b.op || '')));
+    if (p === '/api/codemap' && ctx.codemap) return json(res, 200, await ctx.codemap.op(String(b.sid || ''), String(b.op || '')));
     if (p === '/api/orchestrator' && ctx.orchestrator) return json(res, 200, ctx.orchestrator.set(String(b.cwd || ''), String(b.orchestrator || '')));
     if (p === '/api/hermes/new' && ctx.hermesNew) return json(res, 200, await ctx.hermesNew({ cwd: String(b.cwd || '~'), name: String(b.name || '').slice(0, 80), resumeSid: b.resumeSid ? String(b.resumeSid) : undefined }));   // a Hermes session in a tmux pane here
     if (p === '/api/rename') return json(res, 200, await ctx.rename(b.sid, String(b.name || '').slice(0, 120)));
