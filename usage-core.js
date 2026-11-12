@@ -11,13 +11,19 @@
 const fs = require('fs'), path = require('path');
 const { DatabaseSync } = require('node:sqlite');
 const { createFolders } = require('./project-folders');
+const LINEAGE = require('./lineage');
+// projects that are one piece of work under several names (local/usage-projects.json: [{ "match": "^ticket-reporter$", "project": "Ticket Reporter" }])
+let PROJECT_ALIAS = []; try { PROJECT_ALIAS = JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 'usage-projects.json'), 'utf8')).map(x => [new RegExp(x.match, 'i'), x.project]); } catch { }
+// fixed daily budgets per session (local/usage-budgets.json: { "<session name>": <tokens> }); without one a session's budget is 2× its 7-day average
+let BUDGETS = {}; try { BUDGETS = JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 'usage-budgets.json'), 'utf8')); } catch { }
+const aliasProject = p => { for (const [re, to] of PROJECT_ALIAS) if (re.test(p || '')) return to; return p; };
 
 const HOUR = 3600e3, DAY = 864e5, KEEP_MS = 40 * DAY, CHUNK = 1 << 20, MAX_LINE = 4 << 20, PROJECT_SLOTS = 7;
 const isClaude = m => /claude|fable|mythos|opus|sonnet|haiku/i.test(String(m || ''));       // anything else ran through Ollama and doesn't touch Claude's limit
 const family = m => { m = String(m || '').toLowerCase(); for (const f of ['fable', 'mythos', 'opus', 'sonnet', 'haiku']) if (m.includes(f)) return f; return 'other'; };
 const tokOf = r => r.inp + r.out + r.cr + r.cw;
 
-function openUsage({ file, home, machine, projects = path.join(home, '.claude', 'projects') }) {
+function openUsage({ file, home, machine, projects = path.join(home, '.claude', 'projects'), handoffs = '', refreshLogs = [] }) {
   const db = new DatabaseSync(file);
   db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;
     CREATE TABLE IF NOT EXISTS usage(hour INTEGER, machine TEXT, sid TEXT, model TEXT, inp INTEGER, out INTEGER, cr INTEGER, cw INTEGER, turns INTEGER, PRIMARY KEY(hour, machine, sid, model)) WITHOUT ROWID;
@@ -27,6 +33,8 @@ function openUsage({ file, home, machine, projects = path.join(home, '.claude', 
     CREATE TABLE IF NOT EXISTS files(id INTEGER PRIMARY KEY, path TEXT UNIQUE, size INTEGER, offset INTEGER, turn INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS kv(k TEXT PRIMARY KEY, v TEXT);
     CREATE TABLE IF NOT EXISTS folders(cwd TEXT PRIMARY KEY, project TEXT);`);
+  // lineage (2026-11-13): every generation of a refreshed session shares lid; lname is the lineage's name
+  for (const c of ['lid TEXT', 'lname TEXT', 'gen INTEGER', 'why TEXT']) { try { db.exec(`ALTER TABLE sessions ADD COLUMN ${c}`); } catch { } }
   const q = {
     file: db.prepare('SELECT * FROM files WHERE path = ?'), fileNew: db.prepare('INSERT INTO files(path, size, offset) VALUES(?, 0, 0)'), fileSet: db.prepare('UPDATE files SET size = ?, offset = ?, turn = ? WHERE id = ?'),
     msg: db.prepare('SELECT * FROM msgs WHERE id = ?'),
@@ -125,6 +133,28 @@ function openUsage({ file, home, machine, projects = path.join(home, '.claude', 
       up.run(l.name, l.titled, cwd, project, headless, typed, machine, s.sid);
     }
     db.exec('COMMIT'); seen.clear();
+    assignLineage();
+  }
+  // which lineage each session of this Mac belongs to: the handoff's lineage.json files (refreshes), else one per name
+  function assignLineage() {
+    if (!handoffs) return;
+    if (!kv('lineageBackfill', 0)) {                       // once: chains from the refresh log + same-name sessions, last 30 days
+      const known = db.prepare('SELECT s.sid, s.name, s.machine, MIN(u.hour) h0, MAX(u.hour) h1 FROM sessions s JOIN usage u ON u.sid = s.sid AND u.machine = s.machine WHERE s.machine = ? AND s.headless = 0 GROUP BY s.sid').all(machine)
+        .map(k => ({ sid: k.sid, name: k.name, machine: k.machine, first: k.h0 * HOUR, last: (k.h1 + 1) * HOUR }));
+      try { setKv('lineageBackfillResult', LINEAGE.backfill(handoffs, { logs: refreshLogs, known, machine, since: Date.now() - 30 * DAY })); } catch (e) { setKv('lineageBackfillResult', { err: e.message }); }
+      setKv('lineageBackfill', Date.now());
+    }
+    const idx = LINEAGE.index(handoffs), byName = new Map(); for (const l of LINEAGE.all(handoffs)) byName.set(l.name, l);
+    const up = db.prepare('UPDATE sessions SET lid = ?, lname = ?, gen = ?, why = ? WHERE machine = ? AND sid = ?');
+    db.exec('BEGIN');
+    for (const s of db.prepare('SELECT sid, name, titled, headless FROM sessions WHERE machine = ?').all(machine)) {
+      const x = idx.get(s.sid), l = !x && s.titled && !s.headless ? byName.get(s.name) : null;
+      if (x) up.run(x.lid, x.name, x.gen, x.why, machine, s.sid);
+      else if (l) up.run(l.lid, l.name, null, 'same name', machine, s.sid);
+      else if (s.titled && !s.headless) up.run(`N:${machine}:${s.name}`, s.name, null, null, machine, s.sid);
+      else up.run(s.sid, s.name, null, null, machine, s.sid);
+    }
+    db.exec('COMMIT');
   }
   // what the app knows about live sessions: their names and colours, and which main session a sub-session's folder belongs to
   function labels(list) {
@@ -183,13 +213,13 @@ function openUsage({ file, home, machine, projects = path.join(home, '.claude', 
   }
 
   // ---- the other machine ----
-  const rows = since => ({ machine, sinceHour: since, usage: db.prepare('SELECT * FROM usage WHERE machine = ? AND hour >= ?').all(machine, since), sessions: db.prepare('SELECT machine, sid, name, titled, cwd, project, color, headless, last_at FROM sessions WHERE machine = ? AND last_at >= ?').all(machine, since * HOUR) });
+  const rows = since => ({ machine, sinceHour: since, usage: db.prepare('SELECT * FROM usage WHERE machine = ? AND hour >= ?').all(machine, since), sessions: db.prepare('SELECT machine, sid, name, titled, cwd, project, color, headless, last_at, lid, lname, gen, why FROM sessions WHERE machine = ? AND last_at >= ?').all(machine, since * HOUR) });
   function importRows(d) {
     if (!d || !d.machine || d.machine === machine) return 0;
-    const add = db.prepare('INSERT OR REPLACE INTO usage(hour, machine, sid, model, inp, out, cr, cw, turns) VALUES(?,?,?,?,?,?,?,?,?)'), ses = db.prepare('INSERT OR REPLACE INTO sessions(machine, sid, name, titled, cwd, project, color, headless, last_at) VALUES(?,?,?,?,?,?,?,?,?)');
+    const add = db.prepare('INSERT OR REPLACE INTO usage(hour, machine, sid, model, inp, out, cr, cw, turns) VALUES(?,?,?,?,?,?,?,?,?)'), ses = db.prepare('INSERT OR REPLACE INTO sessions(machine, sid, name, titled, cwd, project, color, headless, last_at, lid, lname, gen, why) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)');
     db.exec('BEGIN'); db.prepare('DELETE FROM usage WHERE machine = ? AND hour >= ?').run(d.machine, d.sinceHour);
     for (const r of d.usage || []) add.run(r.hour, r.machine, r.sid, r.model, r.inp, r.out, r.cr, r.cw, r.turns);
-    for (const s of d.sessions || []) ses.run(s.machine, s.sid, s.name, s.titled, s.cwd, s.project, s.color, s.headless, s.last_at);
+    for (const s of d.sessions || []) ses.run(s.machine, s.sid, s.name, s.titled, s.cwd, s.project, s.color, s.headless, s.last_at, s.lid || null, s.lname || null, s.gen ?? null, s.why || null);   // (an older build sends no lineage)
     db.exec('COMMIT'); const m = kv('peers', {}); m[d.machine] = Date.now(); setKv('peers', m);
     return (d.usage || []).length;
   }
@@ -199,9 +229,15 @@ function openUsage({ file, home, machine, projects = path.join(home, '.claude', 
   // a conversation handed from one Mac to the other has its log on both: that hour counts once
   function loadRows(fromHour) {
     const best = new Map();
-    for (const r of db.prepare(`SELECT u.*, s.name, s.titled, s.project, s.color, s.headless FROM usage u LEFT JOIN sessions s ON s.machine = u.machine AND s.sid = u.sid WHERE u.hour >= ?`).all(fromHour)) {
-      r.tok = tokOf(r); const k = `${r.hour}|${r.sid}|${r.model}`, o = best.get(k); if (!o || r.tok > o.tok) best.set(k, r);
+    for (const r of db.prepare(`SELECT u.*, s.name, s.titled, s.project, s.color, s.headless, s.lid, s.lname, s.gen, s.why FROM usage u LEFT JOIN sessions s ON s.machine = u.machine AND s.sid = u.sid WHERE u.hour >= ?`).all(fromHour)) {
+      r.tok = tokOf(r);
+      if (!r.headless || r.titled) { if (r.lname && r.lid && !String(r.lid).startsWith('N:') && r.lid !== r.sid) r.project = r.lname; }   // every generation counts for its lineage's project
+      r.project = aliasProject(r.project);
+      if (!r.lid) r.lid = r.titled && !r.headless && r.name ? `N:${r.machine}:${r.name}` : r.sid; const k = `${r.hour}|${r.sid}|${r.model}`, o = best.get(k); if (!o || r.tok > o.tok) best.set(k, r);
     }
+    // the same name is the same work on either Mac: one row, under the refreshed lineage when there is one
+    const byName = new Map(); for (const r of best.values()) if (r.lid && r.lid.startsWith('L-') && r.lname) byName.set(r.lname, [r.lid, r.lname]);
+    for (const r of best.values()) if (r.lid && r.lid.startsWith('N:')) { const n = r.lid.replace(/^N:[^:]*:/, ''), l = byName.get(n); if (l) { r.lid = l[0]; r.lname = l[1]; if (!r.why) r.why = 'same name'; } else r.lid = 'N:' + n; }
     return [...best.values()];
   }
   const startOfDay = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
@@ -213,17 +249,33 @@ function openUsage({ file, home, machine, projects = path.join(home, '.claude', 
     return { start: d.getTime(), end: d.getTime() + 7 * DAY, source: 'monday', label: `Since Monday 00:00 ${tzName()} (reset time not readable)` };
   }
   // the display key: a session, or all of one folder's unnamed script runs together
-  const keyOf = r => (r.headless && !r.titled ? `runs:${r.project || 'Home'}` : r.sid);
-  const nameOf = r => (r.headless && !r.titled ? `${r.project || 'Home'} script runs` : r.name || r.sid.slice(0, 8));
+  const isRuns = r => r.headless && !r.titled;
+  const keyOf = r => (isRuns(r) ? `runs:${r.project || 'Home'}` : r.lid || r.sid);
+  const nameOf = r => (isRuns(r) ? `${r.project || 'Home'} script runs` : r.lname || r.name || r.sid.slice(0, 8));
   function rank(R, a, b, limit = 12) {
     const m = new Map(); let total = 0;
     for (const r of R) { const t = r.hour * HOUR; if (t < a - HOUR + 1 || t >= b) continue; total += r.tok; const k = keyOf(r);
-      const e = m.get(k) || m.set(k, { key: k, name: nameOf(r), color: r.color || '', family: family(r.model), project: r.project || 'Home', tok: 0, byFam: {}, sids: new Map() }).get(k);
-      e.tok += r.tok; e.byFam[family(r.model)] = (e.byFam[family(r.model)] || 0) + r.tok; e.sids.set(r.sid, r.machine); }
+      const e = m.get(k) || m.set(k, { key: k, name: nameOf(r), runs: isRuns(r), color: r.color || '', family: family(r.model), project: r.project || 'Home', tok: 0, byFam: {}, sids: new Map(), gens: new Map(), models: {} }).get(k);
+      e.tok += r.tok; e.byFam[family(r.model)] = (e.byFam[family(r.model)] || 0) + r.tok; e.sids.set(r.sid, r.machine); e.models[r.model] = (e.models[r.model] || 0) + r.tok;
+      if (r.color && !e.color) e.color = r.color;
+      if (!e.runs) { const g = e.gens.get(r.sid) || e.gens.set(r.sid, { sid: r.sid, machine: r.machine, name: r.name || '', gen: r.gen ?? null, why: r.why || '', tok: 0, calls: 0, from: t, to: t }).get(r.sid);
+        g.tok += r.tok; g.calls += r.turns || 0; g.from = Math.min(g.from, t); g.to = Math.max(g.to, t + HOUR); } }
     const all = [...m.values()].sort((x, y) => y.tok - x.tok);
-    for (const e of all) { e.family = Object.entries(e.byFam).sort((x, y) => y[1] - x[1])[0][0]; e.sids = [...e.sids].slice(0, 200).map(([sid, machine]) => ({ sid, machine })); delete e.byFam; }
-    const rest = all.slice(limit), other = rest.reduce((n, e) => n + e.tok, 0);
-    return { total, count: all.length, top: all.slice(0, limit), other, otherN: rest.length };
+    for (const e of all) {
+      e.family = Object.entries(e.byFam).sort((x, y) => y[1] - x[1])[0][0]; e.sids = [...e.sids].slice(0, 200).map(([sid, machine]) => ({ sid, machine })); delete e.byFam;
+      e.model = Object.entries(e.models).sort((x, y) => y[1] - x[1])[0][0]; delete e.models;
+      e.gens = [...e.gens.values()].sort((a, b) => a.from - b.from); e.gens.forEach((g, i) => { if (g.gen == null) g.gen = i + 1; });
+    }
+    // a folder's script runs sit under the session whose project it is (the biggest one), when that session is listed
+    const top = [], byKey = new Map();
+    for (const e of all) if (!e.runs) byKey.set(e.key, e);
+    const shown = all.filter(e => !e.runs).slice(0, limit);
+    for (const e of all) if (e.runs) { const p = shown.find(x => x.project === e.project); if (p) (p.children || (p.children = [])).push(e); else top.push(e); }
+    const list = [...shown, ...top].sort((x, y) => y.tok - x.tok).slice(0, limit), inList = new Set(list.map(e => e.key));
+    const nested = new Set(shown.flatMap(e => (e.children || []).map(c => c.key)));
+    const rest = all.filter(e => !inList.has(e.key) && !nested.has(e.key)), other = rest.reduce((n, e) => n + e.tok, 0);
+    for (const e of list) if (e.children && !inList.has(e.key)) delete e.children;
+    return { total, count: all.length, top: list, other, otherN: rest.length };
   }
   const sumIn = (R, a, b) => R.reduce((n, r) => { const t = r.hour * HOUR; return t >= a - HOUR + 1 && t < b ? n + r.tok : n; }, 0);
   function projectSlots(order) {
@@ -233,13 +285,23 @@ function openUsage({ file, home, machine, projects = path.join(home, '.claude', 
     setKv('projectSlots', map); return map;
   }
 
-  function dash({ limits, now = Date.now() } = {}) {
+  // each lineage's average day over the 7 full days before today (days it used nothing count as 0 only after its first day)
+  function lineAvg(R, day0) {
+    const m = new Map();
+    for (const r of R) { const t = r.hour * HOUR; if (t < day0 - 7 * DAY || t >= day0 || (r.headless && !r.titled)) continue; const k = r.lid || r.sid, e = m.get(k) || m.set(k, { tok: 0, first: t }).get(k); e.tok += r.tok; e.first = Math.min(e.first, t); }
+    for (const e of m.values()) e.avg = e.tok / Math.max(1, Math.min(7, Math.ceil((day0 - startOfDay(e.first)) / DAY)));
+    return m;
+  }
+  const budgetOf = (e, avg) => BUDGETS[e.name] || (avg && avg.avg > 0 ? Math.round(2 * avg.avg) : 0);
+  function dash({ limits, now = Date.now(), models = {} } = {}) {
     const day0 = startOfDay(now), m = new Date(now), m0 = new Date(m.getFullYear(), m.getMonth(), 1).getTime(), pm0 = new Date(m.getFullYear(), m.getMonth() - 1, 1).getTime(), week = weekWindow(now, limits);
     const R = loadRows(Math.floor((Math.min(pm0, week.start - 7 * DAY, day0 - 31 * DAY)) / HOUR) - 1);
     const card = (start, prevStart, prevEnd, label, vs) => ({ label, vs, start, tok: sumIn(R, start, now + 1), prev: sumIn(R, prevStart, prevEnd) });
     const cards = { today: card(day0, day0 - DAY, now - DAY, 'Today', 'same time yesterday'), week: { ...card(week.start, week.start - 7 * DAY, now - 7 * DAY, 'This week', 'same point last week'), note: week.label, source: week.source, end: week.end },
       month: card(m0, pm0, Math.min(m0, pm0 + (now - m0)), 'This month', 'same point last month') };
     const ranked = { day: rank(R, day0, now + 1), week: rank(R, week.start, now + 1), month: rank(R, m0, now + 1) };
+    const avgs = lineAvg(R, day0);
+    for (const r of Object.values(ranked)) for (const e of r.top.flatMap(x => [x, ...(x.children || [])])) if (!e.runs) { e.lineName = e.name; e.setModel = models[e.name] || null; e.budget = budgetOf(e, avgs.get(e.key)); }
     // last 30 days, by project: the seven biggest keep a colour for good, the rest are Other
     const days = [], byDay = new Map(), proj = new Map();
     for (let i = 29; i >= 0; i--) { const d = new Date(day0); d.setDate(d.getDate() - i); const e = { day: d.getTime(), total: 0, by: {} }; days.push(e); byDay.set(d.getTime(), e); }
@@ -272,16 +334,27 @@ function openUsage({ file, home, machine, projects = path.join(home, '.claude', 
     } catch { return ''; } finally { if (fd != null) try { fs.closeSync(fd); } catch { } }
   }
 
-  // today's alerts: one session over 30% of the day, or the day at 2× the 7-day average. Each fires once.
-  function alerts(now = Date.now()) {
+  // today's alerts: one session over 30% of the day, the day at 2× the 7-day average, a session past its daily budget,
+  // and (once a week) the weekly limit running out before its reset at the last 24 hours' pace. Each fires once.
+  const fmt = n => n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : Math.round(n / 1e6) + 'M';
+  function alerts(limits, now = Date.now()) {
     const day0 = startOfDay(now), R = loadRows(Math.floor((day0 - 8 * DAY) / HOUR)), today = sumIn(R, day0, now + 1), done = kv('alerted', {}), out = [], dayKey = String(day0);
     const past = []; for (let i = 1; i <= 7; i++) past.push(sumIn(R, day0 - i * DAY, day0 - (i - 1) * DAY));
     const used = past.filter(Boolean); if (!used.length) return out;
     const avg = used.reduce((a, b) => a + b, 0) / used.length;
-    const send = (k, title, body) => { const id = dayKey + ':' + k; if (!done[id]) { done[id] = 1; out.push({ title, body }); } };
+    // the weekly forecast once per week, the rest once a day
+    const send = (k, title, body) => { const id = k.startsWith('w:') ? k : dayKey + ':' + k; if (!done[id]) { done[id] = 1; out.push({ title, body }); } };
     if (today >= avg * 2) send('day', 'Token usage is high today', `Today is at ${(today / avg).toFixed(1)}x your 7-day average.`);
     if (today >= avg * .25) for (const s of rank(R, day0, now + 1, 3).top) if (s.tok / today > .3) send('s:' + s.key, `${s.name} is using a lot today`, `${Math.round(s.tok / today * 100)}% of today's tokens so far.`);
-    for (const k of Object.keys(done)) if (!k.startsWith(dayKey)) delete done[k];
+    // a session past its daily budget: 2× its own 7-day average (or the fixed one in local/usage-budgets.json); 20M floor
+    const avgs = lineAvg(R, day0);
+    for (const s of rank(R, day0, now + 1, 40).top) { if (s.runs) continue; const b = budgetOf(s, avgs.get(s.key)); if (b && s.tok > Math.max(b, 20e6)) send('b:' + s.key, `${s.name} passed its daily token budget`, `${fmt(s.tok)} today vs a budget of ${fmt(b)} (${BUDGETS[s.name] ? 'set' : "2× its 7-day average"}). Check the Token usage board in Mesh.`); }
+    // the weekly limit: at the last 24 hours' pace, does it run out before the reset?
+    const w = (limits || []).find(l => l.kind === 'weekly_all' && l.resetsAt && l.used > 0);
+    if (w) { const wk = weekWindow(now, limits), CR = R.filter(r => isClaude(r.model)), used = sumIn(CR, wk.start, now + 1), d24 = sumIn(CR, now - DAY, now + 1);
+      if (used > 0 && d24 > 0) { const perPct = used / w.used, perDay = d24 / perPct, hits = now + (100 - w.used) / perDay * DAY;
+        if (hits < wk.end) send('w:' + Math.floor(wk.end / HOUR), 'Weekly limit runs out before the reset', `${Math.round(w.used)}% used. At the last 24 hours' pace (${Math.round(perDay)}% a day) it hits 100% ${new Date(hits).toLocaleString('en', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}, reset ${new Date(wk.end).toLocaleString('en', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}.`); } }
+    for (const k of Object.keys(done)) if (k.startsWith('w:') ? +k.slice(2) * HOUR < now - 8 * DAY : !k.startsWith(dayKey)) delete done[k];
     setKv('alerted', done); return out;
   }
   function summary(limits, now = Date.now()) {

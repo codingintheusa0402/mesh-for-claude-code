@@ -14,7 +14,12 @@
 //   5. it is told to continue; its /loop (ScheduleWakeup) is re-armed and the next tick is watched
 //   6. bubble colour, group, orbit (prevSid), project card follow it; the old transcript is archived (7 days) and the old one closed;
 //      leftovers of the old session (processes, duplicates) are checked: idle helpers are stopped, anything doing work is left and reported
-// Triggers: nightly at a set time (per session: nightly / weekends / Sundays / never), context past ~60 %, today's tokens far above
+// Lineage (2026-11-13): every generation shares one lineage id (lineage.js), stamped into HANDOFF.md and lineage.json next to it.
+// Context cap (2026-11-13): a token count, not 60 % of a 1M window: ctxCap (300K), loopCap (200K) for sessions with a /loop,
+// ctxCapFor[name] per session. Model (2026-11-13): model[name] = opus / sonnet / haiku, used from the next refresh on.
+// Idle park (2026-11-13): a session nobody used for idleHours (48) with nothing running writes its handoff and closes,
+// freeing memory; it is listed under Parked and comes back from the handoff on Resume (unpark), as the next generation.
+// Triggers: nightly at a set time (per session: nightly / weekends / Sundays / never), context past the cap, today's tokens far above
 // normal, "Refresh now". Never while a session works, waits for you, runs sub-agents, background tasks or child jobs
 // (Claude Bash tasks, Hermes background processes, tmux jobs in its folder: jobsOf), or (loops) is
 // due to tick within 5 minutes; a blocked nightly refresh retries every 30 min until 07:00, then the next night. Only the
@@ -23,6 +28,7 @@
 // log ~/.mesh/session-refresh.log (local/session-refresh.json can move it).
 const fs = require('fs'), path = require('path'), os = require('os'), crypto = require('crypto'), http = require('http');
 const { execFile, execFileSync } = require('child_process');
+const LINEAGE = require('./lineage');
 
 const HOME = os.homedir();
 // a team's own settings (gitignored): paths, per-session defaults, extra handoff/verification rules for named projects
@@ -38,11 +44,13 @@ const q1 = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
 const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const slug = n => String(n).replace(/[^\p{L}\p{N}_.()-]+/gu, '_').replace(/^_+|_+$/g, '').slice(0, 80) || 'session';   // no spaces: the reply path is read up to the line end
 
-// What every HANDOFF.md must contain (complete, not a summary; reference files by path instead of copying them)
+// What every HANDOFF.md must contain. Lean (2026-11-13, token diet): the new session carries the handoff in every call it
+// makes, so it holds state and pointers, not copies: anything already in a file (rules, how it works, scripts) is named by path.
+const LEAN = 'Keep it lean, at most about 150 lines (8 KB): the new session re-reads it on every call. Facts already in a file (rule files, README, SKILL.md, memory) are named by path in one line, never copied; no transcripts, no logs, no long command output. What exists only in this conversation goes in full.';
 const TEMPLATE = `# HANDOFF: <session name>  (updated <date time>)
 ## 1. Purpose: what this project/session is for, who it serves
 ## 2. Rules and the owner's decisions: every standing rule and decision, with dates (reference rule files by path; list what is NOT in them)
-## 3. How it works: the full logic of every feature and sub-feature (inputs, steps, gates, outputs, edge cases)
+## 3. How it works: the logic of each feature in a few lines, pointing to the file that holds the detail (README, SKILL.md, script)
 ## 4. Files: scripts, configs, state files, logs (absolute paths, one line each on what they hold)
 ## 5. Schedules, loops and children: launchd/cron jobs, the /loop and its prompt and cadence, sub-sessions, tmux windows, background
 ##    agents this session owns: name, schedule, what it does, how to check it. The new session takes them over: no duplicates, no orphans
@@ -60,8 +68,14 @@ function createRefresh(ctx) {
   //      sql(query), remap(oldSid, newSid), alert(title, step), quietFor(), claudeBin(), report(text) (to the app's own session)
   const FILE = path.join(ctx.userData, 'session-refresh.json');
   let cfg = { enabled: false, time: '04:00', sessions: { ...(LOCAL.sessions || {}) }, notBefore: { ...(LOCAL.notBefore || {}) },
-    reportOn: LOCAL.reportOn || [], last: {}, alias: {}, prev: {}, tok: {}, tried: {} };
-  try { const j = JSON.parse(fs.readFileSync(FILE, 'utf8')); cfg = { ...cfg, ...j, sessions: { ...cfg.sessions, ...(j.sessions || {}) }, notBefore: { ...cfg.notBefore, ...(j.notBefore || {}) }, reportOn: cfg.reportOn }; } catch { }
+    reportOn: LOCAL.reportOn || [], last: {}, alias: {}, prev: {}, tok: {}, tried: {},
+    ctxCap: LOCAL.ctxCap || 300e3, loopCap: LOCAL.loopCap || 200e3, ctxCapFor: { ...(LOCAL.ctxCapFor || {}) }, model: { ...(LOCAL.model || {}) },
+    idleHours: LOCAL.idleHours || 48, noPark: LOCAL.noPark || [], parked: {} };
+  try { const j = JSON.parse(fs.readFileSync(FILE, 'utf8')); cfg = { ...cfg, ...j, sessions: { ...cfg.sessions, ...(j.sessions || {}) }, notBefore: { ...cfg.notBefore, ...(j.notBefore || {}) }, reportOn: cfg.reportOn,
+    model: { ...cfg.model, ...(j.model || {}) }, ctxCapFor: { ...cfg.ctxCapFor, ...(j.ctxCapFor || {}) }, noPark: cfg.noPark }; } catch { }
+  const MACHINE = os.hostname().split('.')[0];
+  let linIdx = new Map(), linAt = 0;
+  const lineageOf = sid => { if (Date.now() - linAt > 60e3) { linIdx = LINEAGE.index(FALLBACK); linAt = Date.now(); } return linIdx.get(sid) || null; };
   const save = () => { try { fs.writeFileSync(FILE, JSON.stringify(cfg, null, 1)); } catch { } };
   let running = null;
   // crash safety (2026-11-08): every step of a running refresh is journaled; after a crash/restart the run is rolled back
@@ -298,6 +312,8 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
       const cmd = pp ? String(execFileSync('/bin/ps', ['-o', 'command=', '-p', pp])) : '';
       const m = /ollama launch claude --model (\S+)/.exec(cmd); if (m) return { ollama: m[1] };
     } catch { }
+    const set = cfg.model[s.name];                     // the model chosen for this session (token board or settings), from this refresh on
+    if (set && /^(opus|sonnet|haiku|fable|claude-[\w.-]+)$/.test(set)) return { model: set };
     return { model: /^claude-[\w.-]+$/.test(s.model || '') ? s.model : null };
   }
   // the processes under a session (its background shells, servers, watchers), to check after it is closed
@@ -352,8 +368,9 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
       const where = isH ? `Write it as HANDOFF.md in this project's folder (${s.cwd}), where your instructions and jobs read it; Mesh keeps a copy in ${fb}.`
         : `Write it to ${path.join(fb, 'HANDOFF.md')}: the one canonical place for this session's handoff (not the project folder).`;
       const ex = extraFor(name), since = Date.now(), nonce = crypto.randomBytes(3).toString('hex').toUpperCase();   // each request its own token: a late reply to an earlier one never counts
-      const ask = `[Mesh session refresh] This session will be replaced by a fresh one with the same name, so it stays fast and cheap. `
-        + `${where} It must be COMPLETE, not a summary: a new session with no memory of this conversation must be able to carry on exactly. `
+      const ask = (opt.park ? `[Mesh idle park] Nobody has used this session for ${cfg.idleHours} hours and nothing of it is running, so it will be closed to free memory. It comes back from your handoff when the owner resumes it. `
+        : `[Mesh session refresh] This session will be replaced by a fresh one with the same name, so it stays fast and cheap. `)
+        + `${where} A new session with no memory of this conversation must be able to carry on exactly. ${LEAN} `
         + `Write the whole file now with the sections below, even if you wrote a handoff before (its saved time and sections are checked). Reference existing files by path instead of copying them. Sections:\n${TEMPLATE}\n${ex.handoff ? ex.handoff + '\n' : ''}`
         + (jobs.length ? `These child jobs of yours are STILL RUNNING and will keep running (never kill them). In section 5 list every one: what it does, its pid, where its output/result lands (file, log, task output path) and how the new session collects it when it ends:\n${jobList(jobs)}\n` : '')
         + `Don't start other work. When the file is saved, reply with exactly one line: REFRESH-HANDOFF-DONE-${nonce} <absolute path of HANDOFF.md>`;
@@ -373,6 +390,18 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
         ['open tasks', /open task|to-?do|next step|tasks/i], ['bugs', /bug|edge case|issue|risk/i], ['unsaved', /not saved|unsaved|conversation|not in any file/i]];
       const missing = PARTS.filter(([, re]) => !re.test(heads)).map(([n]) => n);
       if (missing.length > 1) return fail('handoff is missing sections: ' + missing.join(', '));
+      const lin = LINEAGE.ensure(FALLBACK, { name, machine: MACHINE, sid: s.sid, start: s.startedAt || 0 }); linAt = 0;
+      LINEAGE.stamp(hand, lin.lid, lin.gen + 1, s.sid);          // the next generation's id is in its handoff
+      if (opt.park) {                       // idle park: the handoff is the session now; close it, list it under Parked
+        step('close'); archive(s); LINEAGE.close(FALLBACK, name, s.sid);
+        cfg.parked[name] = { sid: s.sid, at: Date.now(), handoff: hand, cwd: s.cwd, session: tmuxSess, title: oldWin, model: (engineOf(s) || {}).model || null, ollama: eng.ollama || null, lid: lin.lid, gen: lin.gen, idleH: Math.round((Date.now() - (s.lastUseAt || Date.now())) / 3600e3) };
+        save();
+        await ctx.sendToSession(s.sid, '/exit'); await sleep(12000);
+        if (ctx.panes.has(s.pane)) ctx.tmux(['kill-pane', '-t', s.pane]);
+        log(`PARK  ${name}: idle ${cfg.parked[name].idleH} h, handoff ${hand.replace(HOME, '~')}; closed (Resume brings it back)`);
+        if (matchAny(cfg.reportOn, name)) ctx.report(`[session refresh] ${name}: parked after ${cfg.parked[name].idleH} h idle (handoff ${hand.replace(HOME, '~')}).`);
+        journal(null); running = null; return { ok: true, parked: true };
+      }
       const loop = loopInfo(s), kids = descendants(s.pid);
       // 2. the new session, next to the old one
       step('start');
@@ -424,6 +453,7 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
       step('move');
       cfg.alias[newSid] = cfg.alias[s.sid] || s.sid; cfg.prev[newSid] = s.sid;
       cfg.last[name] = { at: Date.now(), from: s.sid, to: newSid, why, secs: Math.round((Date.now() - t0) / 1000), handoff: hand, checked: v.n };
+      try { const L = LINEAGE.record(FALLBACK, { name, machine: MACHINE, from: s.sid, to: newSid, why }); cfg.last[name].lid = L.lid; cfg.last[name].gen = L.gen; linAt = 0; } catch (e) { log(`WARN  ${name}: lineage not recorded: ${e.message}`); }
       save(); ctx.remap(s.sid, newSid); keepers(name, s.sid, newSid);
       step('close'); archive(s);
       const still = jobsOf(s).filter(j => j.kind !== 'tmux job');            // tmux jobs live in their own panes: closing the session doesn't touch them
@@ -520,7 +550,11 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
   function overUse(s) {
     if (modeOf(s.name) !== 'nightly') return null;
     const last = cfg.last[s.name]; if (last && Date.now() - last.at < 3 * 3600e3) return null;
-    if (s.ctxMax && s.ctx / s.ctxMax > 0.6) return `context ${Math.round(100 * s.ctx / s.ctxMax)}% full`;
+    if (s.ctx && s.kind !== 'hermes') {                 // a set token count (every call re-reads the whole context), at most 60 % of the window
+      const lim = (c => Math.min(c, s.ctxMax ? 0.6 * s.ctxMax : c))(cfg.ctxCapFor[s.name] || cfg.ctxCap);
+      const loopLim = Math.min(lim, cfg.ctxCapFor[s.name] || cfg.loopCap);
+      if (s.ctx > lim || (s.ctx > loopLim && loopInfo(s))) return `context ${Math.round(s.ctx / 1e3)}K${s.ctxMax ? ` (${Math.round(100 * s.ctx / s.ctxMax)}%)` : ''} past the ${Math.round((s.ctx > lim ? lim : loopLim) / 1e3)}K cap`;
+    } else if (s.ctxMax && s.ctx / s.ctxMax > 0.6) return `context ${Math.round(100 * s.ctx / s.ctxMax)}% full`;
     const days = Object.entries(cfg.tok[s.name] || {}).filter(([d, v]) => d !== dayKey() && v > 0).map(([, v]) => v).sort((a, b) => a - b);
     if (days.length >= 3) { const normal = days[Math.floor(days.length / 2)]; if (s.todayTok > Math.max(3 * normal, 50e6)) return `${Math.round(s.todayTok / 1e6)}M tokens today (normal ${Math.round(normal / 1e6)}M)`; }
     return null;
@@ -539,6 +573,7 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
       ctx.alert(`Session refresh rolled back: ${j.name}`, `Mesh restarted during its refresh (step "${j.step}"). The new session was closed; the old one keeps running.`);
     } else if (neu) {
       cfg.alias[j.newSid] = cfg.alias[j.oldSid] || j.oldSid; cfg.prev[j.newSid] = j.oldSid; save();
+      try { LINEAGE.record(FALLBACK, { name: j.name, machine: MACHINE, from: j.oldSid, to: j.newSid, why: 'finished after a restart' }); linAt = 0; } catch { }
       ctx.remap(j.oldSid, j.newSid); keepers(j.name, j.oldSid, j.newSid);
       if (old) { archive(old); await ctx.sendToSession(j.oldSid, j.isH ? '/quit' : '/exit'); await sleep(12000);
         if (old.pane && ctx.panes.has(old.pane)) ctx.tmux(['kill-pane', '-t', old.pane]); if (j.isH && old.pane) ctx.hermes.forget(old.pane); }
@@ -572,7 +607,7 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
       if (s.parent && list.some(p => p.sid === s.parent && dueNightly(p, now))) continue;      // its parent goes first
       const why = dueNightly(s, now) ? 'nightly' : overUse(s); if (!why) continue;
       // the nightly refresh is for sessions that worked: no prompt or reply since the last refresh (or in 24 h) → skip
-      // until tomorrow night (Kevin 2026-11-10). Context/usage triggers still apply.
+      // until tomorrow night (2026-11-10). Context/usage triggers still apply.
       if (why === 'nightly') {
         const since = Math.max((cfg.last[s.name] || {}).at || 0, now - 864e5);
         const lu = s.lastUseAt || (s.sinceUse != null ? now - s.sinceUse * 1000 : null);      // unknown (no transcript data): refresh as before
@@ -583,8 +618,41 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
       cfg.tried[k] = now; save();
       const r = await refresh(s, why, { force: /^context /.test(why) }); if (r.ok) return;   // only the context trigger refreshes despite running jobs
     }
+    // idle park: nobody used it for idleHours, nothing of it runs, no loop, no sub-sessions; Claude sessions only
+    for (const s of list) {
+      if (!idleFor(s, now) || s.parent || s.kind === 'hermes' || matchAny(cfg.noPark, s.name)) continue;
+      if (local().some(c => c.parent === s.sid) || draftText(s) || loopInfo(s) || jobsOf(s).length) continue;
+      const k = s.name + '|park', tried = cfg.tried[k] || 0; if (now - tried < 6 * 3600e3) continue;
+      cfg.tried[k] = now; save();
+      const r = await refresh(s, `idle ${Math.round(idleFor(s, now) / 3600e3)} h`, { park: true }); if (r.ok) return;
+    }
     for (const k of Object.keys(cfg.tried)) if (now - cfg.tried[k] > 864e5) delete cfg.tried[k];
     save();
+  }
+  // how long nobody has used a session (no prompt or reply), when that is past idleHours; 0 otherwise or when unknown
+  function idleFor(s, now = Date.now()) {
+    const lu = s.lastUseAt || (s.sinceUse != null ? now - s.sinceUse * 1000 : 0); if (!lu || s.health !== 'idle') return 0;
+    const d = now - lu; return d > (cfg.idleHours || 48) * 3600e3 ? d : 0;
+  }
+  // a parked session comes back from its handoff as the next generation of its lineage (same name, folder, tmux session, model)
+  async function unpark(name) {
+    const p = cfg.parked[name]; if (!p) return { ok: false, err: 'not parked: ' + name };
+    if (local().some(x => x.name === name)) { delete cfg.parked[name]; save(); return { ok: false, err: 'a session with this name is already running' }; }
+    const newSid = crypto.randomUUID(), model = cfg.model[name] || p.model;
+    const base = `--dangerously-skip-permissions --session-id ${newSid} -n ${q1(name)}`;
+    const cmd = p.ollama ? `exec ollama launch claude --model ${p.ollama} -- ${base}` : `exec claude ${base} --remote-control ${q1(name)}${model ? ' --model ' + model : ''}`;
+    const pane = await ctx.panes.spawnPane({ session: p.session || 'mesh', cwd: p.cwd || HOME, title: p.title || name, shell: ctx.loginShell(), args: ['-l', '-i', '-c', cmd], env: { COLORTERM: 'truecolor', TERM_PROGRAM: 'ClaudeMesh' } });
+    if (!pane) return { ok: false, err: 'tmux could not open a pane' };
+    let ns = null; for (let i = 0; i < 45; i++) { await sleep(2000); ns = live(newSid); if (ns && ns.health === 'idle') break; }
+    if (!ns) return { ok: false, err: 'the resumed session never appeared (pane ' + pane.id + ')' };
+    const L = LINEAGE.record(FALLBACK, { name, machine: MACHINE, from: p.sid, to: newSid, why: 'resumed after idle park', at: Date.now() }); linAt = 0;
+    await sleep(3000);
+    await ctx.sendToSession(newSid, `Read ${p.handoff} IN FULL (every line), then CLAUDE.md and the project's rule files. This session was parked after ${p.idleH} h idle (nothing was running) and the owner resumed it now: you are lineage ${L.lid}, generation ${L.gen}. Where your memory files disagree with the handoff, the handoff is newer and wins. Then say in two lines what this session is for and its open tasks, and wait for the owner.`);
+    cfg.alias[newSid] = cfg.alias[p.sid] || p.sid; cfg.prev[newSid] = p.sid; delete cfg.parked[name];
+    cfg.last[name] = { at: Date.now(), from: p.sid, to: newSid, why: 'resumed after idle park', secs: 0, handoff: p.handoff, checked: 0, lid: L.lid, gen: L.gen };
+    save(); ctx.remap(p.sid, newSid); keepers(name, p.sid, newSid);
+    log(`RESUM ${name}: ${p.sid.slice(0, 13)} → ${newSid.slice(0, 13)} from ${p.handoff.replace(HOME, '~')}`);
+    return { ok: true, sid: newSid };
   }
   setInterval(() => { tick().catch(e => log('ERR   tick: ' + e.message)); }, 60e3);
   try { migrateHandoffs(); } catch (e) { log('ERR   migrate: ' + e.message); }
@@ -599,11 +667,14 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
 
   return {
     settings: () => ({ enabled: cfg.enabled, time: cfg.time, sessions: cfg.sessions, notBefore: cfg.notBefore, last: cfg.last, running, log: LOG, fallback: FALLBACK,
-      list: local().filter(named).map(s => ({ sid: s.sid, name: s.name, kind: s.kind || 'claude', mode: modeOf(s.name), parent: s.parent || null, last: cfg.last[s.name] || null, ctx: s.ctxMax ? s.ctx / s.ctxMax : 0, why: blocker(s) })) }),
+      ctxCap: cfg.ctxCap, loopCap: cfg.loopCap, idleHours: cfg.idleHours, model: cfg.model, parked: Object.entries(cfg.parked || {}).map(([name, p]) => ({ name, at: p.at, idleH: p.idleH, handoff: p.handoff })),
+      list: local().filter(named).map(s => ({ sid: s.sid, name: s.name, kind: s.kind || 'claude', mode: modeOf(s.name), parent: s.parent || null, last: cfg.last[s.name] || null, ctx: s.ctxMax ? s.ctx / s.ctxMax : 0, ctxTok: s.ctx || 0, model: cfg.model[s.name] || null, cur: s.family || s.model || '', lineage: lineageOf(s.sid), why: blocker(s) })) }),
     set(p) {
       if (typeof p.enabled === 'boolean') { cfg.enabled = p.enabled; log(`SET   refresh ${p.enabled ? 'on' : 'off'}`); }
       if (/^\d{1,2}:\d{2}$/.test(p.time || '')) cfg.time = p.time;
       if (p.session && MODES.includes(p.mode)) { cfg.sessions[p.session] = p.mode; log(`SET   ${p.session}: ${p.mode}`); }
+      if (p.session && 'model' in p) { if (p.model && /^(opus|sonnet|haiku|fable)$/.test(p.model)) cfg.model[p.session] = p.model; else delete cfg.model[p.session]; log(`SET   ${p.session}: model ${p.model || 'as it is'} (from its next refresh)`); }
+      if (+p.ctxCap >= 50e3) cfg.ctxCap = +p.ctxCap; if (+p.loopCap >= 50e3) cfg.loopCap = +p.loopCap; if (+p.idleHours >= 12) cfg.idleHours = +p.idleHours;
       save(); return this.settings();
     },
     now: sid => { const s = live(sid); if (!s) return { ok: false, err: 'session is not running here' }; return refresh(s, 'Refresh now', { manual: true }); },
@@ -611,10 +682,12 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
     rehearse: sid => { const s = live(sid); if (!s) return { ok: false, err: 'session is not running here' }; return refresh(s, 'dry run', { dry: true, manual: true }); },
     inventory, template: TEMPLATE,
     aliasOf: sid => cfg.alias[sid] || sid,
-    decorate(snap) { for (const s of snap.sessions || []) { if (cfg.prev[s.sid]) s.prevSid = cfg.prev[s.sid]; const l = cfg.last[s.name]; if (l && l.to === s.sid) s.refreshedAt = l.at; } },
+    decorate(snap) { for (const s of snap.sessions || []) { if (cfg.prev[s.sid]) s.prevSid = cfg.prev[s.sid]; const l = cfg.last[s.name]; if (l && l.to === s.sid) s.refreshedAt = l.at;
+      const L = !s.onPeer && lineageOf(s.sid); if (L) { s.lineage = L.lid; s.gen = L.gen; } } },
+    unpark, models: () => ({ ...cfg.model }), parked: () => ({ ...cfg.parked }),
     lastFor: name => cfg.last[name] || null,
     running: () => running,
-    _test: { jobsOf, blocker, dueNightly, draftText, clearDraft, restoreDraft, adopt, recover, canonical, migrateHandoffs },
+    _test: { jobsOf, blocker, dueNightly, draftText, clearDraft, restoreDraft, adopt, recover, canonical, migrateHandoffs, overUse, idleFor, engineOf },
   };
 }
-module.exports = { createRefresh, TEMPLATE };
+module.exports = { createRefresh, TEMPLATE, paths: { handoffs: FALLBACK, log: LOG } };

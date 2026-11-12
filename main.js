@@ -603,7 +603,8 @@ function linkSubSessions(snap) {
 // token usage (usage-main.js)
 const USAGE_MACHINE = (() => { try { const c = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'peer.json'), 'utf8')); if (c.selfLabel) return c.selfLabel; } catch { } return os.hostname().split('.')[0]; })();
 const usageBoard = require('./usage-main').createUsage({ userData: app.getPath('userData'), machine: USAGE_MACHINE,
-  snapshot: () => lastSnap, limits: () => (core.usage() || {}).limits || null, limitsPending: () => !core.usage() && !core.usageTried(), peer: () => peerLink, mask: t => cards.mask(t), onAlert: a => { if (phone) phone.alert(a); } });
+  snapshot: () => lastSnap, limits: () => (core.usage() || {}).limits || null, limitsPending: () => !core.usage() && !core.usageTried(), peer: () => peerLink, mask: t => cards.mask(t), onAlert: a => { if (phone) phone.alert(a); },
+  models: () => (refresher ? refresher.models() : {}) });
 app.whenReady().then(() => usageBoard.start());
 ipcMain.handle('usage:dash', () => usageBoard.dash());
 ipcMain.handle('usage:session', (_e, list) => usageBoard.session(list));
@@ -1060,7 +1061,7 @@ function initPhone() {
     handoff,
     orchestrator: { get: cwd => orchestratorFor(fromTildeP(cwd)), set: (cwd, o) => setOrchestrator(fromTildeP(cwd), o) },
     hermesNew: o => spawnHermes(o || {}),
-    refresh: { get: () => refresher.settings(), set: p => refresher.set(p || {}), now: sid => refresher.now(sid), rehearse: sid => refresher.rehearse(sid), inventory: () => refresher.inventory() },
+    refresh: { get: () => refresher.settings(), set: p => refresher.set(p || {}), now: sid => refresher.now(sid), rehearse: sid => refresher.rehearse(sid), inventory: () => refresher.inventory(), unpark: n => refresher.unpark(n) },
     // a session moved here from the other Mac: open it in a fresh in-app terminal (not a select of its mirror)
     handoffStart: b => { if (!win) return { ok: false, err: APP_NAME + ' window is not open' }; win.webContents.send('handoff:start', { sid: String(b.sid || ''), cwd: handoff.fromTilde(String(b.cwd || '~')), name: String(b.name || '') }); return { ok: true }; },
     rename: async (sid, name) => {
@@ -1193,7 +1194,11 @@ function initRefresh() {
 }
 const peerSess = sid => !liveSession(sid) && peerLink && peerLink.owns(sid);
 ipcMain.handle('refresh:get', async (_e, onPeer) => onPeer ? (peerLink ? peerLink.forward('GET', '/api/refresh').catch(e => ({ err: e.message })) : null) : refresher.settings());
-ipcMain.handle('refresh:set', async (_e, p, onPeer) => onPeer ? peerLink.forward('POST', '/api/refresh', p).catch(e => ({ err: e.message })) : refresher.set(p || {}));
+ipcMain.handle('refresh:set', async (_e, p, onPeer) => onPeer ? peerLink.forward('POST', '/api/refresh', p, undefined, p && p.unpark ? 5 * 60e3 : undefined).catch(e => ({ err: e.message })) : p && p.unpark ? refresher.unpark(String(p.unpark)) : refresher.set(p || {}));
+// the token board's model picker: a session's model, from its next refresh (on the Mac it runs on)
+ipcMain.handle('usage:model', async (_e, name, model) => { const here = ((lastSnap && lastSnap.sessions) || []).some(s => s.name === name && !s.onPeer);
+  if (!here && peerLink && peerLink.online() && ((lastSnap && lastSnap.sessions) || []).some(s => s.name === name && s.onPeer)) return peerLink.forward('POST', '/api/refresh', { session: name, model }).catch(e => ({ err: e.message }));
+  return refresher.set({ session: name, model }); });
 ipcMain.handle('refresh:now', async (_e, sid) => peerSess(sid) ? peerLink.forward('POST', '/api/refresh', { now: true, sid }, undefined, 60 * 60e3).catch(e => ({ ok: false, err: e.message })) : refresher.now(sid));
 
 app.whenReady().then(async () => {

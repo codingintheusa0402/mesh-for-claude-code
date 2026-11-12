@@ -50,7 +50,7 @@ function openStarMenu() {
 }
 function openUsage() {
   window.usageView.open({ box: (html, wide) => { const c = document.querySelector('#modalCard .uview'), st = c && c.closest('#modalCard').scrollTop; modal(html + '<div class="btns" style="justify-content:flex-end"><button id="mCancel">Close</button></div>'); $('#modalCard').classList.add('wide'); if (st) $('#modalCard').scrollTop = st; },
-    get: () => window.api.usage.dash(), session: l => window.api.usage.session(l), setManual: p => window.api.usage.manual(p) });
+    get: () => window.api.usage.dash(), session: l => window.api.usage.session(l), setManual: p => window.api.usage.manual(p), setModel: (n, m) => window.api.usage.model(n, m) });
 }
 // the black hole (blackhole.js): 'check' on release (only sessions we can type into go in), 'send' when it crosses the
 // horizon (the Undo window is over), 'refuse' for a group dropped on it, 'stuck' if it never went away

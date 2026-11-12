@@ -45,10 +45,14 @@
     return `<div class="u-plan"><b>Ollama ${usd(o.left)} left${o.allowance ? ` of ${usd(o.allowance + (o.bought || 0))}` : ''}</b> <span class="u-dim">read from Ollama${o.resetsAt ? `, resets ${esc(reset(o.resetsAt))}` : ''}</span><div class="u-dim">${o.tokensLeft ? `About ${fmt(o.tokensLeft)} tokens at the cost per token so far.` : ''}${pace}${o.stale ? ` Couldn't update, from ${esc(stamp(o.at))}.` : ''}</div></div>`;
   }
   const seg = (id, items, on) => `<span class="u-seg" id="${id}">${items.map(([k, l]) => `<button data-k="${k}" class="${k === on ? 'on' : ''}">${l}</button>`).join('')}</span>`;
+  // one row per logical session (all its generations); a folder's script runs sit indented under their session
+  const famOf = m => { m = String(m || '').toLowerCase(); for (const f of ['fable', 'mythos', 'opus', 'sonnet', 'haiku']) if (m.includes(f)) return f; return 'other'; };
   function ranked(d, p) {
     const r = d.ranked[p], max = Math.max(1, ...r.top.map(s => s.tok));
     if (!r.top.length) return `<div class="u-empty">No tokens used in this period yet.</div>`;
-    return r.top.map((s, i) => `<button class="u-row" data-i="${i}" title="${esc(s.project)} · ${fmt(s.tok)} tokens · ${Math.round(s.tok / r.total * 100)}%"><span class="u-name">${esc(s.name)}</span><span class="u-track"><span class="u-bar" style="width:${Math.max(.6, s.tok / max * 100)}%;background:${barColor(s)}"></span></span><span class="u-val">${fmt(s.tok)}<i>${Math.round(s.tok / r.total * 100)}%</i></span></button>`).join('')
+    const row = (s, id, sub) => { const g = s.gens && s.gens.length > 1 ? ` <em class="u-gens">${s.gens.length} gens</em>` : '', m = s.setModel ? ` <em class="u-gens">→ ${esc(MODEL[s.setModel] || s.setModel)}</em>` : '';
+      return `<button class="u-row${sub ? ' u-sub' : ''}" data-i="${id}" title="${esc(s.project)} · ${fmt(s.tok)} tokens · ${Math.round(s.tok / r.total * 100)}% · ${esc(MODEL[famOf(s.model)] || '')}"><span class="u-name">${sub ? '└ ' : ''}${esc(s.name)}${g}${m}</span><span class="u-track"><span class="u-bar" style="width:${Math.max(.6, s.tok / max * 100)}%;background:${barColor(s)}"></span></span><span class="u-val">${fmt(s.tok)}<i>${Math.round(s.tok / r.total * 100)}%</i></span></button>`; };
+    return r.top.map((s, i) => row(s, i) + (s.children || []).map((c, j) => row(c, i + '.' + j, true)).join('')).join('')
       + (r.otherN ? `<div class="u-rest">${r.otherN} more session${r.otherN > 1 ? 's' : ''}: ${fmt(r.other)}</div>` : '');
   }
   function stacked(d) {
@@ -69,12 +73,22 @@
       ${d.models.map(m => `<div class="u-mrow"><i style="background:${famColor(m.family)}"></i><span class="u-mn">${esc(MODEL[m.family])}</span><span class="u-val">${fmt(m.tok)}<i>${Math.round(m.tok / tot * 100)}%</i></span><span class="u-dim u-msplit">${fmt(m.out)} out · ${fmt(m.inp + m.cw)} in · ${fmt(m.cr)} cache read</span></div>`).join('')}
       ${d.models.length ? `<div class="u-dim u-note">This week. Cache reads are ${Math.round(cr / tot * 100)}% of all tokens. Fable uses the weekly limit faster than the others.</div>` : '<div class="u-empty">No tokens used this week yet.</div>'}`;
   }
-  function detail(s, x) {
+  const span = (a, b) => `${stamp(a)} – ${b > Date.now() - 3600e3 ? 'now' : stamp(b)}`;
+  function gens(s) {
+    if (!s.gens || !s.gens.length) return '';
+    return `<h5>Generations</h5>${s.gens.map(g => `<div class="u-turn"><span class="u-tt">#${g.gen}</span><span class="u-tv">${fmt(g.tok)}</span><span class="u-tx">${esc(span(g.from, g.to))} · ${esc(g.machine)}${g.name && g.name !== s.name ? ` · named “${esc(g.name)}”` : ''} <em>${esc(g.why || '')}</em></span></div>`).join('')}`;
+  }
+  function modelPick(s, models) {
+    if (!models || s.runs || !s.lineName) return '';
+    const cur = s.setModel || '';
+    return `<label class="u-man">Model for this session <select id="uModel" data-name="${esc(s.lineName)}">${[['', 'As it is (' + (MODEL[famOf(s.model)] || 'default') + ')'], ['opus', 'Opus'], ['sonnet', 'Sonnet'], ['haiku', 'Haiku']].map(([k, l]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${l}</option>`).join('')}</select></label><div class="u-dim">Takes effect at its next refresh (nightly or context cap), so the cache isn't rebuilt mid-conversation.</div>`;
+  }
+  function detail(s, x, models) {
     const max = Math.max(1, ...x.days.map(d => d.tok)), T = 60;
-    return `<div class="u-det"><h4>${esc(s.name)}</h4><div class="u-dim">${esc(s.project)}${s.sids.length > 1 ? `, ${s.sids.length} runs` : ''}</div>
+    return `<div class="u-det"><h4>${esc(s.name)}</h4><div class="u-dim">${esc(s.project)} · mostly ${esc(MODEL[famOf(s.model)] || '?')}${s.budget ? ` · daily budget ${fmt(s.budget)}` : ''}</div>${modelPick(s, models)}
       <div class="u-mini" style="height:${T}px">${x.days.map(d => `<span title="${date(d.day)}: ${fmt(d.tok)}" style="height:${Math.max(d.tok ? 2 : 0, d.tok / max * T)}px;background:${barColor(s)}"></span>`).join('')}</div>
       <div class="u-minit"><span>${date(x.days[0].day)}</span><span>Daily tokens, peak ${fmt(max)}</span><span>Today</span></div>
-      ${x.partial ? '<div class="u-dim">The other Mac is offline, so its part of this session is missing.</div>' : ''}<h5>Heaviest turns</h5>${x.turns.length ? x.turns.map(t => `<div class="u-turn"><span class="u-tt">${esc(stamp(t.at))}</span><span class="u-tv">${fmt(t.tok)}</span><span class="u-tx">${esc(t.text || 'No prompt text on record')}${t.calls > 1 ? ` <em>${t.calls} calls</em>` : ''}</span></div>`).join('') : '<div class="u-empty">No turn details on record.</div>'}</div>`;
+      ${x.partial ? '<div class="u-dim">The other Mac is offline, so its part of this session is missing.</div>' : ''}${gens(s)}<h5>Heaviest turns</h5>${x.turns.length ? x.turns.map(t => `<div class="u-turn"><span class="u-tt">${esc(stamp(t.at))}</span><span class="u-tv">${fmt(t.tok)}</span><span class="u-tx">${esc(t.text || 'No prompt text on record')}${t.calls > 1 ? ` <em>${t.calls} calls</em>` : ''}</span></div>`).join('') : '<div class="u-empty">No turn details on record.</div>'}</div>`;
   }
   // both Macs are one total; when the other's share is missing or old, say that next to the total
   function peerGap(d) {
@@ -104,11 +118,12 @@
       const root = document.querySelector('.uview');
       root.querySelectorAll('#uP button').forEach(b => b.onclick = () => { period = b.dataset.k; pick = null; draw(); });
       root.querySelectorAll('.u-row').forEach(b => b.onclick = async () => {
-        const s = d.ranked[period].top[+b.dataset.i], el = root.querySelector('#uDet');
+        const [i, j] = String(b.dataset.i).split('.'), p = d.ranked[period].top[+i], s = j != null ? p.children[+j] : p, el = root.querySelector('#uDet');
         root.querySelectorAll('.u-row').forEach(x => x.classList.toggle('on', x === b));
         if (pick === s.key) { pick = null; el.innerHTML = ''; b.classList.remove('on'); return; }
         pick = s.key; el.innerHTML = '<div class="u-empty">Reading…</div>';
-        try { const x = await host.session(s.sids); if (pick === s.key) { el.innerHTML = detail(s, x); el.scrollIntoView({ block: 'nearest' }); } } catch { el.innerHTML = `<div class="u-empty">Couldn't read this session.</div>`; }
+        try { const x = await host.session(s.sids); if (pick === s.key) { el.innerHTML = detail(s, x, !!host.setModel); el.scrollIntoView({ block: 'nearest' });
+          const sel = el.querySelector('#uModel'); if (sel) sel.onchange = async () => { await host.setModel(sel.dataset.name, sel.value || null); d = await host.get(); redraw(); }; } } catch { el.innerHTML = `<div class="u-empty">Couldn't read this session.</div>`; }
       });
       const save = root.querySelector('#uManSave');
       if (save) save.onclick = async () => { const v = root.querySelector('#uManual').value; await host.setManual(v === '' ? null : +v); d = await host.get(); draw(); };
@@ -121,7 +136,8 @@
       const a = document.activeElement; if (a && a.id === 'uManual') return;
       const keep = pick, tbl = document.querySelector('.uview .u-tbl'), open = !!(tbl && tbl.open); pick = null; draw();
       const t = document.querySelector('.uview .u-tbl'); if (t && open) t.open = true;
-      if (keep && d.ranked) { const i = d.ranked[period].top.findIndex(s => s.key === keep), b = document.querySelector(`.uview .u-row[data-i="${i}"]`); if (b) b.click(); }
+      if (keep && d.ranked) { let id = null; d.ranked[period].top.forEach((s, i) => { if (s.key === keep) id = String(i); (s.children || []).forEach((c, j) => { if (c.key === keep) id = i + '.' + j; }); });
+        const b = id != null && document.querySelector(`.uview .u-row[data-i="${id}"]`); if (b) b.click(); }
     };
     const load = async () => {
       try { d = await host.get(); if (!d || !d.cards) d = { failed: (d && d.error) || 'no answer' }; } catch (e) { d = { failed: (e && e.message) || 'no answer' }; }

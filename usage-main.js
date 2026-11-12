@@ -5,13 +5,14 @@ const { utilityProcess, Notification } = require('electron');
 const NAME = require('./mesh-name');
 const EVERY = 5 * 60e3;
 
-function createUsage({ userData, machine, snapshot, limits, limitsPending, peer, mask, onAlert }) {
+function createUsage({ userData, machine, snapshot, limits, limitsPending, peer, mask, onAlert, models = () => ({}) }) {
   const home = os.homedir(), wait = new Map(); let seq = 0, proc = null, ready = null, sum = null, busy = false, scanned = false, scanErr = null, peerErr = null;
   function boot() {
     proc = utilityProcess.fork(path.join(__dirname, 'usage-proc.js'), [], { serviceName: 'Mesh token usage' });
     proc.on('message', m => { const w = wait.get(m.id); if (w) { wait.delete(m.id); m.err ? w.reject(new Error(m.err)) : w.resolve(m.r); } });
     proc.on('exit', () => { for (const w of wait.values()) w.reject(new Error('usage process stopped')); wait.clear(); proc = null; ready = null; });
-    ready = call('open', { file: path.join(userData, 'usage.sqlite'), home, machine });
+    const RP = require('./session-refresh').paths;      // lineage files live next to the handoffs; the refresh log gives the backfill its chains
+    ready = call('open', { file: path.join(userData, 'usage.sqlite'), home, machine, handoffs: RP.handoffs, refreshLogs: [RP.log] });
     return ready;
   }
   function call(op, ...args) {
@@ -33,7 +34,7 @@ function createUsage({ userData, machine, snapshot, limits, limitsPending, peer,
   async function runAlerts() {
     if (process.env.MESH_QA) return;                                       // a test copy never alerts anyone
     const cfg = NAME.usageAlert || null; if (cfg && cfg.host && !os.hostname().toLowerCase().includes(cfg.host.toLowerCase())) return;
-    for (const a of await use('alerts')) {
+    for (const a of await use('alerts', limits())) {
       try { new Notification({ title: a.title, body: a.body, silent: false }).show(); } catch { }
       onAlert && onAlert(a);
       if (cfg && Array.isArray(cfg.cmd)) { const c = cfg.cmd.map(x => String(x).replace(/^~(?=\/)/, home).replace('{title}', a.title).replace('{body}', a.body)); execFile(c[0], c.slice(1), { timeout: 30000 }, () => { }); }
@@ -71,7 +72,7 @@ function createUsage({ userData, machine, snapshot, limits, limitsPending, peer,
   async function dash() {
     if (!scanned && !busy) tick();
     readCredits();
-    const d = await use('dash', { limits: limits() });
+    const d = await use('dash', { limits: limits(), models: models() });
     // one number for both Macs: the first time, wait for the other Mac's share too, and say so when it can't be had
     const p = peer(), other = p && p.label ? p.label() : '', synced = p && (d.peers[p.name()] || Object.values(d.peers)[0]) || 0;
     const peerInfo = p && p.configured() ? { label: other, online: p.online(), at: synced, err: peerErr } : null;

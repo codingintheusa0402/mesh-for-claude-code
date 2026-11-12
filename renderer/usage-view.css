@@ -39,3 +39,7 @@
   .u-cols, .u-ticks { gap: 2px; } .u-col { gap: 1px; } .u-mrow { grid-template-columns: 10px 64px 72px minmax(0, 1fr); } .u-msplit { font-size: 10.5px; }
   .u-turn { grid-template-columns: 82px 48px minmax(0, 1fr); font-size: 12px; }
 }
+
+.uview .u-sub .u-name { padding-left: 14px; opacity: .8; }
+.uview .u-gens { font-style: normal; font-size: 11px; opacity: .6; margin-left: 4px; }
+.uview #uModel { margin-left: 6px; }

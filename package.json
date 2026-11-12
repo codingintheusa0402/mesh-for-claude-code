@@ -84,6 +84,7 @@
       "codemap-preload.js",
       "hermes-sessions.js",
       "session-refresh.js",
+      "lineage.js",
       "calendar.js",
       "usage-core.js",
       "usage-main.js",

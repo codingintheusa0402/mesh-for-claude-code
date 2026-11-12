@@ -165,6 +165,7 @@ function createPhoneServer(ctx) {
       if (b.now && remote(b.sid)) return json(res, 200, await peer.forward('POST', p, b, undefined, 60 * 60e3).catch(e => ({ ok: false, err: e.message })));
       if (b.rehearse) return json(res, 200, await ctx.refresh.rehearse(String(b.sid || '')));
       if (b.inventory) return json(res, 200, ctx.refresh.inventory());
+      if (b.unpark) return json(res, 200, await ctx.refresh.unpark(String(b.unpark)));
       return json(res, 200, b.now ? await ctx.refresh.now(String(b.sid || '')) : ctx.refresh.set(b));
     }
     if (p === '/api/codemap' && ctx.codemap) return json(res, 200, await ctx.codemap.op(String(b.sid || ''), String(b.op || '')));
