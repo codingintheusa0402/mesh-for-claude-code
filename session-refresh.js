@@ -388,7 +388,7 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
       const heads = handText.split('\n').filter(l => /^#{1,4}\s/.test(l)).join('\n');
       const PARTS = [['purpose', /purpose|project|session|what (it|this)/i], ['rules', /rule|decision/i], ['how it works', /how it works|logic|feature|pipeline/i],
         ['files', /file|path|script|config/i], ['schedules', /schedul|loop|cron|launchd|child|sub-?session/i], ['state', /state|status/i],
-        ['open tasks', /open task|to-?do|next step|tasks/i], ['bugs', /bug|edge case|issue|risk/i], ['unsaved', /not saved|unsaved|conversation|not in any file/i]];
+        ['open tasks', /open (task|item)|to-?do|next step|tasks|pending|waiting on/i], ['bugs', /bug|edge case|issue|risk/i], ['unsaved', /not saved|unsaved|conversation|not in any file/i]];
       const missing = PARTS.filter(([, re]) => !re.test(heads)).map(([n]) => n);
       if (missing.length > 1) return fail('handoff is missing sections: ' + missing.join(', '));
       const lin = LINEAGE.ensure(FALLBACK, { name, machine: MACHINE, sid: s.sid, start: s.startedAt || 0 }); linAt = 0;
