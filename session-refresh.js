@@ -178,6 +178,7 @@ function createRefresh(ctx) {
     for (const r of rows) {
       const [id, pid, cmd, cwd] = r.split('\t'); if (!id || mine.has(id) || !s.cwd || path.resolve(cwd || '/') !== path.resolve(s.cwd)) continue;
       if (/^-?(zsh|bash|sh|fish|login|claude|hermes|tail|less|more|top|htop|watch|man|vim?|nano)$/.test(cmd || '')) continue;
+      if (/^\d+\.\d+\.\d+$/.test(cmd || '')) continue;          // Claude Code's native build shows as its version ("2.1.321"): another agent, not a job (2026-11-13)
       out.push({ kind: 'tmux job', pid: +pid, pane: id, cmd: cmd });
     }
     return out;
