@@ -13,10 +13,15 @@ const { DatabaseSync } = require('node:sqlite');
 const { createFolders } = require('./project-folders');
 const LINEAGE = require('./lineage');
 // projects that are one piece of work under several names (local/usage-projects.json: [{ "match": "^ticket-reporter$", "project": "Ticket Reporter" }])
-let PROJECT_ALIAS = []; try { PROJECT_ALIAS = JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 'usage-projects.json'), 'utf8')).map(x => [new RegExp(x.match, 'i'), x.project]); } catch { }
+// an entry with "cwd" instead of "match" files a folder's script runs under that project (jobs living in another session's folder)
+let PROJECT_ALIAS = [], PROJECT_CWD = []; try { for (const x of JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 'usage-projects.json'), 'utf8'))) (x.cwd ? PROJECT_CWD : PROJECT_ALIAS).push([new RegExp(x.cwd || x.match, 'i'), x.project]); } catch { }
 // fixed daily budgets per session (local/usage-budgets.json: { "<session name>": <tokens> }); without one a session's budget is 2× its 7-day average
 let BUDGETS = {}; try { BUDGETS = JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 'usage-budgets.json'), 'utf8')); } catch { }
-const aliasProject = p => { for (const [re, to] of PROJECT_ALIAS) if (re.test(p || '')) return to; return p; };
+const aliasProject = (p, cwd) => { if (cwd) for (const [re, to] of PROJECT_CWD) if (re.test(cwd)) return to; for (const [re, to] of PROJECT_ALIAS) if (re.test(p || '')) return to; return p; };
+// session names that are one lineage under another name (local/usage-lineages.json: [{ "match": "<regex>", "lineage": "<session name>" }]):
+// Claude's own titles on a generation, a renamed project, a daily run that belongs to a session
+let LINE_ALIAS = []; try { LINE_ALIAS = JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 'usage-lineages.json'), 'utf8')).map(x => [new RegExp(x.match, 'i'), x.lineage]); } catch { }
+const aliasLine = n => { for (const [re, to] of LINE_ALIAS) if (re.test(n || '')) return to; return null; };
 
 const HOUR = 3600e3, DAY = 864e5, KEEP_MS = 40 * DAY, CHUNK = 1 << 20, MAX_LINE = 4 << 20, PROJECT_SLOTS = 7;
 const isClaude = m => /claude|fable|mythos|opus|sonnet|haiku/i.test(String(m || ''));       // anything else ran through Ollama and doesn't touch Claude's limit
@@ -229,11 +234,12 @@ function openUsage({ file, home, machine, projects = path.join(home, '.claude', 
   // a conversation handed from one Mac to the other has its log on both: that hour counts once
   function loadRows(fromHour) {
     const best = new Map();
-    for (const r of db.prepare(`SELECT u.*, s.name, s.titled, s.project, s.color, s.headless, s.lid, s.lname, s.gen, s.why FROM usage u LEFT JOIN sessions s ON s.machine = u.machine AND s.sid = u.sid WHERE u.hour >= ?`).all(fromHour)) {
+    for (const r of db.prepare(`SELECT u.*, s.name, s.titled, s.project, s.color, s.headless, s.lid, s.lname, s.gen, s.why, s.cwd FROM usage u LEFT JOIN sessions s ON s.machine = u.machine AND s.sid = u.sid WHERE u.hour >= ?`).all(fromHour)) {
       r.tok = tokOf(r);
       if (!r.headless || r.titled) { if (r.lname && r.lid && !String(r.lid).startsWith('N:') && r.lid !== r.sid) r.project = r.lname; }   // every generation counts for its lineage's project
-      r.project = aliasProject(r.project);
-      if (!r.lid) r.lid = r.titled && !r.headless && r.name ? `N:${r.machine}:${r.name}` : r.sid; const k = `${r.hour}|${r.sid}|${r.model}`, o = best.get(k); if (!o || r.tok > o.tok) best.set(k, r);
+      r.project = aliasProject(r.project, r.headless && !r.titled ? r.cwd : '');
+      if (!r.lid) r.lid = r.titled && !r.headless && r.name ? `N:${r.machine}:${r.name}` : r.sid;
+      if (!r.headless || r.titled) { const to = aliasLine(r.lname || r.name); if (to && to !== r.lname) { r.lid = `N:${r.machine}:${to}`; r.lname = to; r.project = aliasProject(to); if (!r.why) r.why = 'same work, other name'; } } const k = `${r.hour}|${r.sid}|${r.model}`, o = best.get(k); if (!o || r.tok > o.tok) best.set(k, r);
     }
     // the same name is the same work on either Mac: one row, under the refreshed lineage when there is one
     const byName = new Map(); for (const r of best.values()) if (r.lid && r.lid.startsWith('L-') && r.lname) byName.set(r.lname, [r.lid, r.lname]);
