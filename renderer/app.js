@@ -56,10 +56,27 @@ function openStarMenu() {
     m.style.top = Math.min(innerHeight - m.offsetHeight - 8, lastPointer.y + 6) + 'px';
   }).catch(() => { });
 }
+// mode switches as top-bar pills: state read from the file on the machine that holds it (through the other Mac if needed)
+async function renderSwitchPills() {
+  const bar = $('#swBar'); if (!bar) return;
+  const list = await window.api.switches.get().catch(e => [{ id: '', label: 'Switches', offline: true, err: e.message }]);
+  bar.innerHTML = (list || []).map(w => {
+    const name = w.short || w.label, st = w.offline ? '?' : w.enabled ? 'ON' : 'OFF';
+    const tip = w.offline ? `${w.label}: can't read the switch (${w.err || 'no answer'})` : `${w.label} is ${st}` + (w.at ? ` since ${new Date(w.at).toLocaleString()} (by ${w.from || w.by || '?'})` : ' (never switched on)') + ` — click to turn it ${w.enabled ? 'OFF' : 'ON'}`;
+    return `<button class="hpill swpill ${w.offline ? 'err' : w.enabled ? 'on' : 'off'}" data-id="${esc(w.id)}" data-on="${w.enabled ? '0' : '1'}" ${w.offline ? 'disabled' : ''} title="${esc(tip)}">${esc(name)} ${st}</button>`;
+  }).join('');
+  bar.querySelectorAll('.swpill:not([disabled])').forEach(b => b.onclick = () => flipSwitch(b.dataset.id, b.dataset.on === '1'));
+}
+renderSwitchPills(); setInterval(renderSwitchPills, 20000);
+// a mouse wheel scrolls the header sideways when it doesn't fit
+const topFade = () => { const t = $('#top'), more = t.scrollWidth - t.clientWidth; t.classList.toggle('fadeL', more > 1 && t.scrollLeft > 2); t.classList.toggle('fadeR', more > 1 && t.scrollLeft < more - 2); };   // a soft edge says "more this way"
+$('#top').addEventListener('scroll', topFade, { passive: true }); addEventListener('resize', topFade); new ResizeObserver(topFade).observe($('#top')); new MutationObserver(topFade).observe($('#top'), { childList: true, subtree: true });
+$('#top').addEventListener('wheel', e => { const t = $('#top'); if (t.scrollWidth > t.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { t.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
 const swWhen = iso => { const d = new Date(iso), now = new Date(); return d.toDateString() === now.toDateString() ? d.toTimeString().slice(0, 5) : `${d.getMonth() + 1}/${d.getDate()} ${d.toTimeString().slice(0, 5)}`; };
 async function flipSwitch(id, on) {           // the popup (취소 default) is shown by the main process before anything is written
   const r = await window.api.switches.set(id, on).catch(e => ({ ok: false, err: e.message }));
   if (r && r.cancelled) return;
+  renderSwitchPills();
   toast(r && r.ok ? `${r.state.label}: ${r.state.enabled ? 'ON' : 'OFF'}` : `Couldn't switch: ${(r && r.err) || 'no answer'}`);
 }
 function openUsage() {

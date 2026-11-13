@@ -427,7 +427,7 @@ body:not(.pixel) ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); 
 
 /* compact: sidebar slides over, panel floats, header sheds detail */
 body[data-size="compact"] #drawerBtn, body[data-size="mini"] #drawerBtn { display: inline-block; }
-body[data-size="compact"] #models, body[data-size="compact"] #health { display: none; }
+/* compact: the model chips and health pills stay; the header scrolls sideways instead (see "scrolling header") */
 body[data-size="compact"] #body, body[data-size="mini"] #body { position: relative; }
 body[data-size="compact"] #side, body[data-size="mini"] #side { position: absolute; z-index: 30; top: 0; bottom: 0; left: 0; width: min(300px, 86vw) !important;
   transform: translateX(-102%); transition: transform .2s cubic-bezier(.2,.8,.2,1); box-shadow: 18px 0 50px rgba(0,0,0,.7); }
@@ -464,13 +464,19 @@ body[data-size="mini"] #rail { display: flex; flex: none; gap: 6px; padding: 6px
 @media (max-height: 300px) { body[data-size="mini"] #rail { padding: 4px 6px; } }
 
 /* header: when space runs out, the model chips and health pills give way — buttons (Mesh/Split/Grid, PIXEL…) never get cut */
+/* header: one row that never wraps or slices anything — when it doesn't fit, it scrolls sideways (wheel or trackpad) */
+#top { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; overscroll-behavior-x: contain; }
+#top::-webkit-scrollbar { height: 4px; } #top::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 2px; }
 #top > * { flex-shrink: 0; }
-#top > .models, #top > .health { flex-shrink: 1; min-width: 0; overflow: hidden; }
-#top > .spacer { flex-shrink: 1; min-width: 0; }
+#top > .models, #top > .health, #top > .cal { flex-wrap: nowrap; align-items: center; overflow: visible; flex: none; min-width: auto; }
+#top > .spacer { flex: 1 0 8px; min-width: 8px; }
 .seg button { white-space: nowrap; flex: none; }
-/* a pill that doesn't fit drops out whole (wraps to a hidden 2nd line) instead of being sliced */
-#top > .models, #top > .health { flex-wrap: wrap; align-items: center; align-content: flex-start; }
-#top > .models { height: 29px; } #top > .health { height: 25px; }   /* exactly one row of pills */
+#top .hpill { white-space: nowrap; flex: none; }
+#top > .swbar { display: flex; gap: 6px; align-items: center; -webkit-app-region: no-drag; }
+#top .swpill { border-radius: 999px; padding: 3px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+#top .swpill.on { background: #b3261e; border-color: #e0473d; color: #fff; }
+#top .swpill.off { opacity: .75; }
+#top .swpill.err { border-color: #6b5a1a; color: #e8c66a; }
 
 /* Simple mode: static board instead of the animated mesh; no motion, glow, blur or shadow anywhere */
 #board { display: none; }
@@ -637,3 +643,10 @@ body.simple #usagePill { display: inline-block; }
 /* All sessions: older same-name sessions left behind by a handoff/refresh */
 .tag.old, body:not(.pixel) .tag.old { color: #e0a458; border-color: rgba(224,164,88,.45); }
 .hrow.replaced .t { opacity: .55; }
+
+/* scrolling header (after the calendar rules so it wins): nothing shrinks, wraps or gets cut; the bar scrolls instead */
+header#top > .cal, header#top > .models, header#top > .health { flex: none; min-width: auto; overflow: visible; flex-wrap: nowrap; height: auto; }
+header#top .cal-item { flex: none; }
+header#top.fadeR { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); }
+header#top.fadeL { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent); }
+header#top.fadeL.fadeR { -webkit-mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
