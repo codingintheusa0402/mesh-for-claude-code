@@ -239,6 +239,7 @@ Updates are written **in place** into `/Applications/<name>.app` (deleting and r
 | `MESH_DEBUG=1` | Pipe renderer console to stdout; enables `window.api.debugShot(path)` |
 | `MESH_SHOT=/path.png` (+ `MESH_SHOT_DELAY=ms`, `MESH_SHOT_QUIT=1`) | Capture the window after it settles |
 | `MESH_EVAL='js'` | Run JS in the renderer 3 s after load |
+| `MESH_PANES_GUEST=1` / `=0` | Whether this instance is a guest on the tmux server. A guest (default when `MESH_USERDATA` is set) never pipes a pane: it polls the screen instead, so a test copy can't take or switch off the live app's terminal streams. The live app also re-pipes any watched pane whose pipe was switched off, sent to another file or lost its file |
 | `MESH_FSGUARD_STUCK=/dir[:/dir]` | QA: treat these protected folders as stuck (macOS) to test the folder guard; `MESH_NO_FSGUARD=1` turns the guard off |
 
 Notes:

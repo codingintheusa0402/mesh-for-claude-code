@@ -20,4 +20,4 @@ old-session cleanup moved transcripts of running sessions to the Trash. Follow t
   synced copy, which is why the age check matters.
 
 ## Every change
-QA in a throwaway instance with its own `MESH_USERDATA` and `TMPDIR` before shipping.
+QA in a throwaway instance with its own `MESH_USERDATA` and `TMPDIR` before shipping. A throwaway instance is a tmux guest (`MESH_PANES_GUEST`): it sees live panes by polling and never touches their pipes.

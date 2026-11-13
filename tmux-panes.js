@@ -21,22 +21,54 @@ module.exports = function createPanes({ ptyBus }) {
   const keyEnv = Object.fromEntries(['HOME', 'USER', 'LOGNAME', 'PATH', 'TMPDIR', 'TMUX_TMPDIR', 'LANG', 'LC_CTYPE'].filter(k => env[k] != null).map(k => [k, env[k]]));
   const keysSync = args => { try { return execFileSync(BIN, args, { timeout: 10000, env: keyEnv }).toString(); } catch { return ''; } };
 
+  // A test instance (MESH_USERDATA, own TMPDIR) still sees the live tmux server. tmux has ONE pipe per pane, so when a
+  // test copy opened a view it took the live app's pipe, and closing it switched the pipe off: every live terminal then
+  // froze, typing included, while the rest of the app kept updating (2026-11-13 10:50 + 11:04, also 11-09). A guest
+  // never pipes: it polls capture-pane instead. MESH_PANES_GUEST=0/1 overrides the guess.
+  const GUEST = process.env.MESH_PANES_GUEST ? process.env.MESH_PANES_GUEST === '1' : !!process.env.MESH_USERDATA;
   let panes = new Map();          // pane id (%N) -> { id, pid, tty, cols, rows, title }
   const streams = new Map();      // pane id -> { n, file, pos, dec, timer }
 
   async function refresh() {
-    const out = await tmux(['list-panes', '-a', '-F', '#{pane_id}|#{pane_pid}|#{pane_tty}|#{pane_width}|#{pane_height}|#{session_name}:#{window_name}']);
+    const out = await tmux(['list-panes', '-a', '-F', '#{pane_id}|#{pane_pid}|#{pane_tty}|#{pane_width}|#{pane_height}|#{pane_pipe}|#{session_name}:#{window_name}']);
     if (out == null) { if (panes.size) gone(new Map()); return; }   // no tmux server
     const m = new Map();
     for (const l of out.split('\n')) {
-      const [id, pid, tty, w, h, ...rest] = l.split('|'); if (!id) continue;
+      const [id, pid, tty, w, h, pipe, ...rest] = l.split('|'); if (!id) continue;
       const title = rest.join('|');
-      const p = { id, pid: +pid, tty, cols: +w || 120, rows: +h || 32, title };
+      const p = { id, pid: +pid, tty, cols: +w || 120, rows: +h || 32, title, pipe: pipe === '1' };
       const o = panes.get(id);
       if (o && (o.cols !== p.cols || o.rows !== p.rows)) ptyBus.emit('resize', id, p.cols, p.rows);
       m.set(id, p);
     }
     gone(m);
+    heal();
+  }
+  // Self-heal for the live app: a watched pane must pipe into OUR file. Someone else switching the pipe off, pointing it
+  // at their own file, or deleting our file (11-09) used to freeze that terminal for good; now it is re-piped in seconds.
+  let lastPs = 0;
+  function heal() {
+    if (GUEST || !streams.size) return;
+    let theirs = null;
+    if (Date.now() - lastPs > 5000) {                       // which file each tmux pipe really writes to (one ps, every 5 s)
+      lastPs = Date.now(); theirs = new Map();
+      try {
+        for (const l of execFileSync('/bin/ps', ['-axww', '-o', 'command='], { timeout: 3000 }).toString().split('\n')) {
+          const m = /^sh -c cat >> '(.*\/mesh-panes\/_(\d+)\.raw)'$/.exec(l.trim()); if (m) theirs.set('%' + m[2], [...(theirs.get('%' + m[2]) || []), m[1]]);
+        }
+      } catch { theirs = null; }
+    }
+    for (const [id, s] of streams) {
+      const p = panes.get(id); if (!p || s.timer == null) continue;
+      const missing = !fs.existsSync(s.file);
+      const same = f => { try { return fs.realpathSync.native(path.dirname(f)) === fs.realpathSync.native(DIR); } catch { return path.dirname(f) === DIR; } };
+      const elsewhere = theirs && p.pipe && !(theirs.get(id) || []).some(same);
+      if (!missing && p.pipe && !elsewhere) continue;
+      if (missing) { try { fs.mkdirSync(DIR, { recursive: true }); fs.writeFileSync(s.file, ''); } catch { continue; } s.pos = 0; }
+      console.warn(`[panes] ${id}: pipe ${missing ? 'file was deleted' : !p.pipe ? 'was switched off' : 'went to another file'}: re-piping`);
+      p.pipe = true;
+      tmux(['pipe-pane', '-t', id, `cat >> '${s.file}'`]);
+    }
   }
   function gone(m) {
     for (const id of streams.keys()) if (!m.has(id)) { ptyBus.emit('exit', id); stop(id); }
@@ -91,6 +123,7 @@ module.exports = function createPanes({ ptyBus }) {
   async function open(id) {
     let s = streams.get(id);
     if (s) { s.n++; return; }
+    if (GUEST) return openPolled(id);
     fs.mkdirSync(DIR, { recursive: true });
     const file = paneFile(id); try { fs.unlinkSync(file); } catch { }
     fs.writeFileSync(file, '');
@@ -108,10 +141,18 @@ module.exports = function createPanes({ ptyBus }) {
       if (s.pos > 64 << 20) { s.pos = 0; fs.truncateSync(file, 0); }     // long watch: don't let the file grow forever
     }, 80);
   }
+  // guest view: no pipe, just the screen redrawn when it changes (a test copy is never the live app's terminal)
+  function openPolled(id) {
+    let last = snapshot(id);
+    const s = { n: 1, polled: true, timer: null };
+    streams.set(id, s);
+    s.timer = setInterval(() => { const now = snapshot(id); if (now && now !== last) { last = now; ptyBus.emit('data', id, '\x1b[H\x1b[2J' + now); } }, 700);
+  }
   function close(id) { const s = streams.get(id); if (s && --s.n <= 0) stop(id); }
   function stop(id) {
     const s = streams.get(id); if (!s) return;
     clearInterval(s.timer); streams.delete(id);
+    if (s.polled) return;
     tmuxSync(['pipe-pane', '-t', id]);                                      // no command = stop piping
     try { fs.unlinkSync(s.file); } catch { }
   }
@@ -121,7 +162,7 @@ module.exports = function createPanes({ ptyBus }) {
     return true;
   }
   // a crash while streaming would leave pipe-pane writing forever → clean up at start
-  try { for (const f of fs.readdirSync(DIR)) { tmuxSync(['pipe-pane', '-t', '%' + f.replace(/^_/, '').replace(/\.raw$/, '')]); fs.unlinkSync(path.join(DIR, f)); } } catch { }
+  if (!GUEST) try { for (const f of fs.readdirSync(DIR)) { tmuxSync(['pipe-pane', '-t', '%' + f.replace(/^_/, '').replace(/\.raw$/, '')]); fs.unlinkSync(path.join(DIR, f)); } } catch { }
 
   // start a program in its own window of a detached tmux session: it keeps running when the app quits
   const available = () => fs.existsSync(BIN);
