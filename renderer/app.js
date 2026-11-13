@@ -374,12 +374,15 @@ function usageRing(s) {
 let lastBoard = '';
 function renderBoard() {
   if (!isSimple()) return;
-  const html = (window.cleanupBar ? window.cleanupBar() : '') + (snap.sessions.map(s => `<div class="bcard ${s.sid === selected ? 'sel' : ''}" data-sid="${s.sid}">
+  const html = (window.cleanupBar ? window.cleanupBar() : '') + (snap.sessions.map(s => `<div class="bcard b-${s.health}${s.sid === selected ? ' sel' : ''}" data-sid="${s.sid}">
     <div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${peerTag(s)}${usageRing(s)}</div>
     <div class="m"><span style="color:${FAMILY_COLOR[s.family]}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${fmtTok(s.todayTok)}</span><span>${s.health === 'working' ? 'working' : s.health}</span></div>
   </div>`).join('') || '<div class="bempty">No live sessions.</div>');
   if (html === lastBoard) return;
   lastBoard = html; $('#board').innerHTML = html;
+  // the on/off border blink is pinned to the clock, so a repaint doesn't restart it and every card blinks in step
+  const now = Date.now();
+  $('#board').querySelectorAll('.bcard.b-working, .bcard.b-waiting').forEach(c => { const P = c.classList.contains('b-working') ? 800 : 1600; c.style.animationDelay = `-${(now % P) / 1000}s`; });
 }
 $('#board').addEventListener('click', e => { if (e.target.closest('[data-clean]')) return window.openCleanup(); const c = e.target.closest('.bcard'); if (c) select(c.dataset.sid); });
 $('#board').addEventListener('contextmenu', e => { const c = e.target.closest('.bcard'); if (c) { e.preventDefault(); openCmdMenu(c.dataset.sid, e.clientX, e.clientY); } });

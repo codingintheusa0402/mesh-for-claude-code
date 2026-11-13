@@ -668,3 +668,10 @@ body[data-view="grid"] #terms .term { background: var(--termbg, #07080d); }
 #ivMenu button:hover { background: var(--panel2); }
 #ivMenu button.cur::after { content: '✓'; margin-left: auto; }
 #ivMenu .smHead { padding: 6px 10px 3px; font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--dim, #999); }
+/* Simple view: a running session's card border blinks green, one waiting for you blinks yellow (slower). Hard on/off
+   steps, no fade: the one animation Simple mode keeps (more specific than its "no animation" rule) */
+body.simple .bcard.b-working { animation: bBlinkOk .8s steps(1, end) infinite !important; }
+body.simple .bcard.b-waiting { animation: bBlinkWarn 1.6s steps(1, end) infinite !important; }
+@keyframes bBlinkOk { 0% { border-color: var(--ok); } 50% { border-color: var(--line2); } }
+@keyframes bBlinkWarn { 0% { border-color: var(--warn); } 50% { border-color: var(--line2); } }
+@media (prefers-reduced-motion: reduce) { body.simple .bcard.b-working { animation: none !important; border-color: var(--ok); } body.simple .bcard.b-waiting { animation: none !important; border-color: var(--warn); } }
