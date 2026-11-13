@@ -3,7 +3,8 @@
 //   "paneAgents": [{ "window": "main:my-bot",            // tmux session:window name it runs in
 //                    "name": "My Bot", "engine": "hermes", "model": "deepseek-v4-pro",   // shown on the card
 //                    "log": "~/bots/my-bot/bot.log",      // optional: its log; recent lines show as the activity
-//                    "cwd": "~/bots/my-bot", "busyWithin": 120 }]   // log written in the last N s = working
+//                    "cwd": "~/bots/my-bot", "busyWithin": 120,   // log written in the last N s = working
+//                    "operator": true }]   // optional: a Hermes chat of the same name in cwd takes your commands for it
 // View only: Mesh never types into it, interrupts, renames, moves, refreshes or stops it (watchOnly on the session,
 // checked in main.js, handoff.js and session-refresh.js). Closing the window is left to whoever runs it.
 const fs = require('fs'), path = require('path'), os = require('os');
@@ -35,7 +36,7 @@ module.exports = function createPaneAgents() {
       const lines = log ? tail(log, 40) : [];
       out.push({
         pid: p.pid, sessionId: 'agent-' + slug(a.window), cwd: tilde(a.cwd || (log ? path.dirname(log) : HOME)), kind: 'agent', engine: a.engine || undefined,
-        model: a.model || a.engine || 'script', status: busy ? 'busy' : 'idle', pane: p.id, tty: p.tty, watchOnly: true,
+        model: a.model || a.engine || 'script', status: busy ? 'busy' : 'idle', pane: p.id, tty: p.tty, watchOnly: true, operator: !!a.operator,
         name: a.name, nameSource: 'user', startedAt: Math.min(first, mt || first), updatedAt: mt || first,
         agentLog: lines.map(l => { const m = /^(\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d)\s+(.*)$/.exec(l); const t = m ? Date.parse(m[1].replace(' ', 'T')) : NaN;
           return { t: isNaN(t) ? mt || Date.now() : t, kind: 'tool', text: (m ? m[2] : l).replace(/\s+/g, ' ').slice(0, 220) }; }),

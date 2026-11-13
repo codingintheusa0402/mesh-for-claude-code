@@ -49,7 +49,24 @@ const collector = new Collector();
 // Hermes Agent sessions (hermes-sessions.js): they live in tmux panes like Claude's and show up as full sessions
 const hermes = require('./hermes-sessions')({ userData: app.getPath('userData') });
 const paneAgents = require('./pane-agents')();   // script loops in tmux windows, view only (pane-agents.js)
-collector.extraSessions = async () => [...await hermes.sessions(panes.list()), ...paneAgents.sessions(panes.list())];
+// an agent with "operator": true is commanded through a Hermes chat of the same name in its folder: while that chat runs,
+// it is the agent's one row (the view-only row hides)
+collector.extraSessions = async () => { const h = await hermes.sessions(panes.list()), names = new Set(h.map(s => s.name));
+  return [...h, ...paneAgents.sessions(panes.list()).filter(a => !(a.operator && names.has(a.name)))]; };
+// keep each operator chat open on the machine that runs the agent: opened (or resumed by its name) once per app run, only
+// after startup's own reopen had time to bring it back, and never while one is in a pane already
+const opStarted = new Set();
+async function ensureOperators() {
+  for (const a of paneAgents.list()) {
+    if (!a.operator || opStarted.has(a.name) || !panes.list().some(p => p.title === a.window)) continue;
+    if (Object.values(hermes.list()).some(r => r.name === a.name) || ((lastSnap && lastSnap.sessions) || []).some(s => s.name === a.name && s.kind === 'hermes')) continue;
+    opStarted.add(a.name);
+    const rows = await require('./hermes-sessions').sql(`select id from sessions where title='${String(a.name).replace(/'/g, "''")}' order by started_at desc limit 1`) || [];
+    const r = await spawnHermes({ cwd: a.cwd || '~', name: a.name, resumeSid: rows[0] && /^[\w.-]+$/.test(rows[0].id) ? rows[0].id : undefined });
+    console.log('[pane-agents] operator', a.name, r && r.ok ? 'opened ' + r.id : 'failed ' + (r && r.err));
+  }
+}
+if (!process.env.MESH_QA_NO_OPERATORS) app.whenReady().then(() => setTimeout(() => { ensureOperators(); setInterval(ensureOperators, 60e3); }, 120e3));
 const ptys = new Map();          // id -> { proc, title, kind, cwd }
 let win = null;
 let nextId = 1;

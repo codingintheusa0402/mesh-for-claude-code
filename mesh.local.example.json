@@ -13,7 +13,8 @@
       "model": "deepseek-v4-pro",
       "log": "~/bots/my-bot/bot.log",
       "cwd": "~/bots/my-bot",
-      "busyWithin": 120
+      "busyWithin": 120,
+      "operator": true
     }
   ]
 }
