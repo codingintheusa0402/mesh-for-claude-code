@@ -45,8 +45,12 @@ function openStarMenu() {
   m = document.createElement('div'); m.id = 'starMenu'; m.innerHTML = '<button data-a="bc">Broadcast…</button><button data-a="usage">Token usage</button>'; document.body.appendChild(m);
   m.style.left = Math.min(innerWidth - 180, lastPointer.x + 6) + 'px'; m.style.top = Math.min(innerHeight - 90, lastPointer.y + 6) + 'px';
   const shut = () => { m.remove(); removeEventListener('pointerdown', away, true); }, away = e => { if (!m.contains(e.target)) shut(); };
-  m.onclick = e => { const b = e.target.closest('button'), a = b && b.dataset.a; if (!a) return; shut(); a === 'bc' ? openBroadcast() : a === 'usage' ? openUsage() : flipSwitch(b.dataset.id, b.dataset.on === '1'); };
+  m.onclick = e => { const b = e.target.closest('button'), a = b && b.dataset.a; if (!a) return; shut(); a === 'bc' ? openBroadcast() : a === 'usage' ? openUsage() : a === 'theme' ? setTermTheme(b.dataset.id) : flipSwitch(b.dataset.id, b.dataset.on === '1'); };
   addEventListener('pointerdown', away, true);
+  // terminal colour theme: one row per theme, the current one ticked
+  m.insertAdjacentHTML('beforeend', '<div class="smHead">Terminal theme</div>' + Object.entries(TERM_THEMES).map(([id, th]) =>
+    `<button data-a="theme" data-id="${id}" class="thRow${id === termThemeId ? ' cur' : ''}" title="${esc(th.src ? 'github.com/' + th.src : 'the original Mesh colours')}"><i style="background:${th.t.background};border-color:${th.t.blue}"></i>${esc(th.name)}</button>`).join(''));
+  m.style.top = Math.min(innerHeight - m.offsetHeight - 8, lastPointer.y + 6) + 'px';
   // mode switches (switches.js, set in mesh.local.json): one row each with its state and who flipped it last
   window.api.switches.get().then(list => { if (!document.body.contains(m) || !list || !list.length) return;
     for (const w of list) { const b = document.createElement('button'); b.dataset.a = 'sw'; b.dataset.id = w.id; b.dataset.on = w.enabled ? '0' : '1'; b.className = 'swRow';
@@ -710,11 +714,94 @@ function wireOsc52(term) {
     return true;
   });
 }
+// Terminal colour themes: the classic Mesh palette plus popular open-source ones (palettes as published in each repo).
+// Picked from the mother star's menu; stored per window. Claude Code draws most of its own text in fixed colours,
+// so a theme mainly changes the background, plain text and ANSI colours (its /theme "dark-ansi" follows it fully).
+const TERM_THEMES = {
+  mesh: { name: 'Mesh classic', t: { background: '#06051a', foreground: '#e6e9f2', cursor: '#a78bfa', selectionBackground: '#3b4a7a88',
+    black: '#1b1f2a', brightBlack: '#555e78', blue: '#7aa2f7', brightBlue: '#9ab8ff', magenta: '#bb9af7', cyan: '#2dd4bf', green: '#34d399', red: '#f87171', yellow: '#fbbf24' } },
+  catppuccin: { name: 'Catppuccin Mocha', src: 'catppuccin/catppuccin', t: { background: '#1e1e2e', foreground: '#cdd6f4', cursor: '#f5e0dc', cursorAccent: '#1e1e2e', selectionBackground: '#585b70aa',
+    black: '#45475a', red: '#f38ba8', green: '#a6e3a1', yellow: '#f9e2af', blue: '#89b4fa', magenta: '#f5c2e7', cyan: '#94e2d5', white: '#bac2de',
+    brightBlack: '#585b70', brightRed: '#f38ba8', brightGreen: '#a6e3a1', brightYellow: '#f9e2af', brightBlue: '#89b4fa', brightMagenta: '#f5c2e7', brightCyan: '#94e2d5', brightWhite: '#a6adc8' } },
+  dracula: { name: 'Dracula', src: 'dracula/dracula-theme', t: { background: '#282a36', foreground: '#f8f8f2', cursor: '#f8f8f2', cursorAccent: '#282a36', selectionBackground: '#44475acc',
+    black: '#21222c', red: '#ff5555', green: '#50fa7b', yellow: '#f1fa8c', blue: '#bd93f9', magenta: '#ff79c6', cyan: '#8be9fd', white: '#f8f8f2',
+    brightBlack: '#6272a4', brightRed: '#ff6e6e', brightGreen: '#69ff94', brightYellow: '#ffffa5', brightBlue: '#d6acff', brightMagenta: '#ff92df', brightCyan: '#a4ffff', brightWhite: '#ffffff' } },
+  tokyonight: { name: 'Tokyo Night', src: 'folke/tokyonight.nvim', t: { background: '#1a1b26', foreground: '#c0caf5', cursor: '#c0caf5', cursorAccent: '#1a1b26', selectionBackground: '#283457cc',
+    black: '#15161e', red: '#f7768e', green: '#9ece6a', yellow: '#e0af68', blue: '#7aa2f7', magenta: '#bb9af7', cyan: '#7dcfff', white: '#a9b1d6',
+    brightBlack: '#414868', brightRed: '#f7768e', brightGreen: '#9ece6a', brightYellow: '#e0af68', brightBlue: '#7aa2f7', brightMagenta: '#bb9af7', brightCyan: '#7dcfff', brightWhite: '#c0caf5' } },
+  gruvbox: { name: 'Gruvbox Dark', src: 'morhetz/gruvbox', t: { background: '#282828', foreground: '#ebdbb2', cursor: '#ebdbb2', cursorAccent: '#282828', selectionBackground: '#504945cc',
+    black: '#282828', red: '#cc241d', green: '#98971a', yellow: '#d79921', blue: '#458588', magenta: '#b16286', cyan: '#689d6a', white: '#a89984',
+    brightBlack: '#928374', brightRed: '#fb4934', brightGreen: '#b8bb26', brightYellow: '#fabd2f', brightBlue: '#83a598', brightMagenta: '#d3869b', brightCyan: '#8ec07c', brightWhite: '#ebdbb2' } },
+  nord: { name: 'Nord', src: 'nordtheme/nord', t: { background: '#2e3440', foreground: '#d8dee9', cursor: '#d8dee9', cursorAccent: '#2e3440', selectionBackground: '#434c5ecc',
+    black: '#3b4252', red: '#bf616a', green: '#a3be8c', yellow: '#ebcb8b', blue: '#81a1c1', magenta: '#b48ead', cyan: '#88c0d0', white: '#e5e9f0',
+    brightBlack: '#4c566a', brightRed: '#bf616a', brightGreen: '#a3be8c', brightYellow: '#ebcb8b', brightBlue: '#81a1c1', brightMagenta: '#b48ead', brightCyan: '#8fbcbb', brightWhite: '#eceff4' } },
+};
+let termThemeId = TERM_THEMES[store.get('termTheme', 'catppuccin')] ? store.get('termTheme', 'catppuccin') : 'catppuccin';
+const termTheme = () => TERM_THEMES[termThemeId].t;
+document.documentElement.style.setProperty('--termbg', termTheme().background);
+function setTermTheme(id) {
+  if (!TERM_THEMES[id]) return; termThemeId = id; store.set('termTheme', id);
+  document.documentElement.style.setProperty('--termbg', termTheme().background);
+  for (const [, t] of terms) t.term.options.theme = { ...termTheme() };
+  dispatchEvent(new Event('resize'));                                // the time column re-reads the background
+  toast('Terminal theme: ' + TERM_THEMES[id].name);
+}
 const termOpts = () => ({
   fontFamily: '"SF Mono", Menlo, monospace', fontSize: 12.5, lineHeight: 1.15, cursorBlink: !isSimple(), allowProposedApi: true,
   macOptionIsMeta: true, macOptionClickForcesSelection: true, scrollback: 20000,   // ⌥-drag = the terminal's own selection (⌘C) even when Claude Code has the mouse
-  theme: { background: '#06051a', foreground: '#e6e9f2', cursor: '#a78bfa', selectionBackground: '#3b4a7a88',
-    black: '#1b1f2a', brightBlack: '#555e78', blue: '#7aa2f7', brightBlue: '#9ab8ff', magenta: '#bb9af7', cyan: '#2dd4bf', green: '#34d399', red: '#f87171', yellow: '#fbbf24' },
+  theme: { ...termTheme() },
+});
+// Notes-style editing keys for Claude Code's prompt, sent as the keys it understands: ⌘Z undo (Ctrl+_), ⌘←/→ line start/end,
+// ⌘⌫ delete to line start, ⌥←/→ word left/right, ⌥⌫ delete word. Claude Code has no text selection of its own, so ⌘⇧←/→
+// highlights from the cursor to the line start/end here; then ⌫ deletes that span (Ctrl+U / Ctrl+K), typing replaces it,
+// ⌘C copies it and any other key just drops the highlight.
+let lastKeyUndo = 0;
+const promptSpan = (term, toStart) => {
+  const b = term.buffer.active, y = b.baseY + b.cursorY, x = b.cursorX, line = b.getLine(y); if (!line) return null;
+  let first = -1, last = -1, prompt = -1;
+  for (let i = 0; i < term.cols; i++) { const c = line.getCell(i), ch = c && c.getChars(); if (!ch || ch === ' ') continue;
+    if (first < 0) first = i; last = i + Math.max(1, c.getWidth()) - 1; if (ch === '❯' && prompt < 0 && i < x) prompt = i; }
+  const start = prompt >= 0 ? prompt + 2 : first < 0 ? x : Math.min(first, x), end = Math.max(x, last + 1);
+  return toStart ? { x: start, y, n: x - start } : { x, y, n: end - x };
+};
+function wireEditKeys(term, send) {
+  let sel = null;                                                      // '\x15' (kill to start) or '\x0b' (kill to end) while highlighted
+  const drop = () => { if (sel) { sel = null; term.clearSelection(); } };
+  term.onSelectionChange(() => { if (sel && !term.hasSelection()) sel = null; });   // a click elsewhere cleared it
+  term.attachCustomKeyEventHandler(e => {
+    if (e.type !== 'keydown' || e.isComposing) return true;
+    const k = e.key, cmd = e.metaKey && !e.ctrlKey && !e.altKey, alt = e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey;
+    const eat = d => { e.preventDefault(); if (d) send(d); return false; };
+    if (sel && !['Meta', 'Shift', 'Alt', 'Control', 'CapsLock'].includes(k)) {
+      if (cmd && (k === 'c' || k === 'x')) { if (k === 'x') { const kill = sel; setTimeout(() => { drop(); send(kill); }, 0); } return true; }   // copy (cut = copy + delete)
+      const kill = sel; drop();
+      if (k === 'Backspace' || k === 'Delete') return eat(kill);
+      if (k.length === 1 && !e.metaKey && !e.ctrlKey) { send(kill); return true; }   // the typed character follows
+    }
+    if (cmd && e.shiftKey && (k === 'ArrowLeft' || k === 'ArrowRight')) {
+      const s = promptSpan(term, k === 'ArrowLeft'); e.preventDefault();
+      if (s && s.n > 0) { term.select(s.x, s.y, s.n); sel = k === 'ArrowLeft' ? '\x15' : '\x0b'; }
+      return false;
+    }
+    if (cmd && !e.shiftKey) {
+      if (k === 'z') { lastKeyUndo = Date.now(); return eat('\x1f'); }
+      if (k === 'ArrowLeft') return eat('\x01');
+      if (k === 'ArrowRight') return eat('\x05');
+      if (k === 'Backspace') return eat('\x15');
+    }
+    if (alt) {
+      if (k === 'ArrowLeft') return eat('\x1bb');
+      if (k === 'ArrowRight') return eat('\x1bf');
+      if (k === 'Backspace') return eat('\x17');
+    }
+    return true;
+  });
+}
+// Edit ▸ Undo (⌘Z from the menu): Claude Code's undo in the focused terminal, the normal text undo anywhere else
+window.api.onEditUndo && window.api.onEditUndo(() => {
+  if (Date.now() - lastKeyUndo < 400) return;                        // the terminal's key handler already sent it
+  const t = [...terms.values()].find(t => t.term.textarea && document.activeElement === t.term.textarea);
+  if (t) t.send && t.send('\x1f'); else document.execCommand('undo');
 });
 
 // Live mirrors of the other machine's in-app terminals (peer:… ids). They keep the host's size — the
@@ -753,6 +840,7 @@ function mirrorTerm(p) {
   // position, focus, colour reports) are already answered by the host's own terminal, and would land as typed text
   const isReport = d => /^\x1b\[[?>=]?[\d;]*[cnRtIOy]$/.test(d) || /^\x1b\[[IO]$/.test(d) || d.startsWith('\x1b]') || d.startsWith('\x1bP');
   term.onData(d => { if (!isReport(d)) window.api.pty.write(p.id, d); });
+  const send = d => window.api.pty.write(p.id, d); wireEditKeys(term, send);
   // our own tmux panes use this view too: their files stay on this machine; only the other machine's terminals get an upload
   el.addEventListener('paste', async e => { e.preventDefault(); e.stopPropagation(); const r = await clipboardInsert(!!p.onPeer); if (r.text) term.paste(r.text); }, true);
   el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('dropping'); });
@@ -766,7 +854,7 @@ function mirrorTerm(p) {
     term.paste(u.paths.map(shq).join(' ') + ' '); term.focus();
   });
   term.textarea && term.textarea.addEventListener('focus', () => { activeTerm = p.id; markFocus(); });
-  const t = { term, fit, el, title: p.title, kind: p.kind, peer: true, local: !p.onPeer, cols: 120, rows: 30, driving: false, stamps: addStamps(term, el, p.id) };
+  const t = { term, fit, el, send, title: p.title, kind: p.kind, peer: true, local: !p.onPeer, cols: 120, rows: 30, driving: false, stamps: addStamps(term, el, p.id) };
   terms.set(p.id, t);
   if (!activeTerm) { activeTerm = p.id; el.classList.add('on'); }   // the active terminal is also the one shown (it used to stay hidden: clicking its session then did nothing)
   renderTabs(); layoutGrid();
@@ -881,6 +969,7 @@ async function newTerm(opts) {
   term.open(el.querySelector('.xt'));
   wireOsc52(term);
   term.onData(d => window.api.pty.write(info.id, d));
+  const send = d => window.api.pty.write(info.id, d); wireEditKeys(term, send);
   // ⌘V: Finder-copied files → their paths, screenshot/image → saved PNG path, else plain text.
   // (Ctrl+V still goes straight to Claude Code, which reads image clipboards itself.)
   el.addEventListener('paste', async e => {
@@ -890,7 +979,7 @@ async function newTerm(opts) {
   wireDrop(el, text => { term.paste(text); term.focus(); });
   term.onResize(({ cols, rows }) => window.api.pty.resize(info.id, cols, rows));
   term.textarea && term.textarea.addEventListener('focus', () => { activeTerm = info.id; markFocus(); });
-  terms.set(info.id, { term, fit, ser, el, title: info.title, kind: opts.kind, stamps: addStamps(term, el, info.id) });
+  terms.set(info.id, { term, fit, ser, el, send, title: info.title, kind: opts.kind, stamps: addStamps(term, el, info.id) });
   if (opts.saved) term.write(opts.saved, () => window.api.update.adopted(info.id));
   $('#noTerms').style.display = 'none';
   activate(info.id); if (isMini()) miniShow('term');

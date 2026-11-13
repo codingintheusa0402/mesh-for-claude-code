@@ -89,6 +89,7 @@ contextBridge.exposeInMainWorld('api', {
   probeMatch: (ask, sessions) => ipcRenderer.invoke('probe:match', ask, sessions),
   sys: { idle: () => ipcRenderer.invoke('sys:idle') },
   onCinePlay: cb => ipcRenderer.on('cine:play', (_e, o) => cb(o || {})),
+  onEditUndo: cb => ipcRenderer.on('edit:undo', () => cb()),
   onScreenLock: cb => ipcRenderer.on('screen:lock', (_e, s) => cb(s)),
   handoff: { move: sid => ipcRenderer.invoke('handoff:move', sid), onStart: cb => ipcRenderer.on('handoff:start', (_e, x) => cb(x)), onProgress: cb => ipcRenderer.on('handoff:progress', (_e, x) => cb(x)) },
   pathForFile: f => webUtils.getPathForFile(f),

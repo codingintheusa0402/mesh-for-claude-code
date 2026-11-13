@@ -650,3 +650,11 @@ header#top .cal-item { flex: none; }
 header#top.fadeR { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); }
 header#top.fadeL { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent); }
 header#top.fadeL.fadeR { -webkit-mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
+/* terminal theme (TERM_THEMES in app.js): the pane's padding takes the theme's background too */
+#terms .term { background: var(--termbg, #06051a); }
+body[data-view="grid"] #terms .term { background: var(--termbg, #07080d); }
+#starMenu .smHead { padding: 8px 10px 3px; font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--dim, #999); border-top: 1px solid var(--line2); margin-top: 2px; }
+#starMenu .thRow { display: flex; align-items: center; gap: 8px; padding: 5px 10px; }
+#starMenu .thRow i { width: 12px; height: 12px; border-radius: 3px; border: 2px solid; flex: none; }
+#starMenu .thRow.cur::after { content: '✓'; margin-left: auto; color: var(--text); }
+#terms .xterm, #terms .xterm .xterm-viewport { background-color: var(--termbg, #06051a) !important; }

@@ -530,7 +530,10 @@ function buildMenu() {
     { label: app.name, submenu: [{ role: 'about' }, { type: 'separator' }, { label: 'Set Team Name…', click: () => win && win.webContents.send('team:edit') }, { label: 'Session Refresh…', click: () => win && win.webContents.send('refresh:open') }, { type: 'separator' },
       { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' },
       { label: `Restart ${app.name}`, accelerator: 'CmdOrCtrl+Alt+R', click: () => updater.restartNow() }, { role: 'quit' }] },
-    { role: 'fileMenu' }, { role: 'editMenu' },
+    { role: 'fileMenu' },
+    // Undo goes through the page: in a terminal it is Claude Code's own undo (Ctrl+_), elsewhere the normal text undo
+    { label: 'Edit', submenu: [{ label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => win && win.webContents.send('edit:undo') }, { role: 'redo' }, { type: 'separator' },
+      { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'pasteAndMatchStyle' }, { role: 'delete' }, { role: 'selectAll' }] },
     { label: 'View', submenu: [{ role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' }, { type: 'separator' },
       { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' }, { type: 'separator' },
       { label: 'Mesh', enabled: false }, ...meshShow, { type: 'separator' },
