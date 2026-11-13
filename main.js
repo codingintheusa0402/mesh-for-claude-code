@@ -1065,7 +1065,7 @@ function initPhone() {
     handoff,
     orchestrator: { get: cwd => orchestratorFor(fromTildeP(cwd)), set: (cwd, o) => setOrchestrator(fromTildeP(cwd), o) },
     hermesNew: o => spawnHermes(o || {}),
-    switches: { get: hop => switches.get(hop), set: (id, on, from, hop) => switches.set(id, on, from, hop), setInterval: (id, sec, from, hop) => switches.setInterval(id, sec, from, hop) },
+    switches: { get: hop => switches.get(hop), set: (id, on, from, hop) => switches.set(id, on, from, hop), setInterval: (id, sec, from, hop) => switches.setInterval(id, sec, from, hop), setSchedule: (id, sc, from, hop) => switches.setSchedule(id, sc, from, hop) },
     refresh: { get: () => refresher.settings(), set: p => refresher.set(p || {}), now: sid => refresher.now(sid), rehearse: sid => refresher.rehearse(sid), inventory: () => refresher.inventory(), unpark: n => refresher.unpark(n) },
     // a session moved here from the other Mac: open it in a fresh in-app terminal (not a select of its mirror)
     handoffStart: b => { if (!win) return { ok: false, err: APP_NAME + ' window is not open' }; win.webContents.send('handoff:start', { sid: String(b.sid || ''), cwd: handoff.fromTilde(String(b.cwd || '~')), name: String(b.name || '') }); return { ok: true }; },
@@ -1200,6 +1200,7 @@ function initRefresh() {
 const peerSess = sid => !liveSession(sid) && peerLink && peerLink.owns(sid);
 // mode switches: every flip is confirmed here first (취소 is the default); nothing is written on cancel
 ipcMain.handle('sw:get', async () => switches ? switches.get() : []);
+ipcMain.handle('sw:schedule', async (_e, id, sc) => switches ? switches.setSchedule(id, sc, USAGE_MACHINE) : { ok: false, err: 'not ready' });
 ipcMain.handle('sw:interval', async (_e, id, sec) => switches ? switches.setInterval(id, sec, USAGE_MACHINE) : { ok: false, err: 'not ready' });   // no popup: it only changes how often
 ipcMain.handle('sw:set', async (_e, id, on) => {
   if (!switches) return { ok: false, err: 'not ready' };

@@ -49,7 +49,7 @@ function openStarMenu() {
   addEventListener('pointerdown', away, true);
   // terminal colour theme: one row per theme, the current one ticked
   m.insertAdjacentHTML('beforeend', '<div class="smHead">Terminal theme</div>' + Object.entries(TERM_THEMES).map(([id, th]) =>
-    `<button data-a="theme" data-id="${id}" class="thRow${id === termThemeId ? ' cur' : ''}" title="${esc(th.src ? 'github.com/' + th.src : 'the original Mesh colours')}"><i style="background:${th.t.background};border-color:${th.t.blue}"></i>${esc(th.name)}</button>`).join(''));
+    `<button data-a="theme" data-id="${id}" class="thRow${id === termThemeId ? ' cur' : ''}" title="${esc(th.src ? 'github.com/' + th.src : 'the original Mesh colours')}"><i style="background:${th.t.magenta};border-color:${th.t.blue}"></i>${esc(th.name)}</button>`).join(''));
   m.style.top = Math.min(innerHeight - m.offsetHeight - 8, lastPointer.y + 6) + 'px';
   // mode switches (switches.js, set in mesh.local.json): one row each with its state and who flipped it last
   window.api.switches.get().then(list => { if (!document.body.contains(m) || !list || !list.length) return;
@@ -68,13 +68,15 @@ async function renderSwitchPills() {
     const name = w.short || w.label, st = w.offline ? '?' : w.enabled ? 'ON' : 'OFF';
     const tip = w.offline ? `${w.label}: can't read the switch (${w.err || 'no answer'})` : `${w.label} is ${st}` + (w.at ? ` since ${new Date(w.at).toLocaleString()} (by ${w.from || w.by || '?'})` : ' (never switched on)') + ` — click to turn it ${w.enabled ? 'OFF' : 'ON'}`;
     const ivs = !w.offline && w.intervals && w.intervals.length;
-    const cd = ivs && w.enabled && w.lastRun ? `<span class="hpill swcd" data-id="${esc(w.id)}" title="${esc(`Next ${w.label} check (every ${ivLabel(w)}) — right-click the pill to change`)}">⏱ <b></b></span>` : '';
+    const paused = w.enabled && w.scheduled && !w.inWindow;
+    const cd = paused ? `<span class="hpill swcd paused" title="${esc(`${w.label} is outside its schedule (${schedText(w.schedule)}) — right-click the pill to change`)}">Paused until ${esc(whenShort(w.nextChange, w.schedule && w.schedule.tz))}</span>`
+      : ivs && w.enabled && w.lastRun ? `<span class="hpill swcd" data-id="${esc(w.id)}" title="${esc(`Next ${w.label} check (every ${ivLabel(w)})${w.scheduled ? ' · schedule ' + schedText(w.schedule) : ''} — right-click the pill to change`)}">⏱ <b></b></span>` : '';
     return `<span class="swgrp"><button class="hpill swpill ${w.offline ? 'err' : w.enabled ? 'on' : 'off'}" data-id="${esc(w.id)}" data-on="${w.enabled ? '0' : '1'}" ${w.offline ? 'disabled' : ''} title="${esc(tip + (ivs ? ` · checks every ${ivLabel(w)} (right-click to change)` : ''))}">${esc(name)} ${st}</button>${cd}</span>`;
   }).join('');
   swState = new Map((list || []).map(w => [w.id, w]));
   bar.querySelectorAll('.swpill:not([disabled])').forEach(b => {
     b.onclick = () => flipSwitch(b.dataset.id, b.dataset.on === '1');
-    b.oncontextmenu = e => { const w = swState.get(b.dataset.id); if (!w || !w.intervals || !w.intervals.length) return; e.preventDefault(); openIntervalMenu(b, w); };   // right-click: how often it checks
+    b.oncontextmenu = e => { const w = swState.get(b.dataset.id); if (!w || !((w.intervals && w.intervals.length) || w.hasSchedule)) return; e.preventDefault(); openIntervalMenu(b, w); };   // right-click: how often it checks
   });
   tickCountdowns();
 }
@@ -91,14 +93,50 @@ function tickCountdowns() {
 }
 setInterval(tickCountdowns, 1000);
 setInterval(() => { if (document.querySelector('#swBar .swcd') && !document.hidden) renderSwitchPills(); }, 5000);
+// a switch's schedule (switches.js): the hours it may run. Edited in the pill's menu; saved only with Save
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+function schedText(sc) {
+  if (!sc || !sc.enabled) return 'always';
+  const d = (sc.days || []).slice().sort().join(','), days = d === '0,1,2,3,4' ? 'Weekdays' : d === '0,1,2,3,4,5,6' ? 'Every day' : d === '5,6' ? 'Weekends' : (sc.days || []).map(i => DAYS[i]).join(' ');
+  return `${days} ${sc.start}–${sc.end}`;
+}
+const whenShort = (t, tz) => { if (!t) return '—'; const o = { timeZone: tz || undefined, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
+  const same = new Date(t).toLocaleDateString('en-CA', { timeZone: tz || undefined }) === new Date().toLocaleDateString('en-CA', { timeZone: tz || undefined });
+  return same ? new Date(t).toLocaleTimeString('en-GB', o) : new Date(t).toLocaleString('en-GB', { ...o, weekday: 'short' }).replace(',', ''); };
+function scheduleForm(w) {
+  const sc = w.schedule || { enabled: false, start: '09:00', end: '19:00', days: [0, 1, 2, 3, 4] }, days = new Set(sc.days || []);
+  const now = !w.scheduled ? 'Runs whenever it is ON' : w.inWindow ? `Running now · pauses ${whenShort(w.nextChange, sc.tz)}` : `Paused · resumes ${whenShort(w.nextChange, sc.tz)}`;
+  return `<div class="smHead swsHead">Schedule <small>${esc(sc.tz || w.scheduleTz || '')}</small></div><div class="sws">
+    <label class="swsOn"><input type="checkbox" ${sc.enabled ? 'checked' : ''}> Run only during these hours</label>
+    <div class="swsTimes"><input type="time" class="swsA" value="${esc(sc.start || '09:00')}"> – <input type="time" class="swsB" value="${esc(sc.end || '19:00')}"></div>
+    <div class="swsDays">${DAYS.map((d, i) => `<button type="button" data-d="${i}" class="${days.has(i) ? 'on' : ''}">${d}</button>`).join('')}</div>
+    <div class="swsPre"><button type="button" data-p="wd">Weekdays 9–19</button><button type="button" data-p="ed">Every day 9–19</button></div>
+    <div class="swsNow">${esc(now)}</div>
+    <div class="swsBtns"><button type="button" class="swsSave">Save schedule</button></div></div>`;
+}
+function wireScheduleForm(m, w, shut) {
+  const f = m.querySelector('.sws'), on = f.querySelector('.swsOn input'), A = f.querySelector('.swsA'), B = f.querySelector('.swsB');
+  const sync = () => f.classList.toggle('off', !on.checked); sync(); on.onchange = sync;
+  f.querySelectorAll('.swsDays button').forEach(b => b.onclick = () => b.classList.toggle('on'));
+  f.querySelectorAll('.swsPre button').forEach(b => b.onclick = () => { on.checked = true; sync(); A.value = '09:00'; B.value = '19:00';
+    f.querySelectorAll('.swsDays button').forEach(d => d.classList.toggle('on', b.dataset.p === 'ed' || +d.dataset.d < 5)); });
+  f.querySelector('.swsSave').onclick = async () => {
+    const sc = { enabled: on.checked, start: A.value, end: B.value, days: [...f.querySelectorAll('.swsDays button.on')].map(b => +b.dataset.d), tz: (w.schedule && w.schedule.tz) || w.scheduleTz };
+    const r = await window.api.switches.schedule(w.id, sc).catch(e => ({ ok: false, err: e.message }));
+    if (!r || !r.ok) return toast(`Couldn't save the schedule: ${(r && r.err) || 'no answer'}`);
+    shut(); renderSwitchPills(); toast(`${w.label}: ${sc.enabled ? 'runs ' + schedText(r.state.schedule) : 'no schedule (runs whenever ON)'}`);
+  };
+}
 // a switch's run interval (switches.js "intervals"): short form for the pill, the configured label for menus
 const ivShort = sec => !sec ? '?' : sec < 60 ? sec + 's' : sec < 3600 ? Math.round(sec / 60) + 'm' : Math.round(sec / 3600) + 'h';
 const ivLabel = w => ((w.intervals || []).find(i => i.sec === w.interval) || {}).label || ivShort(w.interval);
 function openIntervalMenu(anchor, w) {
   if (!w) return; let m = $('#ivMenu'); if (m) m.remove();
   m = document.createElement('div'); m.id = 'ivMenu';
-  m.innerHTML = `<div class="smHead">${esc(w.label)} · check every</div>` + w.intervals.map(i => `<button data-sec="${i.sec}" class="thRow${i.sec === w.interval ? ' cur' : ''}">${esc(i.label)}</button>`).join('');
+  m.innerHTML = ((w.intervals || []).length ? `<div class="smHead">${esc(w.label)} · check every</div>` + w.intervals.map(i => `<button data-sec="${i.sec}" class="thRow${i.sec === w.interval ? ' cur' : ''}">${esc(i.label)}</button>`).join('') : '')
+    + (w.hasSchedule ? scheduleForm(w) : '');
   document.body.appendChild(m);
+  if (w.hasSchedule) wireScheduleForm(m, w, () => shut());
   const r = anchor.getBoundingClientRect(); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.left)) + 'px'; m.style.top = (r.bottom + 6) + 'px';
   const shut = () => { m.remove(); removeEventListener('pointerdown', away, true); }, away = e => { if (!m.contains(e.target)) shut(); };
   addEventListener('pointerdown', away, true);
@@ -775,17 +813,23 @@ const TERM_THEMES = {
     brightBlack: '#4c566a', brightRed: '#bf616a', brightGreen: '#a3be8c', brightYellow: '#ebcb8b', brightBlue: '#81a1c1', brightMagenta: '#b48ead', brightCyan: '#8fbcbb', brightWhite: '#eceff4' } },
 };
 let termThemeId = TERM_THEMES[store.get('termTheme', 'dracula')] ? store.get('termTheme', 'dracula') : 'dracula';
-const termTheme = () => TERM_THEMES[termThemeId].t;
-document.documentElement.style.setProperty('--termbg', termTheme().background);
+// the terminal shows the Mesh background through it (Kevin 11-13): a theme only sets the text and ANSI colours
+const termTheme = () => ({ ...TERM_THEMES[termThemeId].t, background: '#00000000', cursorAccent: '#07061c' });
+document.documentElement.style.setProperty('--termbg', 'transparent');
 function setTermTheme(id) {
   if (!TERM_THEMES[id]) return; termThemeId = id; store.set('termTheme', id);
-  document.documentElement.style.setProperty('--termbg', termTheme().background);
   for (const [, t] of terms) t.term.options.theme = { ...termTheme() };
   dispatchEvent(new Event('resize'));                                // the time column re-reads the background
   toast('Terminal theme: ' + TERM_THEMES[id].name);
 }
+// Apple's SF Mono (the monospaced member of the SF family apple.com uses). It ships inside macOS but isn't reachable by
+// name, so style.css loads it from /System/Library/Fonts as "Mesh SF Mono"; Menlo if it's missing. Terminals measure their
+// cells when created, so once the font has loaded every open one is told again
+const TERM_FONT = '"Mesh SF Mono", Menlo, monospace';
+document.fonts && document.fonts.load('12.5px "Mesh SF Mono"').then(f => { if (!f.length) return;
+  for (const [, t] of terms) { t.term.options.fontFamily = 'Menlo'; t.term.options.fontFamily = TERM_FONT; } requestAnimationFrame(() => typeof fitAll === 'function' && fitAll()); }).catch(() => { });
 const termOpts = () => ({
-  fontFamily: '"SF Mono", Menlo, monospace', fontSize: 12.5, lineHeight: 1.15, cursorBlink: !isSimple(), allowProposedApi: true,
+  fontFamily: TERM_FONT, fontSize: 12.5, lineHeight: 1.15, cursorBlink: !isSimple(), allowProposedApi: true, allowTransparency: true,
   macOptionIsMeta: true, macOptionClickForcesSelection: true, scrollback: 20000,   // ⌥-drag = the terminal's own selection (⌘C) even when Claude Code has the mouse
   theme: { ...termTheme() },
 });

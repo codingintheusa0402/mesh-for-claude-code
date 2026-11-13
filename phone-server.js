@@ -162,6 +162,7 @@ function createPhoneServer(ctx) {
       return json(res, 200, ctx.handoff ? await ctx.handoff.move(b.sid) : { ok: false, err: 'not supported here' });
     }
     if (p === '/api/handoff/start') return json(res, 200, ctx.handoffStart ? await ctx.handoffStart(b) : { ok: false, err: 'not supported here' });
+    if (p === '/api/switches' && ctx.switches && b.schedule != null) return json(res, 200, await ctx.switches.setSchedule(String(b.id || ''), b.schedule, b.from ? String(b.from).slice(0, 40) : '', !!b.hop));   // hours it may run
     if (p === '/api/switches' && ctx.switches && b.interval != null) return json(res, 200, await ctx.switches.setInterval(String(b.id || ''), b.interval, b.from ? String(b.from).slice(0, 40) : '', !!b.hop));   // how often (no popup needed)
     if (p === '/api/switches' && ctx.switches) return json(res, 200, await ctx.switches.set(String(b.id || ''), b.enabled, b.from ? String(b.from).slice(0, 40) : '', !!b.hop));   // confirmed by the caller's popup
     if (p === '/api/refresh' && ctx.refresh) {

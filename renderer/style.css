@@ -1,3 +1,5 @@
+@font-face { font-family: 'Mesh SF Mono'; src: url('file:///System/Library/Fonts/SFNSMono.ttf') format('truetype'); font-style: normal; font-weight: 100 900; }
+@font-face { font-family: 'Mesh SF Mono'; src: url('file:///System/Library/Fonts/SFNSMonoItalic.ttf') format('truetype'); font-style: italic; font-weight: 100 900; }
 :root {
   --bg: #07061c; --bg2: rgba(14,12,46,.78); --panel: rgba(28,26,82,.42); --panel2: rgba(44,40,120,.5); --line: rgba(140,150,255,.13); --line2: rgba(150,165,255,.24);
   --text: #eef0ff; --dim: #9ea6d8; --faint: #6a70a8;
@@ -652,7 +654,7 @@ header#top.fadeL { -webkit-mask-image: linear-gradient(to left, #000 calc(100% -
 header#top.fadeL.fadeR { -webkit-mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
 /* terminal theme (TERM_THEMES in app.js): the pane's padding takes the theme's background too */
 #terms .term { background: var(--termbg, #06051a); }
-body[data-view="grid"] #terms .term { background: var(--termbg, #07080d); }
+body[data-view="grid"] #terms .term { background: var(--termbg, transparent); }
 #starMenu .smHead { padding: 8px 10px 3px; font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--dim, #999); border-top: 1px solid var(--line2); margin-top: 2px; }
 #starMenu .thRow { display: flex; align-items: center; gap: 8px; padding: 5px 10px; }
 #starMenu .thRow i { width: 12px; height: 12px; border-radius: 3px; border: 2px solid; flex: none; }
@@ -675,3 +677,19 @@ body.simple .bcard.b-waiting { animation: bBlinkWarn 1.6s steps(1, end) infinite
 @keyframes bBlinkOk { 0% { border-color: var(--ok); } 50% { border-color: var(--line2); } }
 @keyframes bBlinkWarn { 0% { border-color: var(--warn); } 50% { border-color: var(--line2); } }
 @media (prefers-reduced-motion: reduce) { body.simple .bcard.b-working { animation: none !important; border-color: var(--ok); } body.simple .bcard.b-waiting { animation: none !important; border-color: var(--warn); } }
+/* schedule section of a switch pill's menu */
+#ivMenu { max-height: calc(100vh - 70px); overflow-y: auto; }
+#ivMenu .swsHead { display: flex; justify-content: space-between; border-top: 1px solid var(--line2); margin-top: 4px; padding-top: 8px; }
+#ivMenu .swsHead small { text-transform: none; letter-spacing: 0; }
+#ivMenu .sws { display: flex; flex-direction: column; gap: 8px; padding: 4px 10px 8px; font-size: 12.5px; color: var(--text); }
+#ivMenu .sws.off .swsTimes, #ivMenu .sws.off .swsDays, #ivMenu .sws.off .swsPre { opacity: .4; }
+#ivMenu .swsOn { display: flex; gap: 7px; align-items: center; cursor: pointer; }
+#ivMenu .swsTimes { display: flex; align-items: center; gap: 6px; color: var(--dim); }
+#ivMenu .swsTimes input { background: var(--panel2); color: var(--text); border: 1px solid var(--line2); border-radius: 6px; padding: 3px 6px; font: inherit; color-scheme: dark; }
+#ivMenu .swsDays, #ivMenu .swsPre { display: flex; gap: 4px; flex-wrap: wrap; }
+#ivMenu .sws button { padding: 3px 7px; font-size: 11.5px; border: 1px solid var(--line2); border-radius: 6px; background: none; color: var(--dim); }
+#ivMenu .swsDays button.on { background: #b3261e; border-color: #b3261e; color: #fff; }
+#ivMenu .swsNow { color: var(--dim); font-size: 11.5px; }
+#ivMenu .swsBtns { display: flex; justify-content: flex-end; }
+#ivMenu .sws .swsSave { color: var(--text); background: var(--panel2); padding: 5px 12px; font-size: 12px; }
+.hpill.swcd.paused { color: var(--warn); min-width: 0; }
