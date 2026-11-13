@@ -1025,7 +1025,7 @@ ipcMain.handle('clip:read', async () => {
 ipcMain.handle('usage:refresh', () => refreshUsage(true));
 
 // ---------------- phone access (phone-server.js) ----------------
-let peerLink = null, handoff = null;
+let peerLink = null, handoff = null, switches = null;
 // the session panel / right-click menu: "Move to <other Mac>" — run here if it runs here, else by the other Mac
 ipcMain.handle('handoff:move', async (_e, sid) => {
   if (!handoff) return { ok: false, err: 'not ready' };
@@ -1035,6 +1035,7 @@ ipcMain.handle('handoff:move', async (_e, sid) => {
 });
 function initPhone() {
   peerLink = createPeer({ userData: app.getPath('userData'), selfKind: 'mac' }); peerLink.start();
+  switches = require('./switches').createSwitches({ peer: () => peerLink, machine: USAGE_MACHINE });   // mode switches (switches.js)
   if (!process.env.MESH_QA) folderMirror.createMirror({ machine: USAGE_MACHINE, peer: () => peerLink, folders: localFolders, enabled: !!require('./mesh-name').folderMirror }).start();
   // moving a session to the other Mac (handoff.js): this side stops / sends, the other side receives / starts it in-app
   handoff = createHandoff({
@@ -1061,6 +1062,7 @@ function initPhone() {
     handoff,
     orchestrator: { get: cwd => orchestratorFor(fromTildeP(cwd)), set: (cwd, o) => setOrchestrator(fromTildeP(cwd), o) },
     hermesNew: o => spawnHermes(o || {}),
+    switches: { get: hop => switches.get(hop), set: (id, on, from, hop) => switches.set(id, on, from, hop) },
     refresh: { get: () => refresher.settings(), set: p => refresher.set(p || {}), now: sid => refresher.now(sid), rehearse: sid => refresher.rehearse(sid), inventory: () => refresher.inventory(), unpark: n => refresher.unpark(n) },
     // a session moved here from the other Mac: open it in a fresh in-app terminal (not a select of its mirror)
     handoffStart: b => { if (!win) return { ok: false, err: APP_NAME + ' window is not open' }; win.webContents.send('handoff:start', { sid: String(b.sid || ''), cwd: handoff.fromTilde(String(b.cwd || '~')), name: String(b.name || '') }); return { ok: true }; },
@@ -1193,6 +1195,16 @@ function initRefresh() {
   });
 }
 const peerSess = sid => !liveSession(sid) && peerLink && peerLink.owns(sid);
+// mode switches: every flip is confirmed here first (취소 is the default); nothing is written on cancel
+ipcMain.handle('sw:get', async () => switches ? switches.get() : []);
+ipcMain.handle('sw:set', async (_e, id, on) => {
+  if (!switches) return { ok: false, err: 'not ready' };
+  const sw = (await switches.get()).find(x => x.id === id); if (!sw) return { ok: false, err: 'no such switch' };
+  const msg = on ? (sw.confirmOn || `Turn ${sw.label} on?`) : (sw.confirmOff || `Turn ${sw.label} off?`);
+  const r = await dialog.showMessageBox(win, { type: on ? 'warning' : 'question', message: sw.label, detail: msg, buttons: ['취소', on ? (sw.onLabel || '켜기') : (sw.offLabel || '끄기')], defaultId: 0, cancelId: 0, noLink: true });
+  if (r.response !== 1) return { ok: false, cancelled: true };
+  return switches.set(id, !!on, USAGE_MACHINE);
+});
 ipcMain.handle('refresh:get', async (_e, onPeer) => onPeer ? (peerLink ? peerLink.forward('GET', '/api/refresh').catch(e => ({ err: e.message })) : null) : refresher.settings());
 ipcMain.handle('refresh:set', async (_e, p, onPeer) => onPeer ? peerLink.forward('POST', '/api/refresh', p, undefined, p && p.unpark ? 5 * 60e3 : undefined).catch(e => ({ err: e.message })) : p && p.unpark ? refresher.unpark(String(p.unpark)) : refresher.set(p || {}));
 // the token board's model picker: a session's model, from its next refresh (on the Mac it runs on)

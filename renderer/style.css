@@ -625,6 +625,11 @@ body.tab-dragging, body.tab-dragging * { cursor: grabbing !important; user-selec
 #starMenu { position: fixed; z-index: 60; display: flex; flex-direction: column; min-width: 160px; padding: 4px; border-radius: 10px; background: #111; border: 1px solid var(--line2); box-shadow: 0 8px 28px rgba(0,0,0,.6); }
 #starMenu button { border: 0; background: none; box-shadow: none; padding: 7px 10px; text-align: left; border-radius: 7px; color: var(--text); font-size: 13px; cursor: pointer; }
 #starMenu button:hover { background: var(--panel2); }
+#starMenu .swRow { display: flex; align-items: baseline; gap: 6px; border-top: 1px solid var(--line2); border-radius: 0 0 7px 7px; margin-top: 2px; }
+#starMenu .swRow b { font-size: 11px; padding: 1px 6px; border-radius: 5px; background: var(--panel2); }
+#starMenu .swRow b.swOn { background: #b3261e; color: #fff; } #starMenu .swRow b.swOff { color: var(--dim, #999); }
+#starMenu .swRow small { margin-left: auto; font-size: 10px; color: var(--dim, #999); white-space: nowrap; }
+#starMenu .swRow:disabled { opacity: .5; cursor: default; }
 #usagePill { display: none; cursor: pointer; max-width: 300px; overflow: hidden; text-overflow: ellipsis; -webkit-app-region: no-drag; }
 body.simple #usagePill { display: inline-block; }
 .bring { width: 18px; height: 18px; flex: none; margin-left: auto; } .bring circle { fill: none; stroke: var(--line2); stroke-width: 2; } .bring circle.on { stroke: var(--text); stroke-linecap: round; }

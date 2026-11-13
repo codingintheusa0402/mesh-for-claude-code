@@ -269,6 +269,28 @@ async function openCommands(s) {
 function openStarSheet() {
   sheet('star', `<div class="sh-h"><h2>Mother star</h2><button class="x">×</button></div><div class="item" id="sBc"><div class="t"><div class="n">Broadcast</div></div>›</div><div class="item" id="sUse"><div class="t"><div class="n">Token usage</div></div>›</div>`);
   $('#sBc').onclick = () => openBroadcast(); $('#sUse').onclick = () => openUsage();
+  // mode switches (switches.js): state + who/when; every flip asks first, nothing is written on 취소
+  fetch(`/api/switches?t=${encodeURIComponent(TOKEN)}`).then(r => r.json()).then(list => {
+    if (sheetKind !== 'star' || !Array.isArray(list)) return;
+    for (const w of list) {
+      const el = document.createElement('div'); el.className = 'item';
+      const when = w.at ? new Date(w.at).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+      el.innerHTML = `<div class="t"><div class="n">${esc(w.label)}</div><div class="m">${w.offline ? esc(w.err || 'other Mac not answering') : w.at ? `${esc(w.from || w.by || '')} · ${esc(when)}` : 'never switched on'}</div></div><b style="color:${w.enabled ? '#ff6b6b' : '#999'}">${w.offline ? '?' : w.enabled ? 'ON' : 'OFF'}</b>`;
+      if (!w.offline) el.onclick = () => askSwitch(w);
+      $('#sheetBody').appendChild(el);
+    }
+  }).catch(() => { });
+}
+function askSwitch(w) {
+  const on = !w.enabled, msg = on ? (w.confirmOn || `Turn ${w.label} on?`) : (w.confirmOff || `Turn ${w.label} off?`);
+  sheet('swask', `<div class="sh-h"><h2>${esc(w.label)}</h2><button class="x">×</button></div><div class="meta" style="white-space:pre-wrap">${esc(msg)}</div>
+    <div class="row"><button id="swNo" class="primary">취소</button><button id="swYes" style="${on ? 'color:#ff6b6b' : ''}">${esc(on ? (w.onLabel || '켜기') : (w.offLabel || '끄기'))}</button></div>`);
+  $('#swNo').onclick = () => openStarSheet();
+  $('#swYes').onclick = async () => {
+    $('#swYes').disabled = true;
+    const r = await api('/api/switches', { id: w.id, enabled: on, from: 'iPhone' }).catch(e => ({ ok: false, err: e.message }));
+    toast(r && r.ok ? `${w.label}: ${r.state.enabled ? 'ON' : 'OFF'}` : `Couldn't switch: ${(r && r.err) || 'no answer'}`); openStarSheet();
+  };
 }
 function openUsage() {
   window.usageView.open({ box: html => { const b = $('#sheetBody'), st = sheetKind === 'usage' && b ? b.scrollTop : 0; sheet('usage', `<div class="sh-h"><span class="spacer"></span><button class="x">×</button></div>${html}`, true); if (st) $('#sheetBody').scrollTop = st; },

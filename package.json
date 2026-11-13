@@ -60,6 +60,7 @@
       "main.js",
       "preload.js",
       "mesh-name.js",
+      "switches.js",
       "mesh.local.json",
       "local/**",
       "collector.js",
