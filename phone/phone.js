@@ -278,8 +278,22 @@ function openStarSheet() {
       el.innerHTML = `<div class="t"><div class="n">${esc(w.label)}</div><div class="m">${w.offline ? esc(w.err || 'other Mac not answering') : w.at ? `${esc(w.from || w.by || '')} · ${esc(when)}` : 'never switched on'}</div></div><b style="color:${w.enabled ? '#ff6b6b' : '#999'}">${w.offline ? '?' : w.enabled ? 'ON' : 'OFF'}</b>`;
       if (!w.offline) el.onclick = () => askSwitch(w);
       $('#sheetBody').appendChild(el);
+      if (!w.offline && w.intervals && w.intervals.length) {           // how often it checks: no popup, it doesn't change what it may do
+        const cur = (w.intervals.find(i => i.sec === w.interval) || {}).label || (w.interval ? w.interval + ' s' : '?');
+        const iv = document.createElement('div'); iv.className = 'item';
+        iv.innerHTML = `<div class="t"><div class="n">${esc(w.label)} · check every</div><div class="m">${esc(cur)}</div></div>›`;
+        iv.onclick = () => pickInterval(w); $('#sheetBody').appendChild(iv);
+      }
     }
   }).catch(() => { });
+}
+function pickInterval(w) {
+  sheet('swiv', `<div class="sh-h"><h2>${esc(w.label)} · check every</h2><button class="x">×</button></div>` +
+    w.intervals.map(i => `<div class="item" data-sec="${i.sec}"><div class="t"><div class="n">${esc(i.label)}</div></div>${i.sec === w.interval ? '✓' : ''}</div>`).join(''));
+  $('#sheetBody').querySelectorAll('[data-sec]').forEach(el => el.onclick = async () => {
+    const r = await api('/api/switches', { id: w.id, interval: +el.dataset.sec, from: 'iPhone' }).catch(e => ({ ok: false, err: e.message }));
+    toast(r && r.ok ? `${w.label}: every ${el.querySelector('.n').textContent}` : `Couldn't change it: ${(r && r.err) || 'no answer'}`); openStarSheet();
+  });
 }
 function askSwitch(w) {
   const on = !w.enabled, msg = on ? (w.confirmOn || `Turn ${w.label} on?`) : (w.confirmOff || `Turn ${w.label} off?`);

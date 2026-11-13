@@ -67,9 +67,26 @@ async function renderSwitchPills() {
   bar.innerHTML = (list || []).map(w => {
     const name = w.short || w.label, st = w.offline ? '?' : w.enabled ? 'ON' : 'OFF';
     const tip = w.offline ? `${w.label}: can't read the switch (${w.err || 'no answer'})` : `${w.label} is ${st}` + (w.at ? ` since ${new Date(w.at).toLocaleString()} (by ${w.from || w.by || '?'})` : ' (never switched on)') + ` — click to turn it ${w.enabled ? 'OFF' : 'ON'}`;
-    return `<button class="hpill swpill ${w.offline ? 'err' : w.enabled ? 'on' : 'off'}" data-id="${esc(w.id)}" data-on="${w.enabled ? '0' : '1'}" ${w.offline ? 'disabled' : ''} title="${esc(tip)}">${esc(name)} ${st}</button>`;
+    const iv = !w.offline && w.intervals && w.intervals.length ? `<button class="hpill swiv" data-id="${esc(w.id)}" title="${esc(`How often ${w.label} checks: ${ivLabel(w)} — click to change`)}">⏱ ${ivShort(w.interval)}</button>` : '';
+    return `<span class="swgrp"><button class="hpill swpill ${w.offline ? 'err' : w.enabled ? 'on' : 'off'}" data-id="${esc(w.id)}" data-on="${w.enabled ? '0' : '1'}" ${w.offline ? 'disabled' : ''} title="${esc(tip)}">${esc(name)} ${st}</button>${iv}</span>`;
   }).join('');
   bar.querySelectorAll('.swpill:not([disabled])').forEach(b => b.onclick = () => flipSwitch(b.dataset.id, b.dataset.on === '1'));
+  bar.querySelectorAll('.swiv').forEach(b => b.onclick = () => openIntervalMenu(b, (list || []).find(w => w.id === b.dataset.id)));
+}
+// a switch's run interval (switches.js "intervals"): short form for the pill, the configured label for menus
+const ivShort = sec => !sec ? '?' : sec < 60 ? sec + 's' : sec < 3600 ? Math.round(sec / 60) + 'm' : Math.round(sec / 3600) + 'h';
+const ivLabel = w => ((w.intervals || []).find(i => i.sec === w.interval) || {}).label || ivShort(w.interval);
+function openIntervalMenu(anchor, w) {
+  if (!w) return; let m = $('#ivMenu'); if (m) m.remove();
+  m = document.createElement('div'); m.id = 'ivMenu';
+  m.innerHTML = `<div class="smHead">${esc(w.label)} · check every</div>` + w.intervals.map(i => `<button data-sec="${i.sec}" class="thRow${i.sec === w.interval ? ' cur' : ''}">${esc(i.label)}</button>`).join('');
+  document.body.appendChild(m);
+  const r = anchor.getBoundingClientRect(); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.left)) + 'px'; m.style.top = (r.bottom + 6) + 'px';
+  const shut = () => { m.remove(); removeEventListener('pointerdown', away, true); }, away = e => { if (!m.contains(e.target)) shut(); };
+  addEventListener('pointerdown', away, true);
+  m.onclick = async e => { const b = e.target.closest('button[data-sec]'); if (!b) return; shut();
+    const r = await window.api.switches.interval(w.id, +b.dataset.sec).catch(e => ({ ok: false, err: e.message }));
+    renderSwitchPills(); toast(r && r.ok ? `${w.label}: checks every ${ivLabel(r.state)}` : `Couldn't change it: ${(r && r.err) || 'no answer'}`); };
 }
 renderSwitchPills(); setInterval(renderSwitchPills, 20000);
 // a mouse wheel scrolls the header sideways when it doesn't fit

@@ -2,8 +2,10 @@
 // Mac or the phone. Each switch is set in mesh.local.json (never in code):
 //   "switches": [{ "id": "autopilot", "label": "Autopilot", "file": "~/.tools/autopilot/mode.json",
 //                  "host": "my-server",                     // machine that holds the file (hostname contains this)
-//                  "short": "Pilot", "confirmOn": "Turn it on?", "confirmOff": "Turn it off?", "onLabel": "Turn on", "offLabel": "Turn off" }]
-// The file is { "enabled": bool, "by": "mesh", "at": "<ISO time>", "from": "<machine or phone>" }; missing = OFF.
+//                  "short": "Pilot", "confirmOn": "Turn it on?", "confirmOff": "Turn it off?", "onLabel": "Turn on", "offLabel": "Turn off",
+//                  "intervals": [{ "sec": 60, "label": "1 min · Very high" }, …], "intervalDefault": 300 }]   // optional: how often the tool runs
+// The file is { "enabled": bool, "by": "mesh", "at": "<ISO time>", "from": "<machine or phone>", "interval": <sec> }; missing = OFF.
+// Writes keep the file's other keys (a flip keeps the interval, an interval change keeps the state); the interval needs no popup.
 // On a machine that isn't the host, get/set go to the peer (peer.js) over /api/switches.
 const fs = require('fs'), path = require('path'), os = require('os');
 
@@ -12,15 +14,20 @@ function createSwitches({ peer, machine }) {
   const list = () => (fromEnv() || require('./mesh-name').switches || []).filter(s => s && s.id && s.file);
   const isHost = s => !s.host || os.hostname().toLowerCase().includes(String(s.host).toLowerCase());
   const fileOf = s => s.file.replace(/^~(?=\/|$)/, os.homedir());
-  const pub = s => ({ id: s.id, label: s.label || s.id, short: s.short || '', confirmOn: s.confirmOn || '', confirmOff: s.confirmOff || '', onLabel: s.onLabel || '', offLabel: s.offLabel || '' });
+  const pub = s => ({ id: s.id, label: s.label || s.id, short: s.short || '', confirmOn: s.confirmOn || '', confirmOff: s.confirmOff || '', onLabel: s.onLabel || '', offLabel: s.offLabel || '',
+    intervals: Array.isArray(s.intervals) ? s.intervals.filter(i => i && i.sec > 0).map(i => ({ sec: +i.sec, label: String(i.label || i.sec + ' s') })) : [], intervalDefault: s.intervalDefault || null });
   function readLocal(s) {
-    try { const j = JSON.parse(fs.readFileSync(fileOf(s), 'utf8')); return { ...pub(s), enabled: j.enabled === true, by: j.by || null, at: j.at || null, from: j.from || null }; }
-    catch (e) { return { ...pub(s), enabled: false, by: null, at: null, from: null, missing: e.code === 'ENOENT' }; }
+    try { const j = JSON.parse(fs.readFileSync(fileOf(s), 'utf8')); return { ...pub(s), enabled: j.enabled === true, by: j.by || null, at: j.at || null, from: j.from || null, interval: +j.interval || s.intervalDefault || null }; }
+    catch (e) { return { ...pub(s), enabled: false, by: null, at: null, from: null, interval: s.intervalDefault || null, missing: e.code === 'ENOENT' }; }
   }
-  function writeLocal(s, enabled, from) {
+  function writeLocal(s, patch, from) {
     const f = fileOf(s), tmp = f + '.tmp-' + process.pid;
     fs.mkdirSync(path.dirname(f), { recursive: true });
-    fs.writeFileSync(tmp, JSON.stringify({ enabled: !!enabled, by: 'mesh', at: new Date().toISOString(), from: from || machine }, null, 2) + '\n');
+    let old = {}; try { old = JSON.parse(fs.readFileSync(f, 'utf8')) || {}; } catch { }
+    const next = 'enabled' in patch ? { ...old, enabled: !!patch.enabled, by: 'mesh', at: new Date().toISOString(), from: from || machine }
+      : { ...old, ...patch, intervalBy: from || machine, intervalAt: new Date().toISOString() };
+    if (!('enabled' in next)) next.enabled = false;
+    fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + '\n');
     fs.renameSync(tmp, f);                                  // atomic: the reader never sees half a file
     return readLocal(s);
   }
@@ -44,9 +51,18 @@ function createSwitches({ peer, machine }) {
     async set(id, enabled, from, hop) {
       const s = list().find(x => x.id === id); if (!s) return { ok: false, err: 'no such switch: ' + id };
       if (typeof enabled !== 'boolean') return { ok: false, err: 'enabled must be true or false' };
-      if (isHost(s)) { try { return { ok: true, state: writeLocal(s, enabled, from) }; } catch (e) { return { ok: false, err: e.message }; } }
+      if (isHost(s)) { try { return { ok: true, state: writeLocal(s, { enabled }, from) }; } catch (e) { return { ok: false, err: e.message }; } }
       if (hop) return { ok: false, err: 'neither machine holds this switch' };
       return viaPeer('POST', { id, enabled, from: from || machine, hop: 1 }).catch(e => ({ ok: false, err: 'Couldn\'t reach the other machine: ' + e.message }));
+    },
+    // how often the tool runs: one of the switch's own "intervals" (seconds)
+    async setInterval(id, sec, from, hop) {
+      const s = list().find(x => x.id === id); if (!s) return { ok: false, err: 'no such switch: ' + id };
+      sec = +sec;
+      if (isHost(s)) { if (!pub(s).intervals.some(i => i.sec === sec)) return { ok: false, err: 'not one of this switch\'s intervals: ' + sec };   // the holder's list decides
+        try { return { ok: true, state: writeLocal(s, { interval: sec }, from) }; } catch (e) { return { ok: false, err: e.message }; } }
+      if (hop) return { ok: false, err: 'neither machine holds this switch' };
+      return viaPeer('POST', { id, interval: sec, from: from || machine, hop: 1 }).catch(e => ({ ok: false, err: 'Couldn\'t reach the other machine: ' + e.message }));
     },
   };
 }
