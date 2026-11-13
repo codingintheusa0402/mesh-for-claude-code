@@ -660,7 +660,9 @@ body[data-view="grid"] #terms .term { background: var(--termbg, #07080d); }
 #terms .xterm, #terms .xterm .xterm-viewport { background-color: var(--termbg, #06051a) !important; }
 /* a switch's run-interval pill sits right after it; its menu reuses the star menu's look */
 .swgrp { display: inline-flex; gap: 4px; flex: none; }
-.hpill.swiv { font-variant-numeric: tabular-nums; cursor: pointer; }
+.hpill.swcd { font-variant-numeric: tabular-nums; cursor: default; display: inline-block; min-width: 74px; text-align: center; box-sizing: border-box; }
+.hpill.swcd b { font-weight: 600; }
+.hpill.swcd.due b { color: var(--dim, #999); font-weight: 400; }
 #ivMenu { position: fixed; z-index: 60; display: flex; flex-direction: column; min-width: 190px; padding: 4px; border-radius: 10px; background: #111; border: 1px solid var(--line2); box-shadow: 0 8px 28px rgba(0,0,0,.6); }
 #ivMenu button { border: 0; background: none; box-shadow: none; text-align: left; border-radius: 7px; color: var(--text); font-size: 13px; cursor: pointer; display: flex; gap: 8px; padding: 6px 10px; }
 #ivMenu button:hover { background: var(--panel2); }

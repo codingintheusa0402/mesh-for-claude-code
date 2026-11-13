@@ -3,7 +3,8 @@
 //   "switches": [{ "id": "autopilot", "label": "Autopilot", "file": "~/.tools/autopilot/mode.json",
 //                  "host": "my-server",                     // machine that holds the file (hostname contains this)
 //                  "short": "Pilot", "confirmOn": "Turn it on?", "confirmOff": "Turn it off?", "onLabel": "Turn on", "offLabel": "Turn off",
-//                  "intervals": [{ "sec": 60, "label": "1 min · Very high" }, …], "intervalDefault": 300 }]   // optional: how often the tool runs
+//                  "intervals": [{ "sec": 60, "label": "1 min · Very high" }, …], "intervalDefault": 300,   // optional: how often the tool runs
+//                  "tickFile": "~/.tools/autopilot/tick.json" }]   // optional: { "at": <epoch s of its last run> }, for the countdown
 // The file is { "enabled": bool, "by": "mesh", "at": "<ISO time>", "from": "<machine or phone>", "interval": <sec> }; missing = OFF.
 // Writes keep the file's other keys (a flip keeps the interval, an interval change keeps the state); the interval needs no popup.
 // On a machine that isn't the host, get/set go to the peer (peer.js) over /api/switches.
@@ -14,11 +15,12 @@ function createSwitches({ peer, machine }) {
   const list = () => (fromEnv() || require('./mesh-name').switches || []).filter(s => s && s.id && s.file);
   const isHost = s => !s.host || os.hostname().toLowerCase().includes(String(s.host).toLowerCase());
   const fileOf = s => s.file.replace(/^~(?=\/|$)/, os.homedir());
+  const lastRun = s => { if (!s.tickFile) return null; try { const a = +JSON.parse(fs.readFileSync(s.tickFile.replace(/^~(?=\/|$)/, os.homedir()), 'utf8')).at; return a > 0 ? Math.round(a * 1000) : null; } catch { return null; } };
   const pub = s => ({ id: s.id, label: s.label || s.id, short: s.short || '', confirmOn: s.confirmOn || '', confirmOff: s.confirmOff || '', onLabel: s.onLabel || '', offLabel: s.offLabel || '',
     intervals: Array.isArray(s.intervals) ? s.intervals.filter(i => i && i.sec > 0).map(i => ({ sec: +i.sec, label: String(i.label || i.sec + ' s') })) : [], intervalDefault: s.intervalDefault || null });
   function readLocal(s) {
-    try { const j = JSON.parse(fs.readFileSync(fileOf(s), 'utf8')); return { ...pub(s), enabled: j.enabled === true, by: j.by || null, at: j.at || null, from: j.from || null, interval: +j.interval || s.intervalDefault || null }; }
-    catch (e) { return { ...pub(s), enabled: false, by: null, at: null, from: null, interval: s.intervalDefault || null, missing: e.code === 'ENOENT' }; }
+    try { const j = JSON.parse(fs.readFileSync(fileOf(s), 'utf8')); return { ...pub(s), enabled: j.enabled === true, by: j.by || null, at: j.at || null, from: j.from || null, interval: +j.interval || s.intervalDefault || null, lastRun: lastRun(s) }; }
+    catch (e) { return { ...pub(s), enabled: false, by: null, at: null, from: null, interval: s.intervalDefault || null, lastRun: lastRun(s), missing: e.code === 'ENOENT' }; }
   }
   function writeLocal(s, patch, from) {
     const f = fileOf(s), tmp = f + '.tmp-' + process.pid;

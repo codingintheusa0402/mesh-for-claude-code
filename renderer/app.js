@@ -67,12 +67,30 @@ async function renderSwitchPills() {
   bar.innerHTML = (list || []).map(w => {
     const name = w.short || w.label, st = w.offline ? '?' : w.enabled ? 'ON' : 'OFF';
     const tip = w.offline ? `${w.label}: can't read the switch (${w.err || 'no answer'})` : `${w.label} is ${st}` + (w.at ? ` since ${new Date(w.at).toLocaleString()} (by ${w.from || w.by || '?'})` : ' (never switched on)') + ` — click to turn it ${w.enabled ? 'OFF' : 'ON'}`;
-    const iv = !w.offline && w.intervals && w.intervals.length ? `<button class="hpill swiv" data-id="${esc(w.id)}" title="${esc(`How often ${w.label} checks: ${ivLabel(w)} — click to change`)}">⏱ ${ivShort(w.interval)}</button>` : '';
-    return `<span class="swgrp"><button class="hpill swpill ${w.offline ? 'err' : w.enabled ? 'on' : 'off'}" data-id="${esc(w.id)}" data-on="${w.enabled ? '0' : '1'}" ${w.offline ? 'disabled' : ''} title="${esc(tip)}">${esc(name)} ${st}</button>${iv}</span>`;
+    const ivs = !w.offline && w.intervals && w.intervals.length;
+    const cd = ivs && w.enabled && w.lastRun ? `<span class="hpill swcd" data-id="${esc(w.id)}" title="${esc(`Next ${w.label} check (every ${ivLabel(w)}) — right-click the pill to change`)}">⏱ <b></b></span>` : '';
+    return `<span class="swgrp"><button class="hpill swpill ${w.offline ? 'err' : w.enabled ? 'on' : 'off'}" data-id="${esc(w.id)}" data-on="${w.enabled ? '0' : '1'}" ${w.offline ? 'disabled' : ''} title="${esc(tip + (ivs ? ` · checks every ${ivLabel(w)} (right-click to change)` : ''))}">${esc(name)} ${st}</button>${cd}</span>`;
   }).join('');
-  bar.querySelectorAll('.swpill:not([disabled])').forEach(b => b.onclick = () => flipSwitch(b.dataset.id, b.dataset.on === '1'));
-  bar.querySelectorAll('.swiv').forEach(b => b.onclick = () => openIntervalMenu(b, (list || []).find(w => w.id === b.dataset.id)));
+  swState = new Map((list || []).map(w => [w.id, w]));
+  bar.querySelectorAll('.swpill:not([disabled])').forEach(b => {
+    b.onclick = () => flipSwitch(b.dataset.id, b.dataset.on === '1');
+    b.oncontextmenu = e => { const w = swState.get(b.dataset.id); if (!w || !w.intervals || !w.intervals.length) return; e.preventDefault(); openIntervalMenu(b, w); };   // right-click: how often it checks
+  });
+  tickCountdowns();
 }
+// live countdown to a switch's next run: its last run (tickFile) + interval. The tool's own scheduler can start a little
+// late, so past zero it says "scanning…" until the last-run time moves (re-read every 5 s while a countdown shows)
+let swState = new Map();
+function tickCountdowns() {
+  document.querySelectorAll('#swBar .swcd').forEach(el => {
+    const w = swState.get(el.dataset.id); if (!w) return;
+    const left = Math.round((w.lastRun + w.interval * 1000 - Date.now()) / 1000);
+    el.querySelector('b').textContent = left > 0 ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : 'scanning…';
+    el.classList.toggle('due', left <= 0);
+  });
+}
+setInterval(tickCountdowns, 1000);
+setInterval(() => { if (document.querySelector('#swBar .swcd') && !document.hidden) renderSwitchPills(); }, 5000);
 // a switch's run interval (switches.js "intervals"): short form for the pill, the configured label for menus
 const ivShort = sec => !sec ? '?' : sec < 60 ? sec + 's' : sec < 3600 ? Math.round(sec / 60) + 'm' : Math.round(sec / 3600) + 'h';
 const ivLabel = w => ((w.intervals || []).find(i => i.sec === w.interval) || {}).label || ivShort(w.interval);
