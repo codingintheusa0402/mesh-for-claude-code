@@ -38,7 +38,7 @@ function createHandoff({ peer, liveSession, findTranscript, histEntry, ptys, sta
 
   // stop the local copy: SIGTERM (Claude Code saves as it goes), SIGKILL after 10 s; in-app terminal closes with it
   async function stopHere(s) {
-    if (!s || !s.pid) return;
+    if (!s || !s.pid || s.watchOnly) return;
     try { process.kill(s.pid, 'SIGTERM'); } catch { }
     for (let i = 0; i < 50 && alive(s.pid); i++) await sleep(200);
     if (alive(s.pid)) { try { process.kill(s.pid, 'SIGKILL'); } catch { } await sleep(500); }

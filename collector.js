@@ -362,6 +362,11 @@ print(json.dumps(out))`;
   }
 
   // A Hermes session's numbers come from Hermes' own state.db (hermes-sessions.js), not a Claude transcript
+  fillAgent(j) {                             // a watched script loop (pane-agents.js): no tokens, its log is the activity
+    const s = this.stat(j.sessionId);
+    s.lastWriteAt = j.updatedAt || 0; s.lastModel = j.model || ''; s.customTitle = j.name; s.log = j.agentLog || [];
+    if (j.updatedAt) s.lastUseAt = Math.max(s.lastUseAt || 0, j.updatedAt);
+  }
   fillHermes(j) {
     const s = this.stat(j.sessionId), H = j.hermes, now = Date.now();
     s.hermes = true;
@@ -410,7 +415,7 @@ print(json.dumps(out))`;
       this.readSessions();
       if (this.extraSessions) {                 // Hermes Agent sessions in Mesh's tmux panes (hermes-sessions.js)
         let ex = []; try { ex = await this.extraSessions(); } catch { }
-        for (const j of ex) { this.sessions.set(j.pid, j); this.fillHermes(j); }
+        for (const j of ex) { this.sessions.set(j.pid, j); if (j.kind === 'agent') this.fillAgent(j); else this.fillHermes(j); }
       }
       await this.refreshPs();
       await this.readRcNames();
@@ -464,8 +469,8 @@ print(json.dumps(out))`;
       let owner = null;
       for (const [ptyId, ptyPid] of ptyMap) if (this.descends(pid, ptyPid)) owner = ptyId;
       sessions.push({
-        pid, sid: j.sessionId, name: sessionName(j, s, this.rcNames && this.rcNames.get(pid)), cwd: j.cwd, kind: j.kind, engine: j.engine || undefined, hermesPane: j.kind === 'hermes' ? j.pane : undefined,
-        status: j.status, health, tty: p.tty && !/^\?+$/.test(p.tty) ? '/dev/' + p.tty : null,   // macOS prints ??, Linux ? for none
+        pid, sid: j.sessionId, name: sessionName(j, s, this.rcNames && this.rcNames.get(pid)), cwd: j.cwd, kind: j.kind, engine: j.engine || undefined, hermesPane: j.kind === 'hermes' ? j.pane : undefined, watchOnly: j.watchOnly || undefined,
+        status: j.status, health, tty: !j.watchOnly && p.tty && !/^\?+$/.test(p.tty) ? '/dev/' + p.tty : null,   // a watched script gets no tty: nothing can type into it   // macOS prints ??, Linux ? for none
         cpu: p.cpu || 0, rssMb: Math.round((p.rss || 0) / 1024), etime: p.etime || '',
         startedAt: j.startedAt, version: j.version, remote: !!j.bridgeSessionId,
         model, family: fam, ctx: s.lastCtx, ctxMax: (s.hermes && s.ctxMax) || ctxWindow(model),

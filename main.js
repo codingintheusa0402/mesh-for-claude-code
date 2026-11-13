@@ -48,7 +48,8 @@ ipcMain.on('app:name', e => { e.returnValue = APP_NAME; });
 const collector = new Collector();
 // Hermes Agent sessions (hermes-sessions.js): they live in tmux panes like Claude's and show up as full sessions
 const hermes = require('./hermes-sessions')({ userData: app.getPath('userData') });
-collector.extraSessions = () => hermes.sessions(panes.list());
+const paneAgents = require('./pane-agents')();   // script loops in tmux windows, view only (pane-agents.js)
+collector.extraSessions = async () => [...await hermes.sessions(panes.list()), ...paneAgents.sessions(panes.list())];
 const ptys = new Map();          // id -> { proc, title, kind, cwd }
 let win = null;
 let nextId = 1;
@@ -349,8 +350,9 @@ function terminalTabScript(tty, body) {
 
 // Typing into the external session: Terminal "do script" types the text then CR (= Enter).
 const hermesByTty = tty => tty && ((lastSnap && lastSnap.sessions) || []).find(s => s.kind === 'hermes' && s.tty === tty && s.hermesPane);
-ipcMain.handle('ext:send', async (_e, tty, text) => { const h = hermesByTty(tty); return h ? hermesSend(h.hermesPane, text) : extSend(tty, text); });
-ipcMain.handle('ext:interrupt', async (_e, tty) => { const h = hermesByTty(tty); return h ? interruptSession(h.sid) : extInterrupt(tty); });
+const watchedTty = tty => tty && ((lastSnap && lastSnap.sessions) || []).some(s => s.watchOnly && s.tty === tty);
+ipcMain.handle('ext:send', async (_e, tty, text) => { if (watchedTty(tty)) return { ok: false, err: 'view only' }; const h = hermesByTty(tty); return h ? hermesSend(h.hermesPane, text) : extSend(tty, text); });
+ipcMain.handle('ext:interrupt', async (_e, tty) => { if (watchedTty(tty)) return { ok: false, err: 'view only' }; const h = hermesByTty(tty); return h ? interruptSession(h.sid) : extInterrupt(tty); });
 ipcMain.handle('ext:focus', async (_e, tty) => extFocus(tty));
 
 // Write to an in-app session (owned pty) by id
@@ -397,6 +399,7 @@ function claudeDraft(pane) {
 }
 async function sendToSession(sid, text) {
   const s = liveSession(sid); if (!s) return { ok: false, err: 'session is not running' };
+  if (s.watchOnly) return { ok: false, err: 'a watched script — view only' };
   if (s.kind === 'hermes' && s.hermesPane) return hermesSend(s.hermesPane, text);
   // a Claude session in tmux: never mix into a half-typed message of yours (waits up to 2 minutes for the box to be empty)
   if (s.pane && !s.owner) for (let i = 0; claudeDraft(s.pane); i++) { if (i >= 119) return { ok: false, err: 'unsent text in its input box: not mixing into it' }; await new Promise(r => setTimeout(r, 1000)); }
@@ -406,6 +409,7 @@ async function sendToSession(sid, text) {
 }
 async function interruptSession(sid) {
   const s = liveSession(sid); if (!s) return { ok: false };
+  if (s.watchOnly) return { ok: false, err: 'a watched script — view only' };
   if (s.kind === 'hermes' && s.hermesPane) return hermesDraft(s.hermesPane) ? { ok: false, err: 'unsent text in its input box' } : tmuxKeys(s.hermesPane, 'C-c');   // one Ctrl+C on an empty box stops the turn (with a draft it would only clear the draft)
   if (s.owner) { const p = ptys.get(s.owner); if (p) p.proc.write('\x1b'); return { ok: true }; }
   if (s.tty) return extInterrupt(s.tty);
@@ -941,6 +945,7 @@ ipcMain.handle('hist:list', async () => {
 ipcMain.handle('peer:resume', (_e, sid, opts) => peerLink ? peerLink.forward('POST', '/api/resume', { sid, ...(opts || {}) }).catch(e => ({ ok: false, err: String(e.message || e) })) : { ok: false, err: 'no peer' });
 ipcMain.handle('hist:rename', async (_e, sid, name) => {
   const s = liveSession(sid);
+  if (s && s.watchOnly) return { ok: false, err: 'a watched script keeps the name set in mesh.local.json' };
   if (s && s.kind === 'hermes' && s.hermesPane) return hermesSend(s.hermesPane, '/title ' + String(name || '').replace(/[\r\n]/g, ' ').slice(0, 120));   // Hermes keeps the title in its own state.db
   return renameTranscript(sid, name);
 });
@@ -967,6 +972,7 @@ ipcMain.handle('peer:interrupt', (_e, sid) => peerLink ? peerLink.forward('POST'
 ipcMain.handle('session:stop', async (_e, pid) => {
   pid = +pid; if (!pid || pid === process.pid) return { ok: false, err: 'bad pid' };
   if (!(lastSnap && lastSnap.sessions.some(s => s.pid === pid))) return { ok: false, err: 'not a session on this machine' };   // never a peer's pid
+  if (lastSnap.sessions.some(s => s.pid === pid && s.watchOnly)) return { ok: false, err: 'a watched script — Mesh never stops it' };
   try { process.kill(pid, 'SIGTERM'); } catch (e) { return { ok: e.code === 'ESRCH', err: e.message }; }
   for (let i = 0; i < 30; i++) { await new Promise(r => setTimeout(r, 100)); try { process.kill(pid, 0); } catch { return { ok: true }; } }
   try { process.kill(pid, 'SIGKILL'); } catch { } return { ok: true };

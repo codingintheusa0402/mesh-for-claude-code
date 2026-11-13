@@ -84,7 +84,7 @@ function createRefresh(ctx) {
   const journal = o => { try { o ? fs.writeFileSync(JOURNAL, JSON.stringify({ ...o, at: Date.now() })) : fs.unlinkSync(JOURNAL); } catch { } };
   const log = msg => { try { fs.mkdirSync(path.dirname(LOG), { recursive: true }); fs.appendFileSync(LOG, `${new Date().toLocaleString('sv-SE')} ${msg}\n`); } catch { } };
 
-  const local = () => ((ctx.getSnap() || {}).sessions || []).filter(s => !s.onPeer && s.sid);
+  const local = () => ((ctx.getSnap() || {}).sessions || []).filter(s => !s.onPeer && s.sid && !s.watchOnly);   // watched scripts (pane-agents.js) are never refreshed
   const named = s => s.name && !s.auto && !s.headless && !/^[\w-]{8}$/.test(s.name);
   const modeOf = name => MODES.includes(cfg.sessions[name]) ? cfg.sessions[name] : 'nightly';
   const live = sid => local().find(s => s.sid === sid);

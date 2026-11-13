@@ -4,5 +4,16 @@
   "dataDir": "My Mesh",
   "signId": "Mesh Local Signing",
   "tmuxSession": "mesh",
-  "guideUrl": ""
+  "guideUrl": "",
+  "paneAgents": [
+    {
+      "window": "main:my-bot",
+      "name": "My Bot",
+      "engine": "hermes",
+      "model": "deepseek-v4-pro",
+      "log": "~/bots/my-bot/bot.log",
+      "cwd": "~/bots/my-bot",
+      "busyWithin": 120
+    }
+  ]
 }
