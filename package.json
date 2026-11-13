@@ -61,6 +61,7 @@
       "preload.js",
       "mesh-name.js",
       "switches.js",
+      "pane-agents.js",
       "mesh.local.json",
       "local/**",
       "collector.js",
