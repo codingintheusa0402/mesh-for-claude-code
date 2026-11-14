@@ -185,6 +185,12 @@ function ownerElsewhere(sid) {
 ipcMain.handle('pty:spawn', async (_e, opts) => {
   if (opts && opts.kind === 'claude' && !opts.moved && !IS_WIN) {
     const rsid = (/--resume\s+([0-9a-f]{8}-[0-9a-f-]{27})\b/.exec(opts.flags || '') || [])[1], away = rsid && ownerElsewhere(rsid);
+    // already running on this Mac (11-14: after a reboot the boot script and Mesh's reopen both resumed AI Trader): no second copy
+    if (rsid) {
+      let running = ((lastSnap && lastSnap.sessions) || []).some(s => s.sid === rsid && !s.onPeer);
+      if (!running) try { running = execFileSync('/bin/ps', ['-axww', '-o', 'command='], { timeout: 3000 }).toString().split('\n').some(l => /(^|\/)claude\s/.test(l) && new RegExp('--(resume|session-id)[ =]' + rsid + '\\b').test(l)); } catch { }
+      if (running) return { id: null, note: 'That session is already running on this Mac: not opening a second copy' };
+    }
     if (away) {
       const other = (peerLink && peerLink.label && peerLink.label()) || 'the other Mac';
       if (peerLink && peerLink.online()) {
