@@ -12,6 +12,7 @@
 </head>
 <body data-view="split">
 <header id="top">
+  <div id="topScroll">   <!-- this part scrolls sideways when it doesn't fit; the controls after it stay put -->
   <button id="drawerBtn" class="icon-btn on" title="Sessions (⌘0)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.75" y="5" width="16.5" height="14" rx="2.25"/><path d="M9.25 5v14"/></svg></button>
   <div class="brand"><img class="logo" src="icon.png" alt=""><span class="bname" data-app-name>Mesh for Claude Code</span></div>
   <div id="miniUsage" class="mini-usage" title="Plan usage left"></div>
@@ -20,6 +21,7 @@
   <div class="spacer"></div>
   <div id="swBar" class="swbar"></div>
   <div id="health" class="health"></div>
+  </div>
   <div class="seg" id="viewSeg">
     <button data-view="mesh" title="Mesh only (⌘1)">Mesh</button>
     <button data-view="split" title="Mesh + terminals (⌘2)">Split</button>

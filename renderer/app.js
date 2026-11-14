@@ -146,9 +146,9 @@ function openIntervalMenu(anchor, w) {
 }
 renderSwitchPills(); setInterval(renderSwitchPills, 20000);
 // a mouse wheel scrolls the header sideways when it doesn't fit
-const topFade = () => { const t = $('#top'), more = t.scrollWidth - t.clientWidth; t.classList.toggle('fadeL', more > 1 && t.scrollLeft > 2); t.classList.toggle('fadeR', more > 1 && t.scrollLeft < more - 2); };   // a soft edge says "more this way"
-$('#top').addEventListener('scroll', topFade, { passive: true }); addEventListener('resize', topFade); new ResizeObserver(topFade).observe($('#top')); new MutationObserver(topFade).observe($('#top'), { childList: true, subtree: true });
-$('#top').addEventListener('wheel', e => { const t = $('#top'); if (t.scrollWidth > t.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { t.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
+const topFade = () => { const t = $('#topScroll'), more = t.scrollWidth - t.clientWidth; t.classList.toggle('fadeL', more > 1 && t.scrollLeft > 2); t.classList.toggle('fadeR', more > 1 && t.scrollLeft < more - 2); };   // a soft edge says "more this way"
+$('#topScroll').addEventListener('scroll', topFade, { passive: true }); addEventListener('resize', topFade); new ResizeObserver(topFade).observe($('#topScroll')); new MutationObserver(topFade).observe($('#topScroll'), { childList: true, subtree: true });
+$('#topScroll').addEventListener('wheel', e => { const t = $('#topScroll'); if (t.scrollWidth > t.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { t.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
 const swWhen = iso => { const d = new Date(iso), now = new Date(); return d.toDateString() === now.toDateString() ? d.toTimeString().slice(0, 5) : `${d.getMonth() + 1}/${d.getDate()} ${d.toTimeString().slice(0, 5)}`; };
 async function flipSwitch(id, on) {           // the popup (취소 default) is shown by the main process before anything is written
   const r = await window.api.switches.set(id, on).catch(e => ({ ok: false, err: e.message }));
@@ -570,7 +570,7 @@ if (window.api.handoff) {
   // a session moved here (or restarted here after a failed move): a fresh in-app terminal resuming it
   window.api.handoff.onStart(async x => {
     if (document.body.dataset.view === 'mesh') setView('split');
-    const id = await newTerm({ kind: 'claude', cwd: x.cwd, flags: `${RESUME_FLAGS} --resume ${x.sid}`, title: (x.name || x.sid.slice(0, 8)).slice(0, 40) });
+    const id = await newTerm({ kind: 'claude', cwd: x.cwd, flags: `${RESUME_FLAGS} --resume ${x.sid}`, title: (x.name || x.sid.slice(0, 8)).slice(0, 40), moved: true });   // a Move makes this Mac its server
     autoTrust.set(id, { until: Date.now() + 20000, buf: '' });
     toast(`Resumed ${x.name || 'session'} here`);
   });
@@ -1034,7 +1034,7 @@ async function newTerm(opts) {
   opts = engineFor(opts);
   if (document.body.dataset.view === 'mesh') setView('split');
   const info = opts.adopt || await window.api.pty.spawn({ ...opts, cols: 120, rows: 30 });
-  if (!info || !info.id) { toast("Couldn't start it: " + ((info && info.err) || 'unknown')); return null; }
+  if (!info || !info.id) { toast(info && info.note ? info.note : "Couldn't start it: " + ((info && info.err) || 'unknown')); return null; }
   if (info.pane) {                                                 // it lives in tmux: this tab is a view of it, like any other pane
     const t = terms.get(info.id) || mirrorTerm({ id: info.id, title: info.title, kind: 'tmux' });
     if (!t.attached) { t.attached = true; window.api.peerTerm.open(info.id); }

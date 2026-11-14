@@ -164,7 +164,37 @@ ipcMain.handle('hermes:new', async (_e, o) => {
   return spawnHermes(o);
 });
 ipcMain.handle('hermes:here', () => hermesHere());
+// One server per session (2026-11-14): a Claude session belongs to the Mac that last wrote its transcript (each Mac has its
+// own home folder, so the last "cwd" in it says which). With the Macs' link down, the MacBook once resumed GCX Mesh from
+// its synced copy while it ran on the mini: two copies of one conversation. Resuming it on the other Mac now opens it on
+// its own Mac (its terminal shows here) or, if that Mac can't be reached, refuses; Move (handoff.js) changes the owner.
+function ownerElsewhere(sid) {
+  const f = core.findTranscript(sid); if (!f) return null;
+  try {
+    const fd = fs.openSync(f, 'r'), size = fs.fstatSync(fd).size, len = Math.min(size, 262144), b = Buffer.alloc(len);
+    fs.readSync(fd, b, 0, len, size - len); fs.closeSync(fd);
+    const lines = b.toString('utf8').split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const m = /"cwd":"((?:[^"\\]|\\.)*)"/.exec(lines[i]); if (!m) continue;
+      const c = JSON.parse('"' + m[1] + '"');
+      return c === HOME || c.startsWith(HOME + path.sep) || !/^\/(Users|home)\/[^/]+/.test(c) ? null : c;
+    }
+  } catch { }
+  return null;
+}
 ipcMain.handle('pty:spawn', async (_e, opts) => {
+  if (opts && opts.kind === 'claude' && !opts.moved && !IS_WIN) {
+    const rsid = (/--resume\s+([0-9a-f]{8}-[0-9a-f-]{27})\b/.exec(opts.flags || '') || [])[1], away = rsid && ownerElsewhere(rsid);
+    if (away) {
+      const other = (peerLink && peerLink.label && peerLink.label()) || 'the other Mac';
+      if (peerLink && peerLink.online()) {
+        const r = await peerLink.forward('POST', '/api/resume', { sid: rsid }, undefined, 15000).catch(e => ({ ok: false, err: e.message }));
+        if (r && r.ok) return { id: null, note: `It runs on ${other}: opened it there (its terminal shows here)` };
+        return { id: null, err: `it runs on ${other}, which didn't open it (${(r && r.err) || 'no answer'}). Not starting a second copy here` };
+      }
+      return { id: null, err: `it runs on ${other}, which can't be reached right now. Not starting a second copy here; once the Macs are linked, open it there or Move it` };
+    }
+  }
   const id = 't' + nextId++;
   const cwd = opts.cwd && fs.existsSync(opts.cwd) ? opts.cwd : HOME;
   const sh = loginShell();

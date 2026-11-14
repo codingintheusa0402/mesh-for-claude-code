@@ -468,14 +468,19 @@ body[data-size="mini"] #rail { display: flex; flex: none; gap: 6px; padding: 6px
 /* header: when space runs out, the model chips and health pills give way — buttons (Mesh/Split/Grid, PIXEL…) never get cut */
 /* header: one row that never wraps or slices anything — when it doesn't fit, it scrolls sideways (wheel or trackpad) */
 /* no visible scrollbar (2026-11-14): it scrolls only when it overflows, and the soft edge (fadeL/fadeR) shows there's more */
-#top { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; }
-#top::-webkit-scrollbar { display: none; }
+/* 2026-11-14: only the left part (#topScroll: brand, usage, models, calendar, switches, health) scrolls; the view
+   switch and the buttons after it stay fixed at the right */
+#top { overflow: hidden; }
 #top > * { flex-shrink: 0; }
-#top > .models, #top > .health, #top > .cal { flex-wrap: nowrap; align-items: center; overflow: visible; flex: none; min-width: auto; }
-#top > .spacer { flex: 1 0 8px; min-width: 8px; }
+#top > #topScroll { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: inherit; height: 100%;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; }
+#topScroll::-webkit-scrollbar { display: none; }
+#topScroll > * { flex-shrink: 0; }
+#topScroll > .models, #topScroll > .health, #topScroll > .cal { flex-wrap: nowrap; align-items: center; overflow: visible; flex: none; min-width: auto; }
+#topScroll > .spacer { flex: 1 0 8px; min-width: 8px; }
 .seg button { white-space: nowrap; flex: none; }
 #top .hpill { white-space: nowrap; flex: none; }
-#top > .swbar { display: flex; gap: 6px; align-items: center; -webkit-app-region: no-drag; }
+#topScroll > .swbar { display: flex; gap: 6px; align-items: center; -webkit-app-region: no-drag; }
 #top .swpill { border-radius: 999px; padding: 3px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
 #top .swpill.on { background: #b3261e; border-color: #e0473d; color: #fff; }
 #top .swpill.off { opacity: .75; }
@@ -648,11 +653,11 @@ body.simple #usagePill { display: inline-block; }
 .hrow.replaced .t { opacity: .55; }
 
 /* scrolling header (after the calendar rules so it wins): nothing shrinks, wraps or gets cut; the bar scrolls instead */
-header#top > .cal, header#top > .models, header#top > .health { flex: none; min-width: auto; overflow: visible; flex-wrap: nowrap; height: auto; }
+header#top #topScroll > .cal, header#top #topScroll > .models, header#top #topScroll > .health { flex: none; min-width: auto; overflow: visible; flex-wrap: nowrap; height: auto; }
 header#top .cal-item { flex: none; }
-header#top.fadeR { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); }
-header#top.fadeL { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent); }
-header#top.fadeL.fadeR { -webkit-mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
+header#top #topScroll.fadeR { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent); }
+header#top #topScroll.fadeL { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent); }
+header#top #topScroll.fadeL.fadeR { -webkit-mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
 /* terminal theme (TERM_THEMES in app.js): the pane's padding takes the theme's background too */
 #terms .term { background: var(--termbg, #06051a); }
 body[data-view="grid"] #terms .term { background: var(--termbg, transparent); }
