@@ -467,8 +467,9 @@ body[data-size="mini"] #rail { display: flex; flex: none; gap: 6px; padding: 6px
 
 /* header: when space runs out, the model chips and health pills give way — buttons (Mesh/Split/Grid, PIXEL…) never get cut */
 /* header: one row that never wraps or slices anything — when it doesn't fit, it scrolls sideways (wheel or trackpad) */
-#top { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; overscroll-behavior-x: contain; }
-#top::-webkit-scrollbar { height: 4px; } #top::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 2px; }
+/* no visible scrollbar (2026-11-14): it scrolls only when it overflows, and the soft edge (fadeL/fadeR) shows there's more */
+#top { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; }
+#top::-webkit-scrollbar { display: none; }
 #top > * { flex-shrink: 0; }
 #top > .models, #top > .health, #top > .cal { flex-wrap: nowrap; align-items: center; overflow: visible; flex: none; min-width: auto; }
 #top > .spacer { flex: 1 0 8px; min-width: 8px; }
