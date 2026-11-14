@@ -395,7 +395,7 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
       LINEAGE.stamp(hand, lin.lid, lin.gen + 1, s.sid);          // the next generation's id is in its handoff
       if (opt.park) {                       // idle park: the handoff is the session now; close it, list it under Parked
         step('close'); archive(s); LINEAGE.close(FALLBACK, name, s.sid);
-        cfg.parked[name] = { sid: s.sid, at: Date.now(), handoff: hand, cwd: s.cwd, session: tmuxSess, title: oldWin, model: (engineOf(s) || {}).model || null, ollama: eng.ollama || null, lid: lin.lid, gen: lin.gen, idleH: Math.round((Date.now() - (s.lastUseAt || Date.now())) / 3600e3) };
+        cfg.parked[name] = { sid: s.sid, at: Date.now(), handoff: hand, cwd: s.cwd, session: tmuxSess, title: oldWin, model: (engineOf(s) || {}).model || null, ollama: eng.ollama || null, lid: lin.lid, gen: lin.gen, idleH: opt.idleH != null ? opt.idleH : Math.round((Date.now() - (s.lastUseAt || Date.now())) / 3600e3) };
         save();
         await ctx.sendToSession(s.sid, '/exit'); await sleep(12000);
         if (ctx.panes.has(s.pane)) ctx.tmux(['kill-pane', '-t', s.pane]);
@@ -625,7 +625,8 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
       if (local().some(c => c.parent === s.sid) || draftText(s) || loopInfo(s) || jobsOf(s).length) continue;
       const k = s.name + '|park', tried = cfg.tried[k] || 0; if (now - tried < 6 * 3600e3) continue;
       cfg.tried[k] = now; save();
-      const r = await refresh(s, `idle ${Math.round(idleFor(s, now) / 3600e3)} h`, { park: true }); if (r.ok) return;
+      const idleH = Math.round(idleFor(s, now) / 3600e3);   // measured before the handoff turn, which counts as use
+      const r = await refresh(s, `idle ${idleH} h`, { park: true, idleH }); if (r.ok) return;
     }
     for (const k of Object.keys(cfg.tried)) if (now - cfg.tried[k] > 864e5) delete cfg.tried[k];
     save();
