@@ -62,6 +62,7 @@
       "mesh-name.js",
       "switches.js",
       "pane-agents.js",
+      "model-fallback.js",
       "mesh.local.json",
       "local/**",
       "collector.js",

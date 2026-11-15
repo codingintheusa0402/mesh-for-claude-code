@@ -1223,6 +1223,7 @@ async function loop() {
       for (const p of panes.list()) if (p.title.startsWith(TMUX_SESSION + ':') && !snap.ptys.some(x => x.id === p.id))
         snap.ptys.push({ id: p.id, pid: p.pid, title: p.title.slice(TMUX_SESSION.length + 1) || 'session', kind: 'tmux', cwd: null });
       if (refresher) refresher.decorate(snap);
+      if (fallback) { fallback.decorate(snap); if (Date.now() - fallbackAt > 15000) { fallbackAt = Date.now(); fallback.tick(); } }
       paintSessions(snap.sessions); groupSessions(snap); linkSubSessions(snap);
       // the window shows BOTH machines (the peer's sessions and terminals merged in); phone + peer keep the local snap
       const shown = peerLink ? peerLink.merge(snap) : snap;
@@ -1238,6 +1239,13 @@ async function loop() {
 
 // ---------------- session refresh (session-refresh.js) ----------------
 let refresher = null;
+// model fallback (model-fallback.js): Opus outage → Sonnet, and back once Opus works for 10 minutes
+let fallback = null, fallbackAt = 0;
+function initFallback() {
+  const conf = require('./mesh-name').modelFallback || {};
+  fallback = require('./model-fallback')({ userData: app.getPath('userData'), getSnap: () => lastSnap, sendToSession, alert: alertOwner,
+    claudeBin: () => core.resolveClaude(), conf, log: line => { try { fs.appendFileSync(path.join(app.getPath('userData'), 'model-fallback.log'), new Date().toISOString() + ' ' + line + '\n'); } catch { } } });
+}
 function alertOwner(title, step) {
   try { new Notification({ title, body: step, silent: false }).show(); } catch { }
   const c = (require('./mesh-name').usageAlert || {}).cmd;           // the team's alert command (mesh.local.json), e.g. a chat/phone notifier
@@ -1250,7 +1258,9 @@ function initRefresh() {
     findTranscript: sid => core.findTranscript(sid), sql: require('./hermes-sessions').sql, quietFor: () => updater.quietFor(), alert: alertOwner,
     claudeBin: () => core.resolveClaude(),
     report: text => { const to = (require('./mesh-name').refreshReportTo || APP_NAME); const g = ((lastSnap && lastSnap.sessions) || []).find(x => x.name === to && !x.onPeer); if (g) sendToSession(g.sid, text); },   // results the owner asked to hear about go to the session named like the app (or refreshReportTo)
+    modelFor: name => fallback && fallback.modelFor(name),
     remap: (from, to) => {                                     // colour and group follow the session; the window moves its orbit (prevSid)
+      if (fallback) fallback.remap(from, to);
       if (sessionColors[from]) { sessionColors[to] = sessionColors[from]; try { fs.writeFileSync(COLORS_FILE, JSON.stringify(sessionColors)); } catch { } }
       if (sessionGroups.members[from]) { sessionGroups.members[to] = sessionGroups.members[from]; delete sessionGroups.members[from]; saveGroups(); }
     },
@@ -1288,7 +1298,7 @@ app.whenReady().then(async () => {
     await Promise.race([fsGuard.start(), new Promise(r => setTimeout(r, 3000))]);
     if (fsGuard.stuck().length) notifyFsStuck({ state: 'stuck', stuck: fsGuard.stuck() });
   }
-  initRefresh();
+  initRefresh(); initFallback();
   createWindow();
   initPhone();
   loop();

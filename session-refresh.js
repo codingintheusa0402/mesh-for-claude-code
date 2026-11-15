@@ -61,12 +61,33 @@ const TEMPLATE = `# HANDOFF: <session name>  (updated <date time>)
 
 // Projects that need more in their handoff and their verification: local/session-refresh.json "extra": [{ "match": "^Name", "handoff": "...", "verify": "..." }]
 const EXTRA = (LOCAL.extra || []).map(x => [new RegExp(x.match, 'i'), { handoff: x.handoff || '', verify: x.verify || '' }]);
-const extraFor = name => (EXTRA.find(([re]) => re.test(name)) || [, {}])[1];
+// and for every session: local/session-refresh.json "always": { "handoff": "...", "verify": "..." } (standing rules every generation inherits)
+const ALWAYS = LOCAL.always || {};
+const extraFor = name => { const x = (EXTRA.find(([re]) => re.test(name)) || [, {}])[1];
+  return { handoff: [ALWAYS.handoff, x.handoff].filter(Boolean).join('\n'), verify: [ALWAYS.verify, x.verify].filter(Boolean).join(' ') }; };
+
+// Remote control is on when the transcript has a bridge_status line ("/remote-control is active") — the CLI writes one each time it connects
+function rcState(sid, findTranscript) {
+  try {
+    const f = (findTranscript || rcState.find)(sid); if (!f) return { ok: false, why: 'no transcript yet' };
+    const fd = fs.openSync(f, 'r'), size = fs.fstatSync(fd).size, len = Math.min(size, 4 << 20), b = Buffer.alloc(len);
+    fs.readSync(fd, b, 0, len, size - len); fs.closeSync(fd);
+    let on = null;                       // only the CLI's own system lines count (a chat that quotes them doesn't)
+    for (const l of b.toString('utf8').split('\n')) {
+      if (!l.startsWith('{"') || !l.includes('"type":"system"')) continue;
+      let j; try { j = JSON.parse(l); } catch { continue; }
+      if (j.subtype === 'bridge_status') on = true;
+      else if (j.subtype === 'local_command' && /<local-command-stdout>Remote Control disconnected/.test(j.content || '')) on = false;
+    }
+    return on ? { ok: true } : { ok: false, why: on === false ? 'disconnected' : 'never connected' };
+  } catch (e) { return { ok: false, why: e.message }; }
+}
 
 function createRefresh(ctx) {
   // ctx: userData, getSnap, panes, hermes, spawnHermes, sendToSession, tmux(args)->string|null, loginShell, findTranscript,
   //      sql(query), remap(oldSid, newSid), alert(title, step), quietFor(), claudeBin(), report(text) (to the app's own session)
   const FILE = path.join(ctx.userData, 'session-refresh.json');
+  rcState.find = ctx.findTranscript;
   let cfg = { enabled: false, time: '04:00', sessions: { ...(LOCAL.sessions || {}) }, notBefore: { ...(LOCAL.notBefore || {}) },
     reportOn: LOCAL.reportOn || [], last: {}, alias: {}, prev: {}, tok: {}, tried: {},
     ctxCap: LOCAL.ctxCap || 300e3, loopCap: LOCAL.loopCap || 200e3, ctxCapFor: { ...(LOCAL.ctxCapFor || {}) }, model: { ...(LOCAL.model || {}) },
@@ -313,6 +334,7 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
       const cmd = pp ? String(execFileSync('/bin/ps', ['-o', 'command=', '-p', pp])) : '';
       const m = /ollama launch claude --model (\S+)/.exec(cmd); if (m) return { ollama: m[1] };
     } catch { }
+    const fb = ctx.modelFor && ctx.modelFor(s.name); if (fb) return { model: fb };   // an Opus outage fallback is on (model-fallback.js)
     const set = cfg.model[s.name];                     // the model chosen for this session (token board or settings), from this refresh on
     if (set && /^(opus|sonnet|haiku|fable|claude-[\w.-]+)$/.test(set)) return { model: set };
     return { model: /^claude-[\w.-]+$/.test(s.model || '') ? s.model : null };
@@ -439,6 +461,12 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
       const v = await verify(name, kind, newSid, handText, useOllama, nonce);
       if (!v.ok) return fail('verification failed: ' + (v.why || v.bad.map(x => `Q${x.n} ${x.why}`).join('; ')));
       log(`CHECK ${name}: ${v.n}/${v.n} answers correct${v.retried ? ' on the second try' : ''} (${v.qs.map(q => q.slice(0, 50)).join(' | ')})`);
+      if (!isH && !eng.ollama) {           // remote control (2026-11-15): every new generation must show in the Claude app's Code list
+        let rc = rcState(newSid);
+        if (!rc.ok) { log(`WARN  ${name}: remote control not connected yet; turning it on`); await ctx.sendToSession(newSid, '/remote-control'); await sleep(15000); rc = rcState(newSid); }
+        log(rc.ok ? `CHECK ${name}: remote control on` : `WARN  ${name}: remote control did not connect (${rc.why}); the daily audit retries it`);
+        if (!rc.ok && ctx.alert) ctx.alert(`${name}: remote control is off`, 'It will not show in the Claude app. Run /remote-control in that session (the daily audit retries it).');
+      }
       if (opt.dry) {                       // rehearsal: close the new one, the old one stays exactly as it was
         await dropNew();
         journal(null);
