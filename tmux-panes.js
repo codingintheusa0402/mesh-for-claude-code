@@ -112,10 +112,15 @@ module.exports = function createPanes({ ptyBus }) {
     const hist = tmuxSync(['capture-pane', '-p', '-e', '-t', id, '-S', '-2000', '-E', '-1']).replace(/\n$/, '');
     const screen = tmuxSync(['capture-pane', '-p', '-e', '-t', id]).replace(/\n$/, '').split('\n');
     while (screen.length < p.rows) screen.push('');
-    const [cx, cy] = tmuxSync(['display', '-p', '-t', id, '#{cursor_x} #{cursor_y}']).trim().split(' ').map(Number);
+    const [cx, cy, alt, mAll, mBtn, mStd, mSgr, mUtf8] = tmuxSync(['display', '-p', '-t', id,
+      '#{cursor_x} #{cursor_y} #{alternate_on} #{mouse_all_flag} #{mouse_button_flag} #{mouse_standard_flag} #{mouse_sgr_flag} #{mouse_utf8_flag}']).trim().split(' ').map(Number);
+    // a full-screen app (Claude Code draws in the alternate screen and scrolls itself with the mouse wheel) keeps no tmux
+    // history, so a viewer opened on a plain copy of the screen had nothing to scroll and its wheel never reached the
+    // app (2026-11-15). The copy now carries those modes: alternate screen, then the mouse reporting the app asked for.
+    const modes = (alt ? '\x1b[?1049h\x1b[H' : '') + (mAll ? '\x1b[?1003h' : mBtn ? '\x1b[?1002h' : mStd ? '\x1b[?1000h' : '') + (mSgr ? '\x1b[?1006h' : '') + (mUtf8 ? '\x1b[?1005h' : '');
     // capture-pane carries no terminal modes. Claude Code, Hermes and zsh all turn bracketed paste on at start, and
     // without it the viewer sends a paste as typed keys: an image path then stays a raw path instead of [Image #n]
-    return '\x1b[?2004h' + (hist ? hist.split('\n').join('\r\n') + '\r\n' : '') + screen.slice(-p.rows).join('\x1b[0m\r\n')
+    return '\x1b[?2004h' + (hist && !alt ? hist.split('\n').join('\r\n') + '\r\n' : '') + modes + screen.slice(-p.rows).join('\x1b[0m\r\n')
       + `\x1b[0m\x1b[${(cy || 0) + 1};${(cx || 0) + 1}H`;
   }
 
