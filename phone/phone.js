@@ -471,7 +471,8 @@ function renderSplit(force) {
     || `<span class="meta" style="padding:6px 4px">${snap.ready ? 'No Claude Code sessions running.' : 'Connecting…'}</span>`;
   $('#switch').querySelectorAll('[data-sid]').forEach(b => b.onclick = () => pickSplit(b.dataset.sid));
   if (!s) { $('#pane').innerHTML = ''; paneKind = null; return; }
-  const kind = s.owner ? 'term' : 'ctl', key = kind + s.sid;
+  const tid = s.owner || (!s.onPeer && s.pane) || null;            // a Mesh terminal, or the tmux pane the session runs in (2026-11-15)
+  const kind = tid ? 'term' : 'ctl', key = kind + s.sid;
   const head = `<span class="dot ${s.health}"></span><b>${esc(s.name)}</b><span class="pm">${s.health === 'working' ? Math.round(s.tps) + ' tok/s · ' : ''}${fmtTok(s.todayTok)}</span>`;
   if (!force && paneKind === key) {                              // live refresh without touching the terminal or the text box
     $('#paneHead .ph').innerHTML = head;
@@ -486,8 +487,8 @@ function renderSplit(force) {
           <div class="chips"><button id="pInt">Interrupt</button>${QUICK.slice(0, 5).map(c => `<button data-c="${c}">${c}</button>`).join('')}</div>` : '<div class="meta">Background session — view only.</div>'}<div id="pLog">${paneLog(s)}</div></div>`);
   $('#pInfo').onclick = () => openSession(s.sid);
   if (kind === 'term') {
-    $('#pFull').onclick = () => openTerminal(s.owner, s.sid);
-    mountTerm($('#pxt'), s.owner, $('#pane'), s.sid);
+    $('#pFull').onclick = () => openTerminal(tid, s.sid);
+    mountTerm($('#pxt'), tid, $('#pane'), s.sid);
   } else {
     if (termId && sheetKind !== 'term') { tes && tes.close(); }
     const send = $('#pSend');
@@ -591,9 +592,28 @@ addEventListener('orientationchange', () => setTimeout(() => { viz.resize(); if 
 // the session drawer (like the Claude app): ☰ or a swipe from the left edge opens it, a tap outside or on a session closes it
 function toggleNav(open) { const o = typeof open === 'boolean' ? open : !document.body.classList.contains('navOpen'); document.body.classList.toggle('navOpen', o); if (o) renderDrawer(); }
 $('#navBtn').onclick = () => toggleNav(); $('#scrim').onclick = () => toggleNav(false);
-{ let x0 = null, y0 = null;
-  addEventListener('touchstart', e => { const t = e.touches[0]; x0 = t.clientX < 22 && !document.body.classList.contains('navOpen') ? t.clientX : null; y0 = t.clientY; }, { passive: true });
-  addEventListener('touchmove', e => { if (x0 == null) return; const t = e.touches[0]; if (t.clientX - x0 > 50 && Math.abs(t.clientY - y0) < 40) { x0 = null; toggleNav(true); } }, { passive: true }); }
+// iOS-style: drag right (from the left edge, or anywhere outside the terminal) pulls the drawer out with the finger,
+// drag it left to push it back; on release it snaps open or shut (a quick flick counts too)
+{ let sx = null, sy = null, st = 0, mode = null, w = 1, open = false; const D = $('#drawer'), SC = $('#scrim');
+  const place = off => { D.style.transition = SC.style.transition = 'none'; D.style.transform = `translateX(${off}px)`; SC.style.opacity = String(Math.max(0, 1 + off / w)); SC.style.pointerEvents = 'none'; };
+  addEventListener('touchstart', e => {
+    const t = e.touches[0]; open = document.body.classList.contains('navOpen'); sx = null; mode = null;
+    if (!open && !(t.clientX < 40 || !e.target.closest('#pxt, #xt, textarea, input, .keys, #grid'))) return;
+    if (!open) renderDrawer();
+    sx = t.clientX; sy = t.clientY; st = Date.now(); w = D.offsetWidth || 300;
+  }, { passive: true });
+  addEventListener('touchmove', e => {
+    if (sx == null) return; const t = e.touches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+    if (!mode) { if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.4 && (open ? dx < 0 : dx > 0)) mode = 'drag'; else if (Math.abs(dy) > 12 || Math.abs(dx) > 10) { sx = null; return; } else return; }
+    place(open ? Math.min(0, dx) : Math.min(0, -w + dx));
+  }, { passive: true });
+  addEventListener('touchend', e => {
+    if (sx == null || mode !== 'drag') { sx = null; return; }
+    const dx = e.changedTouches[0].clientX - sx, v = dx / Math.max(1, Date.now() - st);   // px per ms
+    D.style.transition = SC.style.transition = D.style.transform = SC.style.opacity = SC.style.pointerEvents = '';
+    toggleNav(open ? !(dx < -w * 0.3 || v < -0.5) : (dx > w * 0.3 || v > 0.5)); sx = null; mode = null;
+  }, { passive: true });
+}
 function renderDrawer() {
   const d = $('#drawer'); if (!document.body.classList.contains('navOpen') && d.dataset.ready) return; d.dataset.ready = 1;
   const ago = x => Math.min(...[x.sinceUse, x.sinceWrite].filter(v => typeof v === 'number' && v >= 0), 9e9);
