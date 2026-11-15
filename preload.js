@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   appName: ipcRenderer.sendSync('app:name'),
+  chatThemeName: ipcRenderer.sendSync('app:chatThemeName'),
+  chat: (sid, n) => ipcRenderer.invoke('chat:get', sid, n),
   onTelemetry: cb => ipcRenderer.on('telemetry', (_e, s) => cb(s)),
   stamps: sid => ipcRenderer.invoke('stamps', sid),
   dockState: list => ipcRenderer.send('dock:state', list),

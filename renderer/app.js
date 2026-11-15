@@ -29,7 +29,7 @@ function doneCls(sid) {
   const el = Date.now() - f.t; if (el >= FADE_MS) { doneFade.delete(sid); return ''; }
   return ` done-out" style="--a:${f.a.toFixed(3)};animation-delay:-${el / 1000}s`;
 }
-function seen(sid) { if (sid && doneSids.delete(sid)) { saveDone(); { const t = Date.now(); doneFade.set(sid, { t, a: .5 - .5 * Math.cos(2 * Math.PI * (t % BLINK_MS) / BLINK_MS) }); /* start from where the glow is now */ } renderList(); typeof renderHistory === 'function' && renderHistory();
+function seen(sid) { window.chatTheme && window.chatTheme.seen(sid); if (sid && doneSids.delete(sid)) { saveDone(); { const t = Date.now(); doneFade.set(sid, { t, a: .5 - .5 * Math.cos(2 * Math.PI * (t % BLINK_MS) / BLINK_MS) }); /* start from where the glow is now */ } renderList(); typeof renderHistory === 'function' && renderHistory();
   setTimeout(() => { renderList(); typeof renderHistory === 'function' && renderHistory(); }, FADE_MS + 50); } }
 const terms = new Map();   // ptyId -> {term, fit, el, title, kind}
 let activeTerm = null;
@@ -45,12 +45,16 @@ function openStarMenu() {
   m = document.createElement('div'); m.id = 'starMenu'; m.innerHTML = '<button data-a="bc">Broadcast…</button><button data-a="usage">Token usage</button>'; document.body.appendChild(m);
   m.style.left = Math.min(innerWidth - 180, lastPointer.x + 6) + 'px'; m.style.top = Math.min(innerHeight - 90, lastPointer.y + 6) + 'px';
   const shut = () => { m.remove(); removeEventListener('pointerdown', away, true); }, away = e => { if (!m.contains(e.target)) shut(); };
-  m.onclick = e => { const b = e.target.closest('button'), a = b && b.dataset.a; if (!a) return; shut(); a === 'bc' ? openBroadcast() : a === 'usage' ? openUsage() : a === 'theme' ? setTermTheme(b.dataset.id) : flipSwitch(b.dataset.id, b.dataset.on === '1'); };
+  m.onclick = e => { const b = e.target.closest('button'), a = b && b.dataset.a; if (!a) return; shut(); a === 'bc' ? openBroadcast() : a === 'usage' ? openUsage() : a === 'theme' ? setTermTheme(b.dataset.id) : a === 'uitheme' ? window.chatTheme && window.chatTheme.set(b.dataset.id === 'chat') : flipSwitch(b.dataset.id, b.dataset.on === '1'); };
   addEventListener('pointerdown', away, true);
   // terminal colour theme: one row per theme, the current one ticked
   m.insertAdjacentHTML('beforeend', '<div class="smHead">Terminal theme</div>' + Object.entries(TERM_THEMES).map(([id, th]) =>
     `<button data-a="theme" data-id="${id}" class="thRow${id === termThemeId ? ' cur' : ''}" title="${esc(th.src ? 'github.com/' + th.src : 'the original Mesh colours')}"><i style="background:${th.t.magenta};border-color:${th.t.blue}"></i>${esc(th.name)}</button>`).join(''));
   m.style.top = Math.min(innerHeight - m.offsetHeight - 8, lastPointer.y + 6) + 'px';
+  // app theme (2026-11-15): Default, or the chat theme (chat-theme.js) that draws Sessions as a chat list and each session as a chat room
+  if (window.chatTheme) { m.insertAdjacentHTML('beforeend', '<div class="smHead">Theme</div>' + [['default', 'Default'], ['chat', window.chatTheme.name]].map(([id, n]) =>
+    `<button data-a="uitheme" data-id="${id}" class="thRow${(id === 'chat') === window.chatTheme.on ? ' cur' : ''}">${esc(n)}</button>`).join(''));
+    m.style.top = Math.min(innerHeight - m.offsetHeight - 8, lastPointer.y + 6) + 'px'; }
   // mode switches (switches.js, set in mesh.local.json): one row each with its state and who flipped it last
   window.api.switches.get().then(list => { if (!document.body.contains(m) || !list || !list.length) return;
     for (const w of list) { const b = document.createElement('button'); b.dataset.a = 'sw'; b.dataset.id = w.id; b.dataset.on = w.enabled ? '0' : '1'; b.className = 'swRow';
@@ -191,6 +195,7 @@ window.api.onTelemetry(s => {
   if (window.refreshMigrate) window.refreshMigrate(s.sessions);   // a refreshed session keeps its orbit (refresh-ui.js)
   viz.update(s);
   renderHeader(); renderList(); renderToday(); renderPanel(); syncPeerTerms(); syncTermTitles(); notifyTransitions(); renderRail(); renderBoard();
+  if (window.chatTheme) window.chatTheme.update();
 });
 
 // memory of each machine, as Activity Monitor's "Memory Used"; the bar turns amber/red with macOS memory pressure
@@ -337,6 +342,7 @@ function renderHeader() {
 const subsOpen = store.get('subsOpen', {});
 function renderList() {
   if (listDrag) return;                                        // don't swap the rows out from under a drag
+  if (window.chatTheme && window.chatTheme.on) return window.chatTheme.renderList();   // the chat theme draws Sessions as a chat list (chat-theme.js)
   $('#sessCount').textContent = snap.ready ? `· ${snap.sessions.length}` : '· reading…';
   // working (green) sessions on top, then everything by most recent activity; a group sits where its liveliest
   // member would, with its members under a header (collapsible, like its portal on the mesh)
@@ -1165,6 +1171,7 @@ function renderTabs() {
     el.addEventListener('pointerdown', e => tabDragStart(e, el)); }
   $('#tabNew').onclick = openNew;
   for (const [, t] of terms) { t.el.querySelector('.ttl').textContent = t.title; t.el.querySelector('.hdot').className = 'hdot h-' + (t.health || 'idle'); }
+  if (window.chatTheme) window.chatTheme.update();
 }
 
 // ---- reorder the terminal tabs by click-hold-dragging (2026-11-01); the order is kept per session ----

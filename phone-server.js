@@ -100,6 +100,11 @@ function createPhoneServer(ctx) {
     if (p === '/api/usage/session' && req.method === 'POST' && ctx.usage) { const b = await body(req); return json(res, 200, await ctx.usage.session(b.list || [])); }
     if (p === '/api/usage/manual' && req.method === 'POST' && ctx.usage) { const b = await body(req); await ctx.usage.setManual(b.pct); return json(res, 200, { ok: true }); }
     if (p === '/api/card/ask' && req.method === 'POST') { const b = await body(req); return json(res, 200, ctx.cards ? { ok: true, r: await ctx.cards.ask(String(b.sid || '')) } : { ok: false }); }
+    if (p === '/api/chat') {                                            // a session's last messages (the chat theme, transcript-chat.js)
+      const sid = u.searchParams.get('sid') || '', n = +u.searchParams.get('n') || 150;
+      if (remote(sid)) return json(res, 200, await peer.forward('GET', '/api/chat', undefined, { sid, n: String(n) }).catch(() => null));
+      return json(res, 200, ctx.chat ? await ctx.chat(sid, n) : null);
+    }
     if (p === '/api/stamps') {                                          // when each prompt / reply was made
       const sid = u.searchParams.get('sid') || '';
       if (remote(sid)) return json(res, 200, await peer.forward('GET', '/api/stamps', undefined, { sid }).catch(() => []));

@@ -121,7 +121,7 @@ The rest of this page is the detailed manual.
 The app's name lives in one setting, used everywhere it appears (window title, menus, the app bundle, the phone page, the iPhone app, installers, logs). The default is **Mesh for Claude Code**.
 
 - Quick: `MESH_NAME="SpongeBob Mesh" npm start`
-- Permanent: copy `mesh.local.example.json` to `mesh.local.json` (gitignored) and set `name`, `appId`, `dataDir`, `signId`, `tmuxSession`, `serverHosts`. `bash install.sh` then builds and installs `/Applications/SpongeBob Mesh.app`.
+- Permanent: copy `mesh.local.example.json` to `mesh.local.json` (gitignored) and set `name`, `appId`, `dataDir`, `signId`, `tmuxSession`, `serverHosts`, `chatThemeName` (the chat theme's label). `bash install.sh` then builds and installs `/Applications/SpongeBob Mesh.app`.
 - iPhone app: put `MESH_NAME`, `MESH_BUNDLE_ID` and `DEVELOPMENT_TEAM` in `ios/Local.xcconfig` (gitignored).
 
 Machine- or team-specific add-ons can go in `local/` (gitignored); `local/main.js` is loaded if present.
@@ -145,6 +145,7 @@ Machine- or team-specific add-ons can go in `local/` (gitignored); `local/main.j
 | **Code map** | **Code map** in a session's menu opens an interactive knowledge graph of that session's project: every file, function and module, how they call and import each other, and the main areas (communities), with search and click-through. It is built by [Graphify](https://github.com/Graphify-Labs/graphify) (Apache-2.0): it parses the code locally with tree-sitter (vendored, minified and build files skipped), then groups it into areas and names them with whatever model it finds, such as the Claude Code CLI (only area and symbol names are sent). Usually under a minute. Install it once with `uv tool install graphifyy`. The map is saved in `~/.mesh/codemap/<project>/` (the project folder isn't touched) and rebuilt when the project has newer commits; a project that keeps its own Graphify graph (`graphify install --project`) is shown from there. The window has **Rebuild**, **Report** (key concepts and suggested questions), **Open in browser** and **Show in Finder**. A session on the other Mac is mapped there. |
 | **Rename / agents** | Rename any session: running ones get `/rename`, others get a `custom-title` record. **Convert to agent** runs `claude --bg --resume <id>`. The **Agents** list comes from `claude agents --json`, with attach, logs and stop. |
 | **Terminals** | xterm.js terminals with tabs, Split/Grid views and a resizable dock. ⌘V pastes Finder files as escaped paths and screenshots as saved PNG paths; Finder drag-drop also works. Notes-style editing keys: ⌘Z undo, ⌘←/→ line start/end, ⌘⇧←/→ select to line start/end (then ⌫ deletes it, typing replaces it, ⌘C copies it), ⌘⌫ delete to line start, ⌥←/→ and ⌥⌫ by word. Text colour themes (Dracula by default, Catppuccin Mocha, Tokyo Night, Gruvbox Dark, Nord, Mesh classic) are picked from the mother star's menu; the terminal itself is see-through, so it always has the Mesh background. The font is Apple's SF Mono, loaded from `/System/Library/Fonts` (Menlo if it's missing). |
+| **Chat theme** | Optional. Pick **Theme → Chat** in the mother star's menu (kept per machine; **Default** brings the usual look back unchanged). The Sessions panel becomes a messenger-style chat list (avatar in the session's colour, latest line, time, unread badge, a typing indicator while it works, All / Unread / Working filters and search) and each session's terminal panel a chat room: your prompts on the right, replies on the left, tool calls as one grey line each. The input bar sends through the same path as the Control box; the room header's terminal button switches that session back to the real terminal. Messages come from the end of the transcript; Hermes sessions show their activity log. The label can be changed with `chatThemeName` in mesh.local.json. |
 | **Pixel mode** | ⌘P switches to a lightweight retro renderer: low-res, 30 fps, same features. |
 | **Notifications** | Optional macOS notifications when a session finishes, errors or waits for input. |
 
@@ -194,6 +195,7 @@ hermes-sessions.js  Hermes Agent sessions in tmux panes: pane ↔ Hermes session
 session-refresh.js  Session refresh: handoff → fresh session → verification → swap, nightly, context cap, idle park, on demand
 lineage.js          Session lineage: one id for every generation of a refreshed session (token board rows, handoff stamp)
 preload.js     window.api bridge (contextIsolation)
+transcript-chat.js  A session's last messages from its transcript tail, for the chat theme
 switches.js    Mode switches: ON/OFF JSON flags another tool reads, flipped from either Mac or the phone (confirmed first)
 pane-agents.js Watched agents: script loops in tmux windows shown in the Sessions list, view only
 model-fallback.js Model fallback: Opus outage → Sonnet per session, back after 10 min of Opus working
@@ -210,6 +212,7 @@ renderer/
   organism.js  Session "living universe" bubbles (nebula, fibres, sparks, heart-knot, glass rim)
   pixel.js     Pixel-mode renderer
   commands.js  Slash-command menu, quick chips, "/" autocomplete
+  chat-theme.js / chat-theme.css  Optional chat theme: Sessions as a chat list, each session as a chat room
   history.js   All-sessions list, resume, rename, convert-to-agent, agents list
   style.css    Glass UI skin + pixel skin
 build/         App icon (mkicon.js generates icon.icns)

@@ -16,5 +16,6 @@
       "busyWithin": 120,
       "operator": true
     }
-  ]
+  ],
+  "chatThemeName": "Chat"
 }

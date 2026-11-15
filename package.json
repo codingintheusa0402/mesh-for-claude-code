@@ -68,6 +68,7 @@
       "collector.js",
       "core.js",
       "transcript-stamps.js",
+      "transcript-chat.js",
       "mcp-activity.js",
       "project-folders.js",
       "folder-mirror.js",

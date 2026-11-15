@@ -45,6 +45,7 @@ const MESH = require('./mesh-name');
 app.setName(APP_NAME);
 app.setPath('userData', process.env.MESH_USERDATA || path.join(app.getPath('appData'), MESH.dataDir));
 ipcMain.on('app:name', e => { e.returnValue = APP_NAME; });
+ipcMain.on('app:chatThemeName', e => { e.returnValue = String(MESH.chatThemeName || 'Chat'); });   // the chat theme's label (renderer/chat-theme.js), from mesh.local.json
 const collector = new Collector();
 // Hermes Agent sessions (hermes-sessions.js): they live in tmux panes like Claude's and show up as full sessions
 const hermes = require('./hermes-sessions')({ userData: app.getPath('userData') });
@@ -1121,6 +1122,7 @@ function initPhone() {
     codemap: { status: sid => cmCall(sid, 'status'), html: sid => cmCall(sid, 'html'), op: (sid, op) => ['generate', 'cancel'].includes(op) ? cmCall(sid, op) : { ok: false } },
     details: sid => sessionDetails(sid),
     stamps: sid => stampsFor(core.findTranscript(sid)),
+    chat: (sid, n) => require('./transcript-chat').chatFor(core.findTranscript(sid), n),
     usage: usageBoard,
     folders: () => { const o = {}; for (const [sid, f] of Object.entries(localFolders())) { const r = folderMirror.relOf(f.path); if (r) o[sid] = r; } return o; },
     folderHere: rel => folderMirror.here(rel),
@@ -1152,6 +1154,10 @@ ipcMain.handle('phone:status', () => phone.status());
 // when each prompt / reply in a session was made (renderer/term-stamps.js time column)
 const { stampsFor } = require('./transcript-stamps');
 ipcMain.handle('stamps', (_e, sid) => stampsFor(core.findTranscript(String(sid || ''))));
+// the chat theme (renderer/chat-theme.js): a session's last messages from its transcript; one on the other Mac goes there
+const { chatFor } = require('./transcript-chat');
+ipcMain.handle('chat:get', (_e, sid, n) => { sid = String(sid || ''); const s = liveSession(sid); return peerLink && ((s && s.onPeer) || (!s && peerLink.owns(sid)))
+  ? peerLink.forward('GET', '/api/chat', undefined, { sid, n: String(+n || 150) }).catch(() => null) : chatFor(core.findTranscript(sid), n); });
 ipcMain.handle('phone:set', (_e, v) => { phone.setEnabled(v); return phone.status(); });
 ipcMain.handle('phone:regen', () => { phone.regenerate(); return phone.status(); });
 ipcMain.handle('phone:qr', (_e, url) => require('qrcode').toDataURL(url, { margin: 1, width: 360, color: { dark: '#0a0826', light: '#ffffff' } }));
