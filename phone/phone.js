@@ -30,7 +30,7 @@ function renderVnc(snap) {
   el.classList.toggle('hidden', !macs.length);
 }
 function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2400); }
-function offline(msg) { const o = $('#offline'); if (msg) { o.innerHTML = msg; o.classList.remove('hidden'); } else o.classList.add('hidden'); }
+function offline(msg) { const o = $('#offline'); if (msg) { const h = `<div class="offBox">${msg}</div>`; if (o.innerHTML !== h) o.innerHTML = h; o.classList.remove('hidden'); } else o.classList.add('hidden'); }
 
 // ---------- mesh (cap pixel density at 2× to keep the phone cool) ----------
 const realDPR = window.devicePixelRatio || 1;
@@ -111,10 +111,10 @@ function resetScroll() { const go = () => { scrollTo(0, 0); document.documentEle
   go(); setTimeout(go, 120); setTimeout(go, 400); }
 
 // ---------- live data ----------
-let es = null, lastMsg = 0, offlineTold = false;
+let es = null, lastMsg = 0, offlineTold = false, connAt = Date.now();
 function connect() {
   if (!TOKEN) return offline('Not paired yet.<br>On your Mac open <b>' + APP_NAME + ' → 📱</b> and scan the QR code.');
-  es && es.close();
+  es && es.close(); connAt = Date.now();
   es = new EventSource('/api/events?t=' + encodeURIComponent(TOKEN));
   es.addEventListener('alert', ev => { try { const a = JSON.parse(ev.data); toast(`${a.title}: ${a.body}`); } catch { } });
   es.addEventListener('telemetry', ev => {
@@ -125,18 +125,24 @@ function connect() {
   es.onerror = () => { $('#conn').classList.remove('on'); };
 }
 const bootAt = Date.now(); let denied = false;
+// opening the app (or coming back to it): until fresh data arrives, say so instead of showing an empty or stale screen
+function connectingTick() {
+  if (denied || document.hidden || !TOKEN) return;
+  if (lastMsg < connAt && Date.now() - connAt > 400 && Date.now() - connAt <= 8000) { $('#conn').classList.remove('on'); offline(`<div class="spin"></div>Connecting to ${HOSTN()}…`); }
+}
+setInterval(connectingTick, 250);
 setInterval(() => {
   if (denied) return;
-  const seen = lastMsg || bootAt, away = document.hidden; if (away) return;
+  const seen = Math.max(lastMsg, connAt) || bootAt, away = document.hidden; if (away) return;
   if (Date.now() - seen > 8000) {
     $('#conn').classList.remove('on');
-    offline(`Can’t reach ${HOSTN()}.<br><span style="font-size:13px">${onServer() ? 'Is the server on and on Tailscale?' : `Is ${APP_NAME} open and awake, with phone access on?`} Away from home, turn on Tailscale on this phone.</span>`);
+    offline(`<b class="offT">Can’t reach ${HOSTN()}.</b><span style="font-size:13px">${onServer() ? 'Is the server on and on Tailscale?' : `Is ${APP_NAME} open and awake, with phone access on?`} Away from home, turn on Tailscale on this phone.</span>`);
     if (!offlineTold && Date.now() - seen > 20000) { offlineTold = true; native('offline'); }
     if (!es || es.readyState === 2) connect();
   }
 }, 3000);
 // nothing stays connected while the page is out of sight, and it's live again the moment you come back
-document.addEventListener('visibilitychange', () => { if (document.hidden) { if (es) { es.close(); es = null; } } else if (!denied) { lastMsg = Date.now(); connect(); viz.wake(); } });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { if (es) { es.close(); es = null; } } else if (!denied) { connect(); viz.wake(); } });
 connect();     // (live data doesn't wait for the history below, which can take a while)
 fetch('/api/history?t=' + encodeURIComponent(TOKEN)).then(r => { if (r.status === 401) { denied = true; if (es) es.close(); offline('This pairing key is no longer valid.<br>Scan the QR code in <b>' + APP_NAME + ' → 📱</b> again.'); } }).catch(() => { });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && (!es || es.readyState !== 1)) connect(); });
@@ -434,11 +440,11 @@ function openTerminal(id, sid) {
 // Grid: every live session as a card — health, speed sparkline, spend, context, latest activity — no
 //   terminal streams (iOS allows ~6 connections per host), so it stays light. Tap a card → Split on it,
 //   press and hold → what the session does.
-let view = 'mesh', splitSid = localStorage.getItem('mesh.splitSid') || null, paneKind = null;
+let view = 'split', splitSid = localStorage.getItem('mesh.splitSid') || null, paneKind = null;
 function setView(v) {
   view = v; document.body.dataset.view = v; localStorage.setItem('mesh.view', v);
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === v));
-  viz.compact = v === 'split'; viz.offscreen = v === 'grid';
+  viz.compact = v === 'split'; viz.offscreen = true;          // the phone shows no mesh animation (2026-11-15): never draw it
   viz.selected = v === 'split' ? splitSid : null;
   if (v !== 'split' && paneKind === 'term' && sheetKind !== 'term') { tes && tes.close(); paneKind = null; }
   if (v === 'split') renderSplit(true);
@@ -457,9 +463,10 @@ function splitSession() {
   return s;
 }
 function renderSplit(force) {
-  const S = [...snap.sessions].sort((a, b) => (b.owner ? 1 : 0) - (a.owner ? 1 : 0) || (b.health === 'working') - (a.health === 'working'));
+  const ago = x => Math.min(...[x.sinceUse, x.sinceWrite].filter(v => typeof v === 'number' && v >= 0), 9e9);   // busy first, then most recently used
+  const S = [...snap.sessions].sort((a, b) => ((b.health === 'working' || b.health === 'waiting') - (a.health === 'working' || a.health === 'waiting')) || ago(a) - ago(b));
   const s = splitSession();
-  $('#switch').innerHTML = S.map(x => `<button class="chip ${s && x.sid === s.sid ? 'on' : ''}" data-sid="${x.sid}"><span class="dot ${x.health}"></span>${esc(x.name.length > 22 ? x.name.slice(0, 21) + '…' : x.name)}${x.health === 'working' ? ` <small>${Math.round(x.tps)}</small>` : ''}</button>`).join('')
+  $('#switch').innerHTML = S.map(x => `<button class="chip ${s && x.sid === s.sid ? 'on' : ''}" data-sid="${x.sid}"><span class="dot ${x.health}"></span><span class="cn">${esc(x.name)}</span>${x.health === 'working' ? `<small>${Math.round(x.tps)}</small>` : ''}</button>`).join('')
     || `<span class="meta" style="padding:6px 4px">${snap.ready ? 'No Claude Code sessions running.' : 'Connecting…'}</span>`;
   $('#switch').querySelectorAll('[data-sid]').forEach(b => b.onclick = () => pickSplit(b.dataset.sid));
   if (!s) { $('#pane').innerHTML = ''; paneKind = null; return; }
@@ -472,11 +479,11 @@ function renderSplit(force) {
     return;
   }
   paneKind = key;
-  $('#pane').innerHTML = `<div id="paneHead"><div class="ph">${head}</div>${kind === 'term' ? '<button id="pFull" title="Full screen">⤢</button>' : ''}<button id="pInfo" title="Details">ⓘ</button></div>` +
+  $('#pane').innerHTML = `<div id="paneHead"><button id="navT" title="Session list">☰</button><div class="ph">${head}</div>${kind === 'term' ? '<button id="pFull" title="Full screen">⤢</button>' : ''}<button id="pInfo" title="Details">ⓘ</button></div>` +
     (kind === 'term' ? `<div id="pxt"></div>${termControls()}`
       : `<div id="pScroll"><div id="pStats">${paneStats(s)}</div>${(s.tty && s.kind !== 'bg') ? `<div class="tin"><textarea id="pText" rows="2" placeholder="Message ${esc(s.name)}…"></textarea><button id="pAtt" aria-label="Attach a photo or file">📎</button><button class="primary" id="pSend">Send</button></div>
           <div class="chips"><button id="pInt">Interrupt</button>${QUICK.slice(0, 5).map(c => `<button data-c="${c}">${c}</button>`).join('')}</div>` : '<div class="meta">Background session — view only.</div>'}<div id="pLog">${paneLog(s)}</div></div>`);
-  $('#pInfo').onclick = () => openSession(s.sid);
+  $('#pInfo').onclick = () => openSession(s.sid); $('#navT').onclick = toggleNav;
   if (kind === 'term') {
     $('#pFull').onclick = () => openTerminal(s.owner, s.sid);
     mountTerm($('#pxt'), s.owner, $('#pane'), s.sid);
@@ -490,7 +497,7 @@ function renderSplit(force) {
       $('#pane').querySelectorAll('[data-c]').forEach(b => b.onclick = () => runCmd(s, b.dataset.c));
     }
   }
-  const on = $('#switch .chip.on'); if (on) on.scrollIntoView({ inline: 'center', block: 'nearest' });
+  const on = $('#switch .chip.on'); if (on) on.scrollIntoView({ block: 'nearest' });
 }
 const paneStats = s => { const pct = s.ctxMax ? s.ctx / s.ctxMax * 100 : 0;
   return `<div class="meta"><span style="color:${FAMILY_COLOR[s.family] || '#9fb4d8'}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${s.kind === 'bg' ? 'background' : TERMN()}</span><span>context ${Math.round(pct)}%</span><span>${fmtTok(s.totalTok)} session</span></div>`; };
@@ -579,7 +586,10 @@ if (window.visualViewport) {
 // the bar above the keyboard: "Done" puts the keyboard away (pointerdown so the field doesn't lose focus to the tap first)
 $('#kbDone').addEventListener('pointerdown', e => { e.preventDefault(); const a = document.activeElement; if (a && a.blur) a.blur(); });
 addEventListener('orientationchange', () => setTimeout(() => { viz.resize(); if (view === 'split' && paneKind && paneKind.startsWith('term')) renderSplit(true); }, 350));
-{ const v0 = localStorage.getItem('mesh.view'); if (v0 === 'split' || v0 === 'grid') { setTab(v0, true); setView(v0); } }
+{ const v0 = localStorage.getItem('mesh.view'); const v1 = v0 === 'grid' ? 'grid' : 'split'; setTab(v1, true); setView(v1); }
+// the session list folds away (☰ in the pane's header); remembered on this phone
+if (localStorage.getItem('mesh.nav') === 'closed') document.body.classList.add('navClosed');
+function toggleNav() { const c = document.body.classList.toggle('navClosed'); localStorage.setItem('mesh.nav', c ? 'closed' : 'open'); if (paneKind && paneKind.startsWith('term')) setTimeout(() => renderSplit(true), 60); }
 
 // ---------- press-and-hold a session: what it does, skills, commands, tools, CLAUDE.md ----------
 async function openDetails(sid) {

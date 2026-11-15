@@ -434,9 +434,12 @@ function usageRing(s) {
 }
 // Simple-mode stand-in for the mesh: one static card per session; repainted only when its text changes
 let lastBoard = '';
+// Grid order (2026-11-15): busy first, then the most recently used; sessions unused for a while go to the back
+const lastUsedAgo = s => Math.min(...[s.sinceUse, s.sinceWrite].filter(x => typeof x === 'number' && x >= 0), 9e9);
+const boardOrder = ss => [...ss].sort((a, b) => ((b.health === 'working' || b.health === 'waiting') - (a.health === 'working' || a.health === 'waiting')) || lastUsedAgo(a) - lastUsedAgo(b));
 function renderBoard() {
   if (!isSimple()) return;
-  const html = (window.cleanupBar ? window.cleanupBar() : '') + (snap.sessions.map(s => `<div class="bcard b-${s.health}${s.sid === selected ? ' sel' : ''}" data-sid="${s.sid}">
+  const html = (window.cleanupBar ? window.cleanupBar() : '') + (boardOrder(snap.sessions).map(s => `<div class="bcard b-${s.health}${s.sid === selected ? ' sel' : ''}" data-sid="${s.sid}">
     <div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${peerTag(s)}${usageRing(s)}</div>
     <div class="m"><span style="color:${FAMILY_COLOR[s.family]}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${fmtTok(s.todayTok)}</span><span>${s.health === 'working' ? 'working' : s.health}</span></div>
   </div>`).join('') || '<div class="bempty">No live sessions.</div>');
