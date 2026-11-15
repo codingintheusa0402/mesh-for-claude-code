@@ -200,7 +200,7 @@ window.api.onTelemetry(s => {
 
 // memory of each machine, as Activity Monitor's "Memory Used"; the bar turns amber/red with macOS memory pressure
 // "MacBook" / "MacMini" (peer.json labels) → how macOS names them
-const macName = l => ({ MacMini: 'Mac mini', MacBook: 'MacBook' })[l] || l || 'other Mac';
+const macName = l => ({ MacMini: 'Mac mini', MacBook: 'MacBook' })[l] || (/mini/i.test(l || '') ? 'Mac mini' : /book/i.test(l || '') ? 'MacBook' : l) || 'other Mac';
 // header button: Screen Sharing to the other Mac (shown while a peer is paired)
 function renderVncBtn(snap) {
   const b = $('#vncBtn'), p = snap.peer; b.hidden = !(p && p.host);
@@ -1164,11 +1164,20 @@ function activate(id) {
 }
 function markFocus() { for (const [k, t] of terms) t.el.classList.toggle('focus', k === activeTerm); }
 
+// the tab says which Mac the session runs on and what it is, the same way the Sessions list does (2026-11-16: it used to
+// say "tmux" for a session in a tmux pane here, which is only how it is hosted, and the raw peer label for the other Mac)
+function termTag(id, t) {
+  if (!t.local && !t.peer) return '';
+  const s = ((snap && snap.sessions) || []).find(x => x.owner === id || x.pane === id);
+  const mac = t.peer && !t.local ? macName(snap.peer && snap.peer.label) : macName((snap.peer && snap.peer.selfLabel) || snap.machine);
+  const what = !s ? 'terminal' : s.watchOnly ? 'script' : s.kind === 'hermes' ? 'Hermes' : (s.spawnedBy || s.headless || s.kind === 'bg') ? 'helper' : 'command session';
+  return `<span class="tag${t.peer && !t.local ? ' peer' : ''}" title="Runs on ${esc(mac)}${t.local ? ' (in tmux)' : ''}">${esc(mac)} · ${what}</span>`;
+}
 function renderTabs() {
   if (tabDrag) { tabDrag.dirty = true; return; }   // never rebuild the row under a tab being dragged
   applyTabOrder();
   $('#tabs').innerHTML = [...terms].filter(([, t]) => !t.tabHidden).map(([id, t]) => `<div class="tab ${id === activeTerm ? 'on' : ''}" data-id="${id}">
-    <span class="hdot h-${t.health || (t.exited ? 'error' : 'idle')}"></span><span class="t">${esc(t.title)}</span>${t.local ? '<span class="tag">tmux</span>' : t.peer && snap.peer ? `<span class="tag peer">${esc(snap.peer.label)}</span>` : ''}<span class="x" data-x="${id}">×</span></div>`).join('') +
+    <span class="hdot h-${t.health || (t.exited ? 'error' : 'idle')}"></span><span class="t">${esc(t.title)}</span>${termTag(id, t)}<span class="x" data-x="${id}">×</span></div>`).join('') +
     `<div class="tab" id="tabNew" title="New session (⌘T)">＋</div>`;
   for (const el of document.querySelectorAll('.tab[data-id]')) { el.onclick = e => { if (tabDrag || el._dragged) { el._dragged = false; return; } if (e.target.dataset.x) closeTerm(e.target.dataset.x); else activate(el.dataset.id); };
     el.addEventListener('pointerdown', e => tabDragStart(e, el)); }
