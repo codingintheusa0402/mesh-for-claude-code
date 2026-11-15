@@ -699,3 +699,15 @@ body.simple .bcard.b-waiting { animation: bBlinkWarn 1.6s steps(1, end) infinite
 #ivMenu .swsBtns { display: flex; justify-content: flex-end; }
 #ivMenu .sws .swsSave { color: var(--text); background: var(--panel2); padding: 5px 12px; font-size: 12px; }
 .hpill.swcd.paused { color: var(--warn); min-width: 0; }
+
+/* right-click on a memory pill (app.js openMemMenu) */
+#memMenu { position: fixed; z-index: 60; min-width: 250px; max-width: calc(100vw - 16px); padding: 4px 4px 8px; border-radius: 10px; background: #111; border: 1px solid var(--line2); box-shadow: 0 10px 30px rgba(0,0,0,.5); font-size: 12.5px; }
+#memMenu .smHead { padding: 8px 10px 3px; font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--dim, #999); }
+#memMenu .mmRow { display: flex; justify-content: space-between; gap: 16px; padding: 2px 10px; color: var(--text); white-space: nowrap; }
+#memMenu .mmRow > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+#memMenu .mmRow > span:last-child { font-variant-numeric: tabular-nums; color: var(--text); }
+#memMenu .mmRow.dim { color: var(--dim, #999); white-space: normal; }
+#memMenu .mmBar { display: block; height: 5px; margin: 3px 10px 4px; border-radius: 3px; background: #2a2a2a; overflow: hidden; }
+#memMenu .mmBar b { display: block; height: 100%; background: #7fd18b; }
+#memMenu .mmBar.warn b { background: #e6c140; } #memMenu .mmBar.crit b { background: #e5534b; }
+#memMenu .mm-high { color: #e6c140; } #memMenu .mm-critical { color: #e5534b; }

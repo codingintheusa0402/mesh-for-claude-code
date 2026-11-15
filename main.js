@@ -190,6 +190,13 @@ ipcMain.handle('pty:spawn', async (_e, opts) => {
       let running = ((lastSnap && lastSnap.sessions) || []).some(s => s.sid === rsid && !s.onPeer);
       if (!running) try { running = execFileSync('/bin/ps', ['-axww', '-o', 'command='], { timeout: 3000 }).toString().split('\n').some(l => /(^|\/)claude\s/.test(l) && new RegExp('--(resume|session-id)[ =]' + rsid + '\\b').test(l)); } catch { }
       if (running) return { id: null, note: 'That session is already running on this Mac: not opening a second copy' };
+      // one lineage, one copy (2026-11-15): not on the other Mac either, and not an older generation of a session that runs
+      const all = ((peerLink && lastSnap ? peerLink.merge(lastSnap) : lastSnap) || { sessions: [] }).sessions || [];
+      const there = all.find(s => s.onPeer && (s.sid === rsid || s.sid === 'peer:' + rsid));
+      if (there) return { id: null, note: `That session is already running on ${(peerLink && peerLink.label && peerLink.label()) || 'the other Mac'}: not opening a second copy` };
+      let lid = null; try { lid = (require('./lineage').index(require('./session-refresh').paths.handoffs).get(rsid) || {}).lid; } catch { }
+      const newer = lid && all.find(s => s.lineage === lid && s.sid !== rsid && s.sid !== 'peer:' + rsid);
+      if (newer) return { id: null, note: `"${newer.name}" (a newer generation of this session) is already running${newer.onPeer ? ' on the other Mac' : ''}: open that one instead` };
     }
     if (away) {
       const other = (peerLink && peerLink.label && peerLink.label()) || 'the other Mac';
@@ -1193,12 +1200,34 @@ function readMem() {
     const ps = +(out.match(/page size of (\d+)/) || [, 16384])[1];
     const pg = k => +((out.match(new RegExp(k + ':\\s+(\\d+)')) || [, 0])[1]);
     const used = (pg('Anonymous pages') - pg('Pages purgeable') + pg('Pages wired down') + pg('Pages occupied by compressor')) * ps;
-    require('child_process').execFile('/usr/sbin/sysctl', ['-n', 'kern.memorystatus_vm_pressure_level'], (e2, lv) => {
-      hostMem = { used, total: os.totalmem(), pressure: +String(lv || '1').trim() || 1 };
+    // the breakdown Activity Monitor shows (right-click on a memory pill), the swap and the startup disk's free space
+    const parts = { app: (pg('Anonymous pages') - pg('Pages purgeable')) * ps, wired: pg('Pages wired down') * ps, compressed: pg('Pages occupied by compressor') * ps,
+      cached: (pg('File-backed pages') + pg('Pages purgeable')) * ps, free: pg('Pages free') * ps };
+    let disk = null; try { const f = fs.statfsSync(fs.existsSync('/System/Volumes/Data') ? '/System/Volumes/Data' : '/'); disk = { free: f.bavail * f.bsize, total: f.blocks * f.bsize }; } catch { }
+    require('child_process').execFile('/usr/sbin/sysctl', ['-n', 'kern.memorystatus_vm_pressure_level', 'vm.swapusage'], (e2, lv) => {
+      const [lvl, sw] = String(lv || '1').split('\n'), bytes = v => parseFloat(v) * (/G$/.test(v) ? 2 ** 30 : 2 ** 20);
+      const m = /total = ([\d.]+[MG]).*used = ([\d.]+[MG])/.exec(sw || '');
+      hostMem = { used, total: os.totalmem(), pressure: +String(lvl).trim() || 1, parts, disk, top: memTop,
+        swap: m ? { total: bytes(m[1]), used: bytes(m[2]) } : null };
     });
   });
 }
 readMem(); setInterval(readMem, 5000);
+// the apps using the most memory (summed over their helper processes), every 30 s
+let memTop = [];
+function readTop() {
+  if (process.platform !== 'darwin') return;
+  require('child_process').execFile('/bin/ps', ['-axo', 'rss=,comm='], { maxBuffer: 4 << 20 }, (err, out) => {
+    if (err) return; const by = {}, n = {};
+    for (const l of String(out).split('\n')) {
+      const m = /^\s*(\d+)\s+(.+)$/.exec(l); if (!m) continue;
+      const app = /\/([^/]+)\.app\//.exec(m[2]); let name = app ? app[1] : path.basename(m[2]);
+      name = name.replace(/ Helper.*$| Web Content$| Networking$/, ''); by[name] = (by[name] || 0) + (+m[1]) * 1024; n[name] = (n[name] || 0) + 1;
+    }
+    memTop = Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, bytes]) => ({ name: name === 'claude' ? `Claude Code (${n[name]} sessions)` : name, bytes }));
+  });
+}
+readTop(); setInterval(readTop, 30000);
 
 // ---------------- telemetry loop ----------------
 async function loop() {
@@ -1229,6 +1258,7 @@ async function loop() {
       const shown = peerLink ? peerLink.merge(snap) : snap;
       if (shown !== snap) { paintSessions(shown.sessions); groupSessions(shown); }   // includes the peer's terminals (peer:… ids, onPeer)
       win.webContents.send('telemetry', shown);
+      if (Date.now() - dupAt > 60e3) { dupAt = Date.now(); watchDuplicates(shown); }
       lastSnap = snap; watchEngines(snap); if (phone) phone.broadcast(snap); recordSessions(snap);
       const sig = snap.sessions.map(s => s.sid + s.health).join();
       if (sig !== loopSig || snap.sessions.some(s => s.health === 'working')) { loopSig = sig; loopBusyAt = Date.now(); }
@@ -1239,6 +1269,22 @@ async function loop() {
 
 // ---------------- session refresh (session-refresh.js) ----------------
 let refresher = null;
+// duplicate watch (2026-11-15): one conversation or one lineage running twice (either Mac) → one alert per 6 hours
+let dupAt = 0; const dupSent = {};
+function watchDuplicates(snap) {
+  const ss = ((snap && snap.sessions) || []).filter(s => s.kind !== 'hermes' && s.kind !== 'agent' && !s.watchOnly && !s.headless && !s.spawnedBy);
+  const key = s => String(s.sid || '').replace(/^peer:/, ''), groups = {};
+  for (const s of ss) { groups['sid:' + key(s)] = (groups['sid:' + key(s)] || []).concat(s); if (s.lineage) groups['lin:' + s.lineage] = (groups['lin:' + s.lineage] || []).concat(s); }
+  for (const [k, g] of Object.entries(groups)) {
+    if (g.length < 2) continue;
+    const sids = new Set(g.map(key));
+    if (k.startsWith('lin:') && sids.size === 2 && g.some(a => g.some(b => key(a) !== key(b) && a.prevSid === key(b)))) continue;   // a refresh hand-over in progress
+    if (Date.now() - (dupSent[k] || 0) < 6 * 3600e3) continue; dupSent[k] = Date.now();
+    const where = g.map(s => `${s.onPeer ? 'other Mac' : 'this Mac'} ${key(s).slice(0, 8)}`).join(', ');
+    console.log('[duplicate]', k, where);
+    alertOwner(`Duplicate session: ${g[0].name} runs ${g.length} times`, `${k.startsWith('sid:') ? 'Same conversation' : 'Same lineage'} running more than once (${where}). Keep the one with the current work, have the other write a handoff, then close it when idle.`);
+  }
+}
 // model fallback (model-fallback.js): Opus outage → Sonnet, and back once Opus works for 10 minutes
 let fallback = null, fallbackAt = 0;
 function initFallback() {

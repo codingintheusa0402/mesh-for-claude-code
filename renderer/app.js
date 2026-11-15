@@ -266,11 +266,35 @@ window.api.team.onEdit(async () => {
   const save = async () => { applyTeam(await window.api.team.set($('#teamName').value)); closeModal(); };
   $('#teamOk').onclick = save; $('#teamName').onkeydown = e => { if (e.key === 'Enter') save(); }; $('#teamName').focus();
 });
+const memData = {};                     // label -> last memory sample, for the right-click details
 function memPill(label, m) {
   if (!m || !m.total) return '';
+  memData[label] = m;
   const gb = b => (b / 2 ** 30).toFixed(1), pct = Math.min(100, Math.round(m.used / m.total * 100));
   const lvl = m.pressure >= 4 ? 'crit' : m.pressure >= 2 ? 'warn' : 'ok';
-  return `<span class="hpill mem ${lvl}" title="${esc(label)}: ${gb(m.used)} of ${gb(m.total)} GB memory used${lvl === 'ok' ? '' : ' · memory pressure ' + (lvl === 'crit' ? 'critical' : 'high')}">${esc(label)} <i>${gb(m.used)}/${Math.round(m.total / 2 ** 30)} GB</i><span class="membar"><span style="width:${pct}%"></span></span></span>`;
+  return `<span class="hpill mem ${lvl}" data-mem="${esc(label)}" title="${esc(label)}: ${gb(m.used)} of ${gb(m.total)} GB memory used${lvl === 'ok' ? '' : ' · memory pressure ' + (lvl === 'crit' ? 'critical' : 'high')}">${esc(label)} <i>${gb(m.used)}/${Math.round(m.total / 2 ** 30)} GB</i><span class="membar"><span style="width:${pct}%"></span></span></span>`;
+}
+// right-click a memory pill: the memory breakdown (as Activity Monitor shows it), the biggest apps, swap and the SSD's free space
+document.addEventListener('contextmenu', e => { const p = e.target.closest('.hpill.mem[data-mem]'); if (!p) return; e.preventDefault(); openMemMenu(p, p.dataset.mem); });
+function openMemMenu(anchor, label) {
+  const m = memData[label]; if (!m) return; let d = $('#memMenu'); if (d) d.remove();
+  const gb = b => b >= 2 ** 30 ? (b / 2 ** 30).toFixed(1) + ' GB' : Math.round(b / 2 ** 20) + ' MB';
+  const bar = (part, whole, cls = '') => `<span class="mmBar ${cls}"><b style="width:${Math.min(100, Math.round(part / whole * 100))}%"></b></span>`;
+  const row = (k, v, extra = '') => `<div class="mmRow"><span>${esc(k)}</span><span>${v}</span>${extra}</div>`;
+  const lvl = m.pressure >= 4 ? 'critical' : m.pressure >= 2 ? 'high' : 'normal', P = m.parts;
+  let h = `<div class="smHead">${esc(label)} · memory</div>`
+    + row('Used', `${gb(m.used)} of ${gb(m.total)} (${Math.round(m.used / m.total * 100)}%)`) + bar(m.used, m.total, m.pressure >= 4 ? 'crit' : m.pressure >= 2 ? 'warn' : '')
+    + row('Memory pressure', `<span class="mm-${lvl}">${lvl}</span>`);
+  if (P) h += row('App memory', gb(P.app)) + row('Wired', gb(P.wired)) + row('Compressed', gb(P.compressed)) + row('Cached files', gb(P.cached)) + row('Free', gb(P.free));
+  if (m.swap) h += row('Swap used', `${gb(m.swap.used)} of ${gb(m.swap.total)}`);
+  if (m.top && m.top.length) h += `<div class="smHead">Biggest apps</div>` + m.top.slice(0, 6).map(t => row(t.name, gb(t.bytes))).join('');
+  if (m.disk) h += `<div class="smHead">SSD</div>` + row('Free', `${gb(m.disk.free)} of ${gb(m.disk.total)}`) + bar(m.disk.total - m.disk.free, m.disk.total, m.disk.free < 10 * 2 ** 30 ? 'crit' : m.disk.free < 25 * 2 ** 30 ? 'warn' : '');
+  if (!P && !m.disk) h += `<div class="mmRow dim">Details show once ${esc(label)} runs the same Mesh build.</div>`;
+  d = document.createElement('div'); d.id = 'memMenu'; d.innerHTML = h; document.body.appendChild(d);
+  const r = anchor.getBoundingClientRect(); d.style.left = Math.max(8, Math.min(innerWidth - d.offsetWidth - 8, r.left)) + 'px'; d.style.top = (r.bottom + 6) + 'px';
+  const shut = () => { d.remove(); removeEventListener('pointerdown', away, true); removeEventListener('keydown', esc1, true); },
+    away = e => { if (!d.contains(e.target)) shut(); }, esc1 = e => { if (e.key === 'Escape') shut(); };
+  addEventListener('pointerdown', away, true); addEventListener('keydown', esc1, true);
 }
 // what's left of the plan: 5-hour session, weekly (all models) and the dollar credits (core.js refreshUsage)
 function leftPills(u) {
