@@ -389,9 +389,22 @@ function extSend(tty, text) {
   const clean = String(text).replace(/\r?\n/g, ' ');
   const pane = tmuxPaneForTty(tty);
   if (!pane) return osa(terminalTabScript(tty, [`do script ${asStr(clean)} in t`]));
+  // a long or multi-line message goes in as ONE bracketed paste (2026-11-16): typed as keys, Claude Code dropped the
+  // first ~1,100 characters of a 1,500-character relay, and line breaks were flattened
+  if (String(text).length > 300 || /\n/.test(text)) return pasteThenEnter(pane, text);
   const r = tmuxKeys(pane, '-l', clean);
   if (r.ok) setTimeout(() => tmuxKeys(pane, 'Enter'), 60);          // Enter after the text settles, like ctlSend
   return r;
+}
+function pasteThenEnter(pane, text) {
+  const buf = 'mesh-p' + process.pid + '-' + Date.now(), f = path.join(os.tmpdir(), buf + '.txt');
+  try {
+    fs.writeFileSync(f, String(text).replace(/\r\n?/g, '\n'));
+    execFileSync(TMUX, ['load-buffer', '-b', buf, f], { timeout: 5000, env: TMUX_ENV });
+    execFileSync(TMUX, ['paste-buffer', '-p', '-d', '-b', buf, '-t', pane], { timeout: 5000, env: TMUX_ENV });
+  } catch (e) { return { ok: false, err: String(e.message || e) }; } finally { try { fs.unlinkSync(f); } catch { } }
+  setTimeout(() => tmuxKeys(pane, 'Enter'), 600);                    // after the paste has landed, or it's part of it
+  return { ok: true, out: 'tmux' };
 }
 function extInterrupt(tty) {
   const pane = tmuxPaneForTty(tty);
