@@ -228,3 +228,28 @@ body.navOpen #app { transform: translateX(min(80vw, 340px)); border-radius: 28px
 #pane .tin input, #pane .tin textarea { background: none !important; border: 0 !important; box-shadow: none !important; padding: 8px 0 !important; font-size: 16px; }
 #pane .tin button { border-radius: 50% !important; min-width: 40px; height: 40px; padding: 0 !important; }
 #pane .tin button.tSend, #pane .tin #pSend { border-radius: 20px !important; padding: 0 14px !important; }
+/* 2026-11-16: icons instead of emoji; the header never overlaps; the input pill never clips its buttons */
+svg.ic { display: block; flex: none; }
+button svg.ic { pointer-events: none; }
+#sAtt svg.ic, #sRen svg.ic, #sAg svg.ic { display: inline-block; vertical-align: -3px; margin-right: 4px; }
+.log svg.ic, .gl svg.ic { display: inline-block; vertical-align: -2px; margin-right: 3px; opacity: .7; }
+.pcb svg.ic { display: inline-block; vertical-align: -1px; margin-right: 1px; }
+#drawer .ic svg.ic { margin: 0 auto; }
+/* header: ☰ left, title centred in the space the side groups leave, compact round host buttons right */
+#top { display: flex !important; align-items: center; gap: 8px; }
+#titlePill { position: static !important; transform: none !important; margin: 0 auto; flex: 0 1 auto; min-width: 0; max-width: none !important; }
+#top .spacer { display: none !important; }
+#vnc { display: flex; gap: 6px; flex: none; }
+#vnc .vbtn { width: 38px; height: 38px; padding: 0 !important; border-radius: 50% !important; display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.08); color: var(--text); }
+#vnc .vbtn .vl { display: none; }
+#vnc .vbtn.off { opacity: .4; }
+#top .conn { flex: none; }
+/* left and right groups get the same width so the title stays centred */
+#navBtn { flex: none; }
+/* input pill: the field shrinks, the buttons never do */
+#pane .tin { display: flex; gap: 6px; min-width: 0; }
+#pane .tin input, #pane .tin textarea { flex: 1 1 auto; min-width: 0; width: auto !important; }
+#pane .tin button { flex: none; width: 40px; min-width: 40px !important; height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+#pane .tin button.primary { background: var(--text); color: #000; }
+#pane .tin #pSend, #pane .tin .tGo { padding: 0 !important; border-radius: 50% !important; }

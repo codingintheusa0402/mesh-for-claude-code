@@ -21,11 +21,27 @@ const api = (p, body) => fetch(p + (p.includes('?') ? '&' : '?') + 't=' + encode
 // Screen Sharing from the phone: a vnc:// link per Mac — iOS hands it to RVNC Viewer (or another VNC app).
 // This Mac = the address the page was loaded from; the other Mac = its Tailscale address from peer.json.
 const macName = l => ({ MacMini: 'Mac mini', MacBook: 'MacBook' })[l] || l;
+// monochrome line icons (2026-11-16): no emoji anywhere in the phone UI — iOS draws emoji in colour and at its own size
+const IC = (d, w = 18) => `<svg class="ic" width="${w}" height="${w}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ICON = {
+  plus: IC('<path d="M12 5v14M5 12h14"/>'),
+  up: IC('<path d="M12 19V5M6 11l6-6 6 6"/>'),
+  monitor: IC('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>', 17),
+  laptop: IC('<rect x="4" y="5" width="16" height="10" rx="1.5"/><path d="M2 19h20"/>', 17),
+  expand: IC('<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/>', 16),
+  info: IC('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>', 18),
+  gear: IC('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>', 13),
+  pencil: IC('<path d="M4 20h4L19 9l-4-4L4 16v4z"/>', 15),
+  flag: IC('<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>', 12),
+  code: IC('<path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/>', 17),
+  spark: IC('<path d="M12 3v18M5 8c4 0 7 2 7 4s3 4 7 4M5 16c4 0 7-2 7-4s3-4 7-4"/>', 17),
+  check: IC('<path d="M5 12l5 5 9-10"/>', 15),
+};
 function renderVnc(snap) {
   const el = $('#vnc'), p = snap.peer, macs = [];
   if (/^[\w.-]+$/.test(location.hostname)) macs.push({ name: macName(p && p.selfLabel) || 'This Mac', host: location.hostname, on: true });
   if (p && p.host) macs.push({ name: macName(p.label), host: p.host, on: p.online });
-  const html = macs.map(m => `<a class="vbtn${m.on ? '' : ' off'}" href="vnc://${m.host}" title="Screen share ${esc(m.name)} in RVNC Viewer">🖥 ${esc(m.name)}</a>`).join('');
+  const html = macs.map(m => `<a class="vbtn${m.on ? '' : ' off'}" href="vnc://${m.host}" title="Screen share ${esc(m.name)} in RVNC Viewer" aria-label="Screen share ${esc(m.name)}">${/book/i.test(m.name) ? ICON.laptop : ICON.monitor}<span class="vl">${esc(m.name)}</span></a>`).join('');
   if (el.innerHTML !== html) el.innerHTML = html;
   el.classList.toggle('hidden', !macs.length);
 }
@@ -113,7 +129,7 @@ function resetScroll() { const go = () => { scrollTo(0, 0); document.documentEle
 // ---------- live data ----------
 let es = null, lastMsg = 0, offlineTold = false, connAt = Date.now();
 function connect() {
-  if (!TOKEN) return offline('Not paired yet.<br>On your Mac open <b>' + APP_NAME + ' → 📱</b> and scan the QR code.');
+  if (!TOKEN) return offline('Not paired yet.<br>On your Mac open <b>' + APP_NAME + ' → the phone button</b> and scan the QR code.');
   es && es.close(); connAt = Date.now();
   es = new EventSource('/api/events?t=' + encodeURIComponent(TOKEN));
   es.addEventListener('alert', ev => { try { const a = JSON.parse(ev.data); toast(`${a.title}: ${a.body}`); } catch { } });
@@ -144,7 +160,7 @@ setInterval(() => {
 // nothing stays connected while the page is out of sight, and it's live again the moment you come back
 document.addEventListener('visibilitychange', () => { if (document.hidden) { if (es) { es.close(); es = null; } } else if (!denied) { connect(); viz.wake(); } });
 connect();     // (live data doesn't wait for the history below, which can take a while)
-fetch('/api/history?t=' + encodeURIComponent(TOKEN)).then(r => { if (r.status === 401) { denied = true; if (es) es.close(); offline('This pairing key is no longer valid.<br>Scan the QR code in <b>' + APP_NAME + ' → 📱</b> again.'); } }).catch(() => { });
+fetch('/api/history?t=' + encodeURIComponent(TOKEN)).then(r => { if (r.status === 401) { denied = true; if (es) es.close(); offline('This pairing key is no longer valid.<br>Scan the QR code in <b>' + APP_NAME + ' → the phone button</b> again.'); } }).catch(() => { });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && (!es || es.readyState !== 1)) connect(); });
 
 function render() {
@@ -223,15 +239,15 @@ function renderSession(first) {
       <div class="kpi"><div class="l">Today</div><div class="v">${fmtTok(s.todayTok)}</div></div><div class="kpi"><div class="l">Session</div><div class="v">${fmtTok(s.totalTok)}</div></div></div>
     <div class="meta" style="justify-content:space-between;margin:0"><span>Context</span><span>${Math.round(pct)}%</span></div>
     <div class="bar"><div style="width:${Math.min(100, pct)}%;background:${pct > 85 ? 'var(--err)' : pct > 60 ? 'var(--warn)' : col}"></div></div>`;
-  const log = `<h3>Activity</h3><div class="log">${s.log.slice(-10).reverse().map(l => `<div class="${l.kind}">${l.kind === 'tool' ? '⚙ ' : l.kind === 'you' ? '› ' : ''}${esc(l.text)}</div>`).join('') || '<div>—</div>'}</div>`;
+  const log = `<h3>Activity</h3><div class="log">${s.log.slice(-10).reverse().map(l => `<div class="${l.kind}">${l.kind === 'tool' ? ICON.gear + ' ' : l.kind === 'you' ? '› ' : ''}${esc(l.text)}</div>`).join('') || '<div>—</div>'}</div>`;
   if (!first && sheetKind === 'session' && $('#sStats')) { $('#sStats').innerHTML = stats; $('#sLog').innerHTML = log; $('#sName').textContent = s.name; return; }
   sheet('session', `<div class="sh-h"><span class="dot ${s.health}"></span><h2 id="sName">${esc(s.name)}</h2><button class="x">×</button></div>
     <div id="sStats">${stats}</div>
     ${pcBox(s.sid)}
     ${can ? `<textarea id="sText" rows="3" placeholder="Message ${esc(s.name)}…"></textarea>
-    <div class="row"><button class="primary" id="sSend">Send</button><button id="sAtt">📎 Attach</button><button id="sInt">Interrupt</button>${s.owner ? '<button id="sTerm">Open terminal</button>' : ''}</div>
+    <div class="row"><button class="primary" id="sSend">Send</button><button id="sAtt">${ICON.plus} Attach</button><button id="sInt">Interrupt</button>${s.owner ? '<button id="sTerm">Open terminal</button>' : ''}</div>
     <div class="chips">${QUICK.map(c => `<button data-c="${c}">${c}</button>`).join('')}<button id="sMore">More…</button></div>` : '<div class="meta">Background session — view only.</div>'}
-    <div class="row"><button id="sRen">✎ Rename</button><button id="sAg">⚙ Convert to agent</button></div>
+    <div class="row"><button id="sRen">${ICON.pencil} Rename</button><button id="sAg">${ICON.gear} Convert to agent</button></div>
     ${snap.peer && snap.peer.online && s.kind !== 'bg' && !s.offline ? `<div class="row"><button id="sMove">⇄ Move to ${esc(s.onPeer ? 'this Mac' : snap.peer.label)}</button></div>` : ''}
     <div id="sLog">${log}</div>`);
   pcWire();
@@ -296,7 +312,7 @@ function openStarSheet() {
 }
 function pickInterval(w) {
   sheet('swiv', `<div class="sh-h"><h2>${esc(w.label)} · check every</h2><button class="x">×</button></div>` +
-    w.intervals.map(i => `<div class="item" data-sec="${i.sec}"><div class="t"><div class="n">${esc(i.label)}</div></div>${i.sec === w.interval ? '✓' : ''}</div>`).join(''));
+    w.intervals.map(i => `<div class="item" data-sec="${i.sec}"><div class="t"><div class="n">${esc(i.label)}</div></div>${i.sec === w.interval ? ICON.check : ''}</div>`).join(''));
   $('#sheetBody').querySelectorAll('[data-sec]').forEach(el => el.onclick = async () => {
     const r = await api('/api/switches', { id: w.id, interval: +el.dataset.sec, from: 'iPhone' }).catch(e => ({ ok: false, err: e.message }));
     toast(r && r.ok ? `${w.label}: every ${el.querySelector('.n').textContent}` : `Couldn't change it: ${(r && r.err) || 'no answer'}`); openStarSheet();
@@ -356,7 +372,7 @@ async function openHistory() {
 let termId = null, term = null, tes = null;
 const KEYS = [['Esc', '\x1b'], ['Tab', '\t'], ['↑', '\x1b[A'], ['↓', '\x1b[B'], ['←', '\x1b[D'], ['→', '\x1b[C'], ['⏎', '\r'], ['^C', '\x03'], ['⇧Tab', '\x1b[Z']];
 const termControls = () => `<div class="keys">${KEYS.map(([l, k]) => `<button data-k="${encodeURIComponent(k)}">${l}</button>`).join('')}</div>
-    <div class="tin"><input class="tIn" placeholder="Type, then Send (adds Enter)" autocapitalize="off" autocorrect="off" enterkeyhint="send"><button class="tAtt" aria-label="Attach a photo or file">📎</button><button class="primary tGo">Send</button></div>`;
+    <div class="tin"><input class="tIn" placeholder="Type, then Send (adds Enter)" autocapitalize="off" autocorrect="off" enterkeyhint="send"><button class="tAtt" aria-label="Attach a photo or file">${ICON.plus}</button><button class="primary tGo" aria-label="Send">${ICON.up}</button></div>`;
 function mountTerm(host, id, box, sid) {
   termId = id; tes && tes.close(); if (term) { term._ro && term._ro.disconnect(); term._stamps && term._stamps.dispose(); term.dispose(); }
   const W = host.clientWidth - 8 - (window.attachTermStamps && sid ? 40 : 0);
@@ -488,9 +504,9 @@ function renderSplit(force) {
     return;
   }
   paneKind = key;
-  $('#pane').innerHTML = `<div id="paneHead"><div class="ph">${head}</div>${kind === 'term' ? '<button id="pFull" title="Full screen">⤢</button>' : ''}<button id="pInfo" title="Details">ⓘ</button></div>` +
+  $('#pane').innerHTML = `<div id="paneHead"><div class="ph">${head}</div>${kind === 'term' ? '<button id="pFull" title="Full screen" aria-label="Full screen">' + ICON.expand + '</button>' : ''}<button id="pInfo" title="Details" aria-label="Details">${ICON.info}</button></div>` +
     (kind === 'term' ? `<div id="pxt"></div>${termControls()}`
-      : `<div id="pScroll"><div id="pStats">${paneStats(s)}</div>${(s.tty && s.kind !== 'bg') ? `<div class="tin"><textarea id="pText" rows="2" placeholder="Message ${esc(s.name)}…"></textarea><button id="pAtt" aria-label="Attach a photo or file">📎</button><button class="primary" id="pSend">Send</button></div>
+      : `<div id="pScroll"><div id="pStats">${paneStats(s)}</div>${(s.tty && s.kind !== 'bg') ? `<div class="tin"><textarea id="pText" rows="2" placeholder="Message ${esc(s.name)}…"></textarea><button id="pAtt" aria-label="Attach a photo or file">${ICON.plus}</button><button class="primary" id="pSend" aria-label="Send">${ICON.up}</button></div>
           <div class="chips"><button id="pInt">Interrupt</button>${QUICK.slice(0, 5).map(c => `<button data-c="${c}">${c}</button>`).join('')}</div>` : '<div class="meta">Background session — view only.</div>'}<div id="pLog">${paneLog(s)}</div></div>`);
   $('#pInfo').onclick = () => openSession(s.sid);
   if (kind === 'term') {
@@ -510,7 +526,7 @@ function renderSplit(force) {
 }
 const paneStats = s => { const pct = s.ctxMax ? s.ctx / s.ctxMax * 100 : 0;
   return `<div class="meta"><span style="color:${FAMILY_COLOR[s.family] || '#9fb4d8'}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${s.kind === 'bg' ? 'background' : TERMN()}</span><span>context ${Math.round(pct)}%</span><span>${fmtTok(s.totalTok)} session</span></div>`; };
-const paneLog = s => `<div class="log">${s.log.slice(-8).reverse().map(l => `<div class="${l.kind}">${l.kind === 'tool' ? '⚙ ' : l.kind === 'you' ? '› ' : ''}${esc(l.text)}</div>`).join('') || '<div>—</div>'}</div>`;
+const paneLog = s => `<div class="log">${s.log.slice(-8).reverse().map(l => `<div class="${l.kind}">${l.kind === 'tool' ? ICON.gear + ' ' : l.kind === 'you' ? '› ' : ''}${esc(l.text)}</div>`).join('') || '<div>—</div>'}</div>`;
 
 // sparkline as an SVG path (cheap to redraw every telemetry tick)
 function sparkPath(data, peak, w, h) {
@@ -543,7 +559,7 @@ function renderGrid() {
       <div class="gv"><b>${work ? Math.round(s.tps) : fmtTok(s.todayTok)}</b><small>${work ? ' tok/s' : ' today'}</small><span class="gs">${work ? fmtTok(s.todayTok) : ago(s.sinceWrite) + ' ago'}</span></div>
       <svg class="gsp" viewBox="0 0 100 26" preserveAspectRatio="none"><path d="${sparkPath(s.spark || [0, 0], s.sparkPeak, 100, 26)}" stroke="${col}" /></svg>
       <div class="gbar"><div style="width:${pct}%;background:${pct > 85 ? 'var(--err)' : pct > 60 ? 'var(--warn)' : col}"></div></div>
-      <div class="gl">${last ? (last.kind === 'you' ? '› ' : last.kind === 'tool' ? '⚙ ' : '') + esc(last.text) : '—'}</div>`;
+      <div class="gl">${last ? (last.kind === 'you' ? '› ' : last.kind === 'tool' ? ICON.gear + ' ' : '') + esc(last.text) : '—'}</div>`;
   });
   for (const [sid, c] of gridCards) if (!seen.has(sid)) { c.remove(); gridCards.delete(sid); }
   const A = snap.agents || [];
@@ -633,7 +649,7 @@ function renderDrawer() {
     <button class="dRow${view === 'grid' ? ' on' : ''}" data-go="grid"><span class="ic">▦</span>Grid</button>
     <button class="dRow" data-go="history"><span class="ic">↺</span>All sessions</button>
     <div class="dSec">Sessions</div>
-    <div class="dList">${S.map(x => `<button class="dItem${view === 'split' && x.sid === splitSid ? ' on' : ''}" data-sid="${x.sid}"><span class="ic">${x.kind === 'hermes' ? '☤' : '&lt;/&gt;'}</span><span class="cn">${esc(x.name)}</span>${st(x)}</button>`).join('')
+    <div class="dList">${S.map(x => `<button class="dItem${view === 'split' && x.sid === splitSid ? ' on' : ''}" data-sid="${x.sid}"><span class="ic">${x.kind === 'hermes' ? ICON.spark : ICON.code}</span><span class="cn">${esc(x.name)}</span>${st(x)}</button>`).join('')
       || `<div class="meta" style="padding:10px 14px">${snap.ready ? 'No sessions running.' : 'Connecting…'}</div>`}</div>`;
   // rebuild only when something shows differently, and never under a finger: a replaced element loses its touchend
   if (html === d._html || window.__navDrag) return; d._html = html; d.innerHTML = html;
@@ -673,7 +689,7 @@ const pcWhen = t => { if (!t) return '—'; const d = new Date(t), now = new Dat
   if (d.toDateString() === now.toDateString()) return 'today ' + tm; if (d.toDateString() === new Date(now.getTime() + 864e5).toDateString()) return 'tomorrow ' + tm; return `${d.getMonth() + 1}/${d.getDate()} ${tm}`; };
 async function pcRefresh() { if (document.hidden) return; try { const r = await api('/api/cards'); if (r && typeof r === 'object' && !r.error) { phoneCards = r; if (sheetKind === 'sessions') renderSessions(); } } catch { } }
 setTimeout(pcRefresh, 4000); setInterval(pcRefresh, 5 * 60e3);
-function pcBadges(sid) { const c = phoneCards[sid]; if (!c) return ''; return (c.waitingN ? ` <span class="pcb wait">⚑${c.waitingN}</span>` : '') + (c.failedN ? ` <span class="pcb fail">✕${c.failedN}</span>` : ''); }
+function pcBadges(sid) { const c = phoneCards[sid]; if (!c) return ''; return (c.waitingN ? ` <span class="pcb wait">${ICON.flag}${c.waitingN}</span>` : '') + (c.failedN ? ` <span class="pcb fail">✕${c.failedN}</span>` : ''); }
 function pcIntro(sid) { const c = phoneCards[sid]; return c && c.intro ? `<div class="pci">${esc(c.intro)}</div>` : ''; }
 function pcBox(sid) {
   const c = phoneCards[sid];
