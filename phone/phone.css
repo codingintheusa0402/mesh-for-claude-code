@@ -253,3 +253,9 @@ button svg.ic { pointer-events: none; }
 #pane .tin button { flex: none; width: 40px; min-width: 40px !important; height: 40px; display: inline-flex; align-items: center; justify-content: center; }
 #pane .tin button.primary { background: var(--text); color: #000; }
 #pane .tin #pSend, #pane .tin .tGo { padding: 0 !important; border-radius: 50% !important; }
+
+/* 2026-11-16: the header is as tall as its pill and buttons (it was 41px, so they spilled over the divider and the row below) */
+:root { --hdr: 62px; }
+#top { min-height: var(--hdr); height: calc(env(safe-area-inset-top) + var(--hdr)); box-sizing: border-box; padding-top: env(safe-area-inset-top); padding-bottom: 4px; }
+body[data-view="split"] #split, body[data-view="grid"] #grid { top: calc(env(safe-area-inset-top) + var(--hdr) + 4px) !important; }
+body.kb[data-view="split"] #split { top: calc(env(safe-area-inset-top) + var(--hdr)) !important; }

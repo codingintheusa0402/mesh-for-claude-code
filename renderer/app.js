@@ -1030,6 +1030,9 @@ function windowUsed(e) {
 }
 // (not window focus: bringing the app to the front — e.g. `open` over ssh — is not using it)
 ['keydown', 'mouseup', 'wheel'].forEach(ev => addEventListener(ev, windowUsed, true));
+// switching to this Mac's window counts as using it (2026-11-16): its terminals take their size here, as if the
+// sessions ran on this Mac (focus is not a real input event, so it goes through the same rules with a stand-in event)
+addEventListener('focus', () => setTimeout(() => windowUsed({ isTrusted: true, type: 'focus' }), 150));
 // the other machine took the size of one of our terminals
 window.api.peerTerm.onRemoteSize((id, c, r) => { const t = terms.get(id); if (!t || t.peer) return; t.remote = true; t.cols = c; t.rows = r; gridInLine(t, c, r); });
 // the exact current screen (+ recent scrollback) of one of our terminals, for a phone or the peer opening it

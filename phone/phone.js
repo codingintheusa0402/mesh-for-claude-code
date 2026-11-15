@@ -396,9 +396,24 @@ function mountTerm(host, id, box, sid) {
     const i = JSON.parse(ev.data); fitTo(i.cols, i.rows); term.reset(); term.write(keepHist(i.backlog), () => pin(true));
     pin(true);
   });
-  // always the host terminal's exact size: a narrower/wider xterm garbles Claude's redraws
-  const fitTo = (cols, rows) => { term.options.fontSize = Math.max(6.5, Math.min(11, W / (cols * .6))); term.resize(cols, rows); };   // too wide → scroll sideways
+  // the phone claims the session's size, as if it were running here (2026-11-16): opening it, turning the phone,
+  // coming back to the app or touching the terminal resizes the session to this screen at a readable font, and Claude
+  // Code redraws for it. When another device takes the size, its grid is shown scaled until the phone is used again.
+  const PF = 10.5, mine = () => { const w = host.clientWidth - 10 - (term._stamps ? 40 : 0), h = host.clientHeight - 8;
+    return { cols: Math.max(30, Math.floor(w / (PF * .602))), rows: Math.max(10, Math.floor(h / (PF * 1.17))) }; };
+  let lastClaim = 0;
+  const claim = force => { if (!term || termId !== id || document.hidden) return; const d = mine(); if (d.cols < 30 || host.clientHeight < 60) return;
+    if (!force && term.cols === d.cols && term.rows === d.rows) return; if (Date.now() - lastClaim < 800 && !force) return; lastClaim = Date.now();
+    api('/api/term/' + encodeURIComponent(id), { resize: d }); };
+  // always the size the host reports (a grid that differs from the host's garbles Claude's redraws): our own size at the
+  // readable font, anyone else's shrunk to fit
+  const fitTo = (cols, rows) => { const d = mine(); term.options.fontSize = cols === d.cols ? PF : Math.max(6.5, Math.min(PF, W / (cols * .6))); term.resize(cols, rows); };
   tes.addEventListener('size', ev => { const i = JSON.parse(ev.data); fitTo(i.cols, i.rows); });
+  tes.addEventListener('init', () => setTimeout(() => claim(true), 250));
+  host.addEventListener('touchstart', () => claim(), { passive: true, capture: true });
+  box.addEventListener('focusin', () => claim());
+  if (window.ResizeObserver) { let rt = 0; const ro2 = new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => claim(), 300); }); ro2.observe(host); }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(() => claim(true), 600); });
   tes.addEventListener('data', ev => term.write(keepHist(JSON.parse(ev.data))));
   tes.addEventListener('exit', () => term.write('\r\n\x1b[90m[process exited]\x1b[0m\r\n'));
   box.querySelectorAll('.keys button').forEach(b => b.onclick = () => write(decodeURIComponent(b.dataset.k)));
