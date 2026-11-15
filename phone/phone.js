@@ -403,6 +403,12 @@ function touchScroll(host) {
   const by = dy => {                       // dy > 0: show older lines
     if (!term) return false;
     const b = term.buffer.active, m = host.scrollHeight - host.clientHeight;
+    // a full-screen app (Claude Code) with mouse reporting scrolls itself: send it wheel events, as a Mac's trackpad does
+    if (b.type === 'alternate' && term.modes.mouseTrackingMode !== 'none' && term.input) {
+      acc += dy; const step = lh() * 1.5, n = Math.trunc(acc / step); if (!n) return true; acc -= n * step;
+      const r = Math.max(1, Math.floor(term.rows / 2)), c = Math.max(1, Math.floor(term.cols / 2));
+      term.input(`\x1b[<${n > 0 ? 64 : 65};${c};${r}M`.repeat(Math.min(6, Math.abs(n))), true); return true;
+    }
     if (dy > 0) {
       if (b.viewportY > 0) { lines(dy); return true; }
       if (host.scrollTop > 0) { host.scrollTop -= dy; return true; }
@@ -473,6 +479,7 @@ function renderSplit(force) {
   if (!s) { $('#pane').innerHTML = ''; paneKind = null; return; }
   const tid = s.owner || (!s.onPeer && s.pane) || null;            // a Mesh terminal, or the tmux pane the session runs in (2026-11-15)
   const kind = tid ? 'term' : 'ctl', key = kind + s.sid;
+  $('#tpName').textContent = s.name; $('#tpSub').textContent = s.health === 'working' ? 'Working…' : s.onPeer ? 'on the other Mac' : (s.model || '').replace('claude-', '');
   const head = `<span class="dot ${s.health}"></span><b>${esc(s.name)}</b><span class="pm">${s.health === 'working' ? Math.round(s.tps) + ' tok/s · ' : ''}${fmtTok(s.todayTok)}</span>`;
   if (!force && paneKind === key) {                              // live refresh without touching the terminal or the text box
     $('#paneHead .ph').innerHTML = head;
@@ -594,23 +601,26 @@ function toggleNav(open) { const o = typeof open === 'boolean' ? open : !documen
 $('#navBtn').onclick = () => toggleNav(); $('#scrim').onclick = () => toggleNav(false);
 // iOS-style: drag right (from the left edge, or anywhere outside the terminal) pulls the drawer out with the finger,
 // drag it left to push it back; on release it snaps open or shut (a quick flick counts too)
-{ let sx = null, sy = null, st = 0, mode = null, w = 1, open = false; const D = $('#drawer'), SC = $('#scrim');
-  const place = off => { D.style.transition = SC.style.transition = 'none'; D.style.transform = `translateX(${off}px)`; SC.style.opacity = String(Math.max(0, 1 + off / w)); SC.style.pointerEvents = 'none'; };
+{ let sx = null, sy = null, st = 0, mode = null, w = 1, open = false; const D = $('#drawer'), SC = $('#scrim'), A = $('#app');
+  // like the Claude app: the drawer lies underneath and the conversation slides right as a rounded card
+  const place = off => { const x = w + off, f = Math.max(0, Math.min(1, x / w)); A.style.transition = SC.style.transition = 'none';
+    A.style.transform = `translateX(${x}px)`; A.style.borderRadius = `${Math.round(28 * f)}px`; SC.style.opacity = String(f); SC.style.pointerEvents = 'none'; };
   addEventListener('touchstart', e => {
     const t = e.touches[0]; open = document.body.classList.contains('navOpen'); sx = null; mode = null;
     if (!open && !(t.clientX < 40 || !e.target.closest('#pxt, #xt, textarea, input, .keys, #grid'))) return;
     if (!open) renderDrawer();
-    sx = t.clientX; sy = t.clientY; st = Date.now(); w = D.offsetWidth || 300;
+    sx = t.clientX; sy = t.clientY; st = Date.now(); w = D.offsetWidth || 300; window.__navDrag = true;
   }, { passive: true });
   addEventListener('touchmove', e => {
     if (sx == null) return; const t = e.touches[0], dx = t.clientX - sx, dy = t.clientY - sy;
     if (!mode) { if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.4 && (open ? dx < 0 : dx > 0)) mode = 'drag'; else if (Math.abs(dy) > 12 || Math.abs(dx) > 10) { sx = null; return; } else return; }
     place(open ? Math.min(0, dx) : Math.min(0, -w + dx));
   }, { passive: true });
+  addEventListener('touchcancel', () => { window.__navDrag = false; }, { passive: true });
   addEventListener('touchend', e => {
-    if (sx == null || mode !== 'drag') { sx = null; return; }
+    window.__navDrag = false; if (sx == null || mode !== 'drag') { sx = null; return; }
     const dx = e.changedTouches[0].clientX - sx, v = dx / Math.max(1, Date.now() - st);   // px per ms
-    D.style.transition = SC.style.transition = D.style.transform = SC.style.opacity = SC.style.pointerEvents = '';
+    A.style.transition = SC.style.transition = A.style.transform = A.style.borderRadius = SC.style.opacity = SC.style.pointerEvents = '';
     toggleNav(open ? !(dx < -w * 0.3 || v < -0.5) : (dx > w * 0.3 || v > 0.5)); sx = null; mode = null;
   }, { passive: true });
 }
@@ -619,12 +629,14 @@ function renderDrawer() {
   const ago = x => Math.min(...[x.sinceUse, x.sinceWrite].filter(v => typeof v === 'number' && v >= 0), 9e9);
   const S = [...snap.sessions].sort((a, b) => ((b.health === 'working' || b.health === 'waiting') - (a.health === 'working' || a.health === 'waiting')) || ago(a) - ago(b));
   const st = x => x.health === 'working' ? '<span class="dSpin"></span>' : x.health === 'waiting' ? '<span class="dDot"></span>' : '';
-  d.innerHTML = `<div class="dHead">${esc(APP_NAME)}</div>
+  const html = `<div class="dHead">${esc(APP_NAME)}</div>
     <button class="dRow${view === 'grid' ? ' on' : ''}" data-go="grid"><span class="ic">▦</span>Grid</button>
     <button class="dRow" data-go="history"><span class="ic">↺</span>All sessions</button>
     <div class="dSec">Sessions</div>
     <div class="dList">${S.map(x => `<button class="dItem${view === 'split' && x.sid === splitSid ? ' on' : ''}" data-sid="${x.sid}"><span class="ic">${x.kind === 'hermes' ? '☤' : '&lt;/&gt;'}</span><span class="cn">${esc(x.name)}</span>${st(x)}</button>`).join('')
       || `<div class="meta" style="padding:10px 14px">${snap.ready ? 'No sessions running.' : 'Connecting…'}</div>`}</div>`;
+  // rebuild only when something shows differently, and never under a finger: a replaced element loses its touchend
+  if (html === d._html || window.__navDrag) return; d._html = html; d.innerHTML = html;
   d.querySelectorAll('[data-sid]').forEach(b => b.onclick = () => { toggleNav(false); if (view !== 'split') { setTab('split', true); setView('split'); } pickSplit(b.dataset.sid); });
   d.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { toggleNav(false); setTab(b.dataset.go); });
 }

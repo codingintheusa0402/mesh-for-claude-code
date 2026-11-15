@@ -206,3 +206,25 @@ body.navOpen #drawer { transform: none; }
 /* no tab bar any more: the sheet sits on the bottom edge and hides fully below it */
 .sheet { bottom: 0 !important; padding-bottom: env(safe-area-inset-bottom); }
 .sheet.hidden { transform: translateY(calc(100% + 30px)); visibility: hidden; }
+
+/* like the Claude app (2026-11-15): drawer underneath, the conversation slides right as a rounded card; round ☰,
+   a centred title pill, a floating rounded input */
+body { background: #141414; }
+#app { position: fixed; inset: 0; z-index: 10; background: #000; overflow: hidden; transform-origin: left center;
+  transition: transform .3s cubic-bezier(.2,.85,.25,1), border-radius .3s; will-change: transform; }
+body.navOpen #app { transform: translateX(min(80vw, 340px)); border-radius: 28px; box-shadow: -14px 0 40px rgba(0,0,0,.55); }
+#drawer { z-index: 1 !important; transform: none !important; transition: none !important; background: #141414; border-right: 0; }
+#scrim { position: absolute !important; z-index: 40 !important; background: rgba(0,0,0,.35) !important; }
+#top { border-bottom: 0 !important; background: linear-gradient(#000 70%, rgba(0,0,0,0)) !important; }
+#top .brand, #top #today, #top .logo { display: none !important; }
+#navBtn { width: 44px !important; height: 44px !important; font-size: 19px !important; background: rgba(255,255,255,.09) !important; border: 1px solid rgba(255,255,255,.08) !important; }
+#titlePill { position: absolute; left: 50%; transform: translateX(-50%); max-width: 56vw; display: flex; flex-direction: column; align-items: center;
+  padding: 6px 18px; border-radius: 22px; background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.08); line-height: 1.15; }
+#titlePill b { font-size: 15px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#titlePill small { font-size: 11.5px; color: var(--dim); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#titlePill small:empty { display: none; }
+#paneHead .ph b { display: none; }
+#pane .tin { background: #262626; border-radius: 28px; padding: 6px 6px 6px 16px; border: 1px solid rgba(255,255,255,.07); margin: 6px 0 calc(env(safe-area-inset-bottom) + 4px); align-items: center; }
+#pane .tin input, #pane .tin textarea { background: none !important; border: 0 !important; box-shadow: none !important; padding: 8px 0 !important; font-size: 16px; }
+#pane .tin button { border-radius: 50% !important; min-width: 40px; height: 40px; padding: 0 !important; }
+#pane .tin button.tSend, #pane .tin #pSend { border-radius: 20px !important; padding: 0 14px !important; }
