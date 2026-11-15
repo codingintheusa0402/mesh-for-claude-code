@@ -70,7 +70,7 @@ h3 { font-size: 13px; color: var(--dim); font-weight: 600; margin: 16px 0 6px; }
 .md { font-size: 14px; line-height: 1.55; } .md p { margin: 5px 0; } .md ul { margin: 3px 0; padding-left: 20px; } .md code { background: rgba(255,255,255,.08); padding: 0 4px; border-radius: 4px; } .md pre { background: rgba(0,0,0,.3); padding: 8px; border-radius: 8px; overflow-x: auto; font-size: 12px; } .md h3, .md h4, .md h5 { font-size: 14px; margin: 10px 0 4px; letter-spacing: 0; text-transform: none; color: var(--text); }
 
 /* ================= views: Split · Grid ================= */
-:root { --tabbar: calc(env(safe-area-inset-bottom) + 58px); --kb: 0px; }
+:root { --tabbar: env(safe-area-inset-bottom); --kb: 0px; }
 #split, #grid { display: none; }
 #tabs button b { font-size: 17px; }
 
@@ -181,3 +181,28 @@ body.kb #hint { display: none; }
 #offline .spin { width: 26px; height: 26px; border-radius: 50%; border: 2.5px solid rgba(255,255,255,.15); border-top-color: var(--acc, #8ab4ff); animation: offspin .8s linear infinite; }
 @keyframes offspin { to { transform: rotate(360deg); } }
 #offline { background: rgba(0,0,0,.92); }
+
+/* drawer (2026-11-15, like the Claude app): no bottom tabs, no fixed list; ☰ opens the sessions over the screen */
+#tabs, #switch { display: none !important; }
+#navBtn { flex: none; width: 34px; height: 34px; border-radius: 50%; padding: 0; font-size: 17px; line-height: 1; margin-right: 2px; }
+#top .logo { display: none; }
+#pane { padding-left: calc(env(safe-area-inset-left) + 4px); }
+#scrim { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.55); opacity: 0; pointer-events: none; transition: opacity .2s; }
+body.navOpen #scrim { opacity: 1; pointer-events: auto; }
+#drawer { position: fixed; z-index: 21; top: 0; bottom: 0; left: 0; width: min(80vw, 340px); background: #141414; border-right: 1px solid var(--line);
+  transform: translateX(-102%); transition: transform .22s ease; display: flex; flex-direction: column;
+  padding: calc(env(safe-area-inset-top) + 14px) 10px calc(env(safe-area-inset-bottom) + 10px) calc(env(safe-area-inset-left) + 10px); }
+body.navOpen #drawer { transform: none; }
+#drawer .dHead { font-size: 26px; font-weight: 600; padding: 4px 10px 14px; }
+#drawer .dRow, #drawer .dItem { display: flex; align-items: center; gap: 14px; width: 100%; border: 0; background: none; box-shadow: none; text-align: left;
+  color: var(--text); font-size: 16px; padding: 12px 10px; border-radius: 14px; }
+#drawer .dRow.on, #drawer .dItem.on { background: rgba(255,255,255,.1); }
+#drawer .ic { width: 26px; flex: none; text-align: center; color: var(--dim); font-size: 15px; }
+#drawer .cn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#drawer .dSec { padding: 14px 10px 4px; font-size: 13px; color: var(--dim); }
+#drawer .dList { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+#drawer .dDot { width: 9px; height: 9px; border-radius: 50%; background: #4b8df8; flex: none; }
+#drawer .dSpin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255,255,255,.18); border-top-color: var(--text); animation: offspin .9s linear infinite; flex: none; }
+/* no tab bar any more: the sheet sits on the bottom edge and hides fully below it */
+.sheet { bottom: 0 !important; padding-bottom: env(safe-area-inset-bottom); }
+.sheet.hidden { transform: translateY(calc(100% + 30px)); visibility: hidden; }

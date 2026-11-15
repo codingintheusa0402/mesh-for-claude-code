@@ -17,6 +17,7 @@
 </head>
 <body data-view="split">
 <header id="top">
+  <button id="navBtn" aria-label="Sessions">☰</button>
   <img src="/icon.png" class="logo" alt="">
   <span class="brand">Mesh for Claude Code</span>
   <span id="hostTag" class="hosttag hidden"></span>
@@ -35,6 +36,9 @@
 <section id="grid" aria-label="All live sessions"></section>
 
 <section id="sheet" class="sheet hidden"><div class="grab"></div><div id="sheetBody"></div></section>
+
+<div id="scrim"></div>
+<aside id="drawer" aria-label="Sessions"></aside>
 
 <nav id="tabs">
   <button data-tab="split" class="on"><b>◧</b>Sessions</button>

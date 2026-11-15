@@ -153,6 +153,7 @@ function render() {
   if (sheetKind === 'sessions') renderSessions();
   if (view === 'split') renderSplit();
   if (view === 'grid') renderGrid();
+  if (document.body.classList.contains('navOpen')) renderDrawer();
   if (selected && !$('#sheet').classList.contains('hidden') && sheetKind === 'session') renderSession();
 }
 
@@ -479,11 +480,11 @@ function renderSplit(force) {
     return;
   }
   paneKind = key;
-  $('#pane').innerHTML = `<div id="paneHead"><button id="navT" title="Session list">☰</button><div class="ph">${head}</div>${kind === 'term' ? '<button id="pFull" title="Full screen">⤢</button>' : ''}<button id="pInfo" title="Details">ⓘ</button></div>` +
+  $('#pane').innerHTML = `<div id="paneHead"><div class="ph">${head}</div>${kind === 'term' ? '<button id="pFull" title="Full screen">⤢</button>' : ''}<button id="pInfo" title="Details">ⓘ</button></div>` +
     (kind === 'term' ? `<div id="pxt"></div>${termControls()}`
       : `<div id="pScroll"><div id="pStats">${paneStats(s)}</div>${(s.tty && s.kind !== 'bg') ? `<div class="tin"><textarea id="pText" rows="2" placeholder="Message ${esc(s.name)}…"></textarea><button id="pAtt" aria-label="Attach a photo or file">📎</button><button class="primary" id="pSend">Send</button></div>
           <div class="chips"><button id="pInt">Interrupt</button>${QUICK.slice(0, 5).map(c => `<button data-c="${c}">${c}</button>`).join('')}</div>` : '<div class="meta">Background session — view only.</div>'}<div id="pLog">${paneLog(s)}</div></div>`);
-  $('#pInfo').onclick = () => openSession(s.sid); $('#navT').onclick = toggleNav;
+  $('#pInfo').onclick = () => openSession(s.sid);
   if (kind === 'term') {
     $('#pFull').onclick = () => openTerminal(s.owner, s.sid);
     mountTerm($('#pxt'), s.owner, $('#pane'), s.sid);
@@ -587,9 +588,26 @@ if (window.visualViewport) {
 $('#kbDone').addEventListener('pointerdown', e => { e.preventDefault(); const a = document.activeElement; if (a && a.blur) a.blur(); });
 addEventListener('orientationchange', () => setTimeout(() => { viz.resize(); if (view === 'split' && paneKind && paneKind.startsWith('term')) renderSplit(true); }, 350));
 { const v0 = localStorage.getItem('mesh.view'); const v1 = v0 === 'grid' ? 'grid' : 'split'; setTab(v1, true); setView(v1); }
-// the session list folds away (☰ in the pane's header); remembered on this phone
-if (localStorage.getItem('mesh.nav') === 'closed') document.body.classList.add('navClosed');
-function toggleNav() { const c = document.body.classList.toggle('navClosed'); localStorage.setItem('mesh.nav', c ? 'closed' : 'open'); if (paneKind && paneKind.startsWith('term')) setTimeout(() => renderSplit(true), 60); }
+// the session drawer (like the Claude app): ☰ or a swipe from the left edge opens it, a tap outside or on a session closes it
+function toggleNav(open) { const o = typeof open === 'boolean' ? open : !document.body.classList.contains('navOpen'); document.body.classList.toggle('navOpen', o); if (o) renderDrawer(); }
+$('#navBtn').onclick = () => toggleNav(); $('#scrim').onclick = () => toggleNav(false);
+{ let x0 = null, y0 = null;
+  addEventListener('touchstart', e => { const t = e.touches[0]; x0 = t.clientX < 22 && !document.body.classList.contains('navOpen') ? t.clientX : null; y0 = t.clientY; }, { passive: true });
+  addEventListener('touchmove', e => { if (x0 == null) return; const t = e.touches[0]; if (t.clientX - x0 > 50 && Math.abs(t.clientY - y0) < 40) { x0 = null; toggleNav(true); } }, { passive: true }); }
+function renderDrawer() {
+  const d = $('#drawer'); if (!document.body.classList.contains('navOpen') && d.dataset.ready) return; d.dataset.ready = 1;
+  const ago = x => Math.min(...[x.sinceUse, x.sinceWrite].filter(v => typeof v === 'number' && v >= 0), 9e9);
+  const S = [...snap.sessions].sort((a, b) => ((b.health === 'working' || b.health === 'waiting') - (a.health === 'working' || a.health === 'waiting')) || ago(a) - ago(b));
+  const st = x => x.health === 'working' ? '<span class="dSpin"></span>' : x.health === 'waiting' ? '<span class="dDot"></span>' : '';
+  d.innerHTML = `<div class="dHead">${esc(APP_NAME)}</div>
+    <button class="dRow${view === 'grid' ? ' on' : ''}" data-go="grid"><span class="ic">▦</span>Grid</button>
+    <button class="dRow" data-go="history"><span class="ic">↺</span>All sessions</button>
+    <div class="dSec">Sessions</div>
+    <div class="dList">${S.map(x => `<button class="dItem${view === 'split' && x.sid === splitSid ? ' on' : ''}" data-sid="${x.sid}"><span class="ic">${x.kind === 'hermes' ? '☤' : '&lt;/&gt;'}</span><span class="cn">${esc(x.name)}</span>${st(x)}</button>`).join('')
+      || `<div class="meta" style="padding:10px 14px">${snap.ready ? 'No sessions running.' : 'Connecting…'}</div>`}</div>`;
+  d.querySelectorAll('[data-sid]').forEach(b => b.onclick = () => { toggleNav(false); if (view !== 'split') { setTab('split', true); setView('split'); } pickSplit(b.dataset.sid); });
+  d.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { toggleNav(false); setTab(b.dataset.go); });
+}
 
 // ---------- press-and-hold a session: what it does, skills, commands, tools, CLAUDE.md ----------
 async function openDetails(sid) {
