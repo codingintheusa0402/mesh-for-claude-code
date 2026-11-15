@@ -453,7 +453,10 @@ async function hermesSend(pane, text) {
 // what is typed into a Claude Code session's input box in a tmux pane and not sent ('' = empty; its hint is dim)
 function claudeDraft(pane) {
   let out = ''; try { out = execFileSync(TMUX, ['capture-pane', '-p', '-e', '-t', pane], { timeout: 5000, env: TMUX_ENV }).toString(); } catch { return ''; }
-  const line = out.split('\n').reverse().find(l => l.includes('\u276f')); if (line == null) return '';
+  // the prompt line is "❯" + a no-break space; a background agent list below the box also marks its selected row with
+  // "❯ ◯ name…" (a plain space), which once read as typed text and blocked every relay to that session (2026-11-15)
+  const lines = out.split('\n').reverse(), bare = l => l.replace(/\x1b\[[\d;]*m/g, '');
+  const line = lines.find(l => /^\s*\u276f\u00a0/.test(bare(l))) || lines.find(l => l.includes('\u276f') && !/\u276f [\u25ef\u25cf\u25cb\u25c9]/.test(bare(l))); if (line == null) return '';
   const after = line.slice(line.indexOf('\u276f') + 1).replace(/^(\u00a0| )/, '');
   if (/^(\x1b\[[\d;]*m)*\x1b\[(2|3)m/.test(after)) return '';
   return after.replace(/\x1b\[[\d;]*m/g, '').trim();
