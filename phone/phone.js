@@ -315,7 +315,7 @@ function pickInterval(w) {
     w.intervals.map(i => `<div class="item" data-sec="${i.sec}"><div class="t"><div class="n">${esc(i.label)}</div></div>${i.sec === w.interval ? ICON.check : ''}</div>`).join(''));
   $('#sheetBody').querySelectorAll('[data-sec]').forEach(el => el.onclick = async () => {
     const r = await api('/api/switches', { id: w.id, interval: +el.dataset.sec, from: 'iPhone' }).catch(e => ({ ok: false, err: e.message }));
-    toast(r && r.ok ? `${w.label}: every ${el.querySelector('.n').textContent}` : `Couldn't change it: ${(r && r.err) || 'no answer'}`); openStarSheet();
+    toast(r && r.ok ? `${w.label}: checking now, then every ${el.querySelector(".n").textContent}` : `Couldn't change it: ${(r && r.err) || 'no answer'}`); openStarSheet();
   });
 }
 function askSwitch(w) {

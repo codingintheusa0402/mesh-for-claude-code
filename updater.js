@@ -23,7 +23,22 @@ function createUpdater({ app, powerMonitor, getWin, userData, sessions, inAppBus
   const stamp = extra => write('running.json', { commit: running, base: build.commit, pid: process.pid, at: Date.now(), ...extra });
 
   const noteInput = () => { lastInput = Date.now(); };
-  const quietFor = () => { let sys = 1e9; try { sys = powerMonitor.getSystemIdleTime(); } catch { } return Math.min(sys, (Date.now() - lastInput) / 1000); };
+  // A mouse jiggler (a keep-awake tool) nudges the cursor 1 px and back whenever the Mac has been idle ~25 s, so the system
+  // idle time never passes 30 s and nothing automatic (refresh, quiet restart) ever ran. Sample the idle clock every 2 s:
+  // a reset after >= 20 s idle with the cursor back where it was is a jiggle, not you. Typing in Mesh is counted by noteInput.
+  let quietSince = Date.now(), prev = null;
+  const cursor = () => { try { const p = require('electron').screen.getCursorScreenPoint(); return `${p.x},${p.y}`; } catch { return null; } };
+  setInterval(() => {
+    let idle; try { idle = powerMonitor.getSystemIdleTime(); } catch { return; }
+    const now = Date.now(), pos = cursor();
+    if (!prev) quietSince = now - idle * 1000;
+    else if (idle + 1.5 < prev.idle + (now - prev.t) / 1000) {                  // input happened since the last sample
+      const jiggle = prev.idle >= 20 && pos && pos === prev.pos;
+      if (!jiggle) quietSince = now - idle * 1000;
+    }
+    prev = { idle, t: now, pos };
+  }, 2000).unref();
+  const quietFor = () => Math.min((Date.now() - quietSince) / 1000, (Date.now() - lastInput) / 1000);
   function blocker(need) {
     if (quietFor() < need) return 'you are active';
     const w = sessions().filter(s => s.health === 'waiting' && s.status !== 'shell'); if (w.length) return `${w[0].name} is waiting for you`;

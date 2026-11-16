@@ -146,7 +146,7 @@ function openIntervalMenu(anchor, w) {
   addEventListener('pointerdown', away, true);
   m.onclick = async e => { const b = e.target.closest('button[data-sec]'); if (!b) return; shut();
     const r = await window.api.switches.interval(w.id, +b.dataset.sec).catch(e => ({ ok: false, err: e.message }));
-    renderSwitchPills(); toast(r && r.ok ? `${w.label}: checks every ${ivLabel(r.state)}` : `Couldn't change it: ${(r && r.err) || 'no answer'}`); };
+    renderSwitchPills(); toast(r && r.ok ? `${w.label}: checking now, then every ${ivLabel(r.state)}` : `Couldn't change it: ${(r && r.err) || 'no answer'}`); };
 }
 renderSwitchPills(); setInterval(renderSwitchPills, 20000);
 // a mouse wheel scrolls the header sideways when it doesn't fit

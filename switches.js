@@ -10,6 +10,8 @@
 // is an overnight window that belongs to the day it starts. Outside the window the tool treats the switch as OFF.
 // The file is { "enabled": bool, "by": "mesh", "at": "<ISO time>", "from": "<machine or phone>", "interval": <sec> }; missing = OFF.
 // Writes keep the file's other keys (a flip keeps the interval, an interval change keeps the state); the interval needs no popup.
+// Picking an interval (even the current one) also writes "runNow": <ISO time>: the tool runs once right away, then every
+// <interval> from that run. Optional "kick": "<launchd label>" starts the tool's job at once instead of at its next tick.
 // On a machine that isn't the host, get/set go to the peer (peer.js) over /api/switches.
 const fs = require('fs'), path = require('path'), os = require('os');
 
@@ -101,7 +103,10 @@ function createSwitches({ peer, machine }) {
       const s = list().find(x => x.id === id); if (!s) return { ok: false, err: 'no such switch: ' + id };
       sec = +sec;
       if (isHost(s)) { if (!pub(s).intervals.some(i => i.sec === sec)) return { ok: false, err: 'not one of this switch\'s intervals: ' + sec };   // the holder's list decides
-        try { return { ok: true, state: writeLocal(s, { interval: sec }, from) }; } catch (e) { return { ok: false, err: e.message }; } }
+        // a click also asks for one run right away ("runNow"), then the tool keeps the new interval from there (Kevin 11-16)
+        let state; try { state = writeLocal(s, { interval: sec, runNow: new Date().toISOString() }, from); } catch (e) { return { ok: false, err: e.message }; }
+        if (s.kick) try { require('child_process').execFile('launchctl', ['kickstart', `gui/${process.getuid()}/${s.kick}`], () => { }); } catch { }
+        return { ok: true, state, runNow: true }; }
       if (hop) return { ok: false, err: 'neither machine holds this switch' };
       return viaPeer('POST', { id, interval: sec, from: from || machine, hop: 1 }).catch(e => ({ ok: false, err: 'Couldn\'t reach the other machine: ' + e.message }));
     },
