@@ -29,7 +29,7 @@ Running one Claude Code session is easy. Running five, in five folders, across a
 - **Know what it costs, live.** Tokens per second, burn rate, today's total per model, context fill, and the same plan limits `/usage` shows, with reset times.
 - **Real terminals inside.** xterm.js tabs with Split and Grid views. On macOS sessions live in tmux, so they keep running when the app restarts.
 - **Every past session, one click away.** Search everything `claude --resume` knows and reopen it in a terminal.
-- **From your phone.** A private, pairing-key-protected web app shows the same live mesh and controls on your iPhone over Wi-Fi or Tailscale.
+- **From your phone.** A private, pairing-key-protected web app shows your sessions, their live terminals and the same controls on your iPhone over Wi-Fi or Tailscale.
 - **It's fun to leave open.** Probes tidy the system, a black hole eats stale sessions on request, and an idle screen saver plays short films starring your sessions.
 - **Local and private.** It reads your own `~/.claude` folder. No account, no telemetry, nothing uploaded.
 
@@ -94,7 +94,7 @@ On macOS, `bash install.sh` builds, signs with a local identity if you have one,
 
 1. In Mesh click **📱** in the header and turn on **Allow phone access**.
 2. Scan the QR code with your phone. Use Wi-Fi on the same network, or [Tailscale](https://tailscale.com) from anywhere.
-3. Add it to your home screen. It opens full screen, with pinch-to-zoom, drag-to-orbit, prompts, slash commands and a live terminal.
+3. Add it to your home screen. It opens full screen and works like the Claude app: a drawer with every session, each session's live terminal full screen, prompts and slash commands (details below under **iPhone: sessions, not the mesh**).
 
 Phone access is **off by default**. Every request needs the private pairing key in the QR code, and **New pairing key** cuts off every phone paired before. It is never exposed to the internet.
 
@@ -126,7 +126,7 @@ The app's name lives in one setting, used everywhere it appears (window title, m
 
 Machine- or team-specific add-ons can go in `local/` (gitignored); `local/main.js` is loaded if present.
 
-**Native iPhone app (optional):** `ios/` is a SwiftUI app built with XcodeGen that wraps the same live mesh in a native view, with a QR-scanner pairing screen and automatic fallback between the Tailscale and Wi-Fi addresses. `brew install xcodegen`, then `bash ios/install.sh` builds and installs it on an iPhone connected by cable (Xcode signed in with your Apple ID; with a free Apple ID, re-run it every 7 days).
+**Native iPhone app (optional):** `ios/` is a SwiftUI app built with XcodeGen that wraps the same phone page in a native view, with a QR-scanner pairing screen and automatic fallback between the Tailscale and Wi-Fi addresses. `brew install xcodegen`, then `bash ios/install.sh` builds and installs it on an iPhone connected by cable (Xcode signed in with your Apple ID; with a free Apple ID, re-run it every 7 days).
 
 ## What it does
 
@@ -138,13 +138,13 @@ Machine- or team-specific add-ons can go in `local/` (gitignored); `local/main.j
 | **Load strands** | Glowing curved strands tie each session to the mother, with light pulses running along them. The harder a session works (smoothed tok/s), the more strands it has (1 → 50), and the older their star colour: young blue-white when light, through gold, to red-orange under heavy load. |
 | **Navigation** | Pinch or scroll to zoom (0.65×–2×). Drag empty space to pan (the map extends 40% past the window). Double-click empty space to reset the view. Every session keeps its own slow orbit; new sessions take the widest free gap, and nothing re-slots when others come, go or move. Drag a session to give it a new orbit: farther orbits turn slower, closer ones faster. Double-click a session to release it back to an automatic orbit. Clicking empty space only ripples and never pushes sessions. |
 | **Stats** | Header shows per-model spend, tok/s and burn $/h, plus counts of working/idle/attention sessions and API errors. The panel shows speed now and last reply, burn, today, session total, errors, sub-agents, CPU/mem, a context gauge, a 5-minute sparkline, token breakdown, spend by model and an activity log. |
-| **Press and hold** | Hold a session bubble (about 0.5 s, without moving) to open a dropdown: the **skills** it used, **slash commands** and **tools** with counts, **what it does** (its latest `/compact` summary rendered as markdown; otherwise its first and latest prompt and latest reply) and the **CLAUDE.md** instructions it runs under. The transcript is parsed incrementally. On iPhone, press and hold opens the same view as a sheet. |
-| **Control** | Send prompts, Interrupt (Esc), Focus, Kill. In-app sessions are driven through node-pty; sessions in Terminal.app via AppleScript, matched by tty. Broadcast to many sessions by clicking the mother bubble. |
+| **Press and hold** | Hold a session bubble (about 0.5 s, without moving) to open a dropdown: the **skills** it used, **slash commands** and **tools** with counts, **what it does** (its latest `/compact` summary rendered as markdown; otherwise its first and latest prompt and latest reply) and the **CLAUDE.md** instructions it runs under. The transcript is parsed incrementally. On iPhone, a session's Details button opens the same view as a sheet. |
+| **Control** | Send prompts, Interrupt (Esc), Focus, Kill. In-app sessions are driven through node-pty; sessions in Terminal.app via AppleScript, matched by tty. Text for a tmux session that is long or has line breaks goes in as one bracketed paste (then Enter), so Claude Code gets all of it with its line breaks; short one-liners are typed. Broadcast to many sessions by clicking the mother bubble. |
 | **Slash commands** | Right-click a session, or click its ⋯ menu, for all built-in commands plus your own `~/.claude` and project skills/commands. Quick chips: `/compact /context /cost /doctor /skills /model`. Typing `/` in the prompt box autocompletes. `/clear` and `/exit` ask for confirmation. |
 | **All sessions** | Lists every past session, the same set `claude --resume` shows, with search. **Click to resume** in an in-app terminal with `--dangerously-skip-permissions`; the folder-trust prompt is answered automatically. An **auto** toggle also shows `claude -p` runs. Older sessions with the same name as a newer one (left by a handoff or session refresh) show **replaced**; per name the current one and one replaced copy are kept, older copies go to the Trash, but only once they are more than 7 days old and their session has ended (never a running or resumed session, see CLAUDE.md). |
 | **Code map** | **Code map** in a session's menu opens an interactive knowledge graph of that session's project: every file, function and module, how they call and import each other, and the main areas (communities), with search and click-through. It is built by [Graphify](https://github.com/Graphify-Labs/graphify) (Apache-2.0): it parses the code locally with tree-sitter (vendored, minified and build files skipped), then groups it into areas and names them with whatever model it finds, such as the Claude Code CLI (only area and symbol names are sent). Usually under a minute. Install it once with `uv tool install graphifyy`. The map is saved in `~/.mesh/codemap/<project>/` (the project folder isn't touched) and rebuilt when the project has newer commits; a project that keeps its own Graphify graph (`graphify install --project`) is shown from there. The window has **Rebuild**, **Report** (key concepts and suggested questions), **Open in browser** and **Show in Finder**. A session on the other Mac is mapped there. |
 | **Rename / agents** | Rename any session: running ones get `/rename`, others get a `custom-title` record. **Convert to agent** runs `claude --bg --resume <id>`. The **Agents** list comes from `claude agents --json`, with attach, logs and stop. |
-| **Terminals** | xterm.js terminals with tabs, Split/Grid views and a resizable dock. ⌘V pastes Finder files as escaped paths and screenshots as saved PNG paths; Finder drag-drop also works. Notes-style editing keys: ⌘Z undo, ⌘←/→ line start/end, ⌘⇧←/→ select to line start/end (then ⌫ deletes it, typing replaces it, ⌘C copies it), ⌘⌫ delete to line start, ⌥←/→ and ⌥⌫ by word. Text colour themes (Dracula by default, Catppuccin Mocha, Tokyo Night, Gruvbox Dark, Nord, Mesh classic) are picked from the mother star's menu; the terminal itself is see-through, so it always has the Mesh background. The font is Apple's SF Mono, loaded from `/System/Library/Fonts` (Menlo if it's missing). |
+| **Terminals** | xterm.js terminals with tabs, Split/Grid views and a resizable dock. ⌘V pastes Finder files as escaped paths and screenshots as saved PNG paths; Finder drag-drop also works. Notes-style editing keys: ⌘Z undo, ⌘←/→ line start/end, ⌘⇧←/→ select to line start/end (then ⌫ deletes it, typing replaces it, ⌘C copies it), ⌘⌫ delete to line start, ⌥←/→ and ⌥⌫ by word. Text colour themes (Dracula by default, Catppuccin Mocha, Tokyo Night, Gruvbox Dark, Nord, Mesh classic) are picked from the mother star's menu; the terminal itself is see-through, so it always has the Mesh background. The font is Apple's SF Mono, loaded from `/System/Library/Fonts` (Menlo if it's missing). Each tab says which Mac the session runs on and what kind it is, like the Sessions list (e.g. "Mac mini · command session", or script / Hermes / helper / terminal; "in tmux" is in the tooltip). Switching back to a tab shows its newest output unless you had scrolled up there. A mirrored terminal of the other Mac reconnects by itself after a dead connection (the host pings each stream every 15 s; 40 s of silence means reconnect), and a terminal opened from a snapshot (the other Mac, the phone) keeps the full-screen and mouse modes, so the wheel scrolls Claude Code there too. |
 | **Chat theme** | Optional. Pick **Theme → Chat** in the mother star's menu (kept per machine; **Default** brings the usual look back unchanged). The Sessions panel becomes a messenger-style chat list (avatar in the session's colour, latest line, time, unread badge, a typing indicator while it works, All / Unread / Working filters and search) and each session's terminal panel a chat room: your prompts on the right, replies on the left, tool calls as one grey line each. The input bar sends through the same path as the Control box; the room header's terminal button switches that session back to the real terminal. Messages come from the end of the transcript; Hermes sessions show their activity log. The label can be changed with `chatThemeName` in mesh.local.json. |
 | **Pixel mode** | ⌘P switches to a lightweight retro renderer: low-res, 30 fps, same features. |
 | **Notifications** | Optional macOS notifications when a session finishes, errors or waits for input. |
@@ -193,6 +193,10 @@ main.js        Electron main: window, node-pty terminals, AppleScript control, h
 collector.js   Session registry + incremental transcript tailing → spend/speed/health snapshot
 hermes-sessions.js  Hermes Agent sessions in tmux panes: pane ↔ Hermes session, status from its hook, numbers from state.db
 session-refresh.js  Session refresh: handoff → fresh session → verification → swap, nightly, context cap, idle park, on demand
+codemap.js     Code map: builds and caches a session project's Graphify knowledge graph (window: renderer/codemap.html)
+fs-guard.js    Keeps the app responsive when macOS stalls on its protected folders (Desktop, Documents, iCloud Drive…)
+tmux-panes.js  Sessions in tmux panes: streamed while watched, snapshot on open, send-keys / bracketed paste, resize
+transcript-stamps.js  Times beside prompts and replies, from the transcript
 lineage.js          Session lineage: one id for every generation of a refreshed session (token board rows, handoff stamp)
 preload.js     window.api bridge (contextIsolation)
 transcript-chat.js  A session's last messages from its transcript tail, for the chat theme
@@ -218,7 +222,8 @@ renderer/
 build/         App icon (mkicon.js generates icon.icns)
 docs/          README screenshots
 install.sh     Build → sign → install to /Applications → relaunch
-scripts/       builder-config.js: electron-builder config with your name and bundle id
+scripts/       builder-config.js: electron-builder config with your name and bundle id;
+               smoke.js: CI smoke test (launch with a throwaway data folder, check it renders, open a terminal)
 local/         (gitignored) your own add-ons, loaded if present
 ```
 
@@ -229,6 +234,8 @@ npm install            # Electron 44 + node-pty (allow its install script)
 npx electron-rebuild -f -w node-pty
 npm start              # run from source
 bash install.sh        # build, sign, install to /Applications, relaunch
+node scripts/smoke.js <app executable> shot.png   # the CI smoke test on a packaged build
+SMOKE_APP=. node scripts/smoke.js "$(node -p "require('electron')")" shot.png   # …or on this source checkout
 ```
 
 `install.sh` signs with a local self-signed identity named by `signId` in mesh.local.json (default **"Mesh Local Signing"**) if it is in the login keychain. A stable signature means macOS remembers file-access permissions (and a one-time Full Disk Access grant) across rebuilds. Without the identity it falls back to ad-hoc signing.
@@ -263,6 +270,7 @@ Notes:
 - **One lineage, one copy.** Mesh never opens a conversation that already runs on either Mac, nor an older generation of a session whose newer one runs. A watch checks both Macs every minute: if a conversation or a lineage runs twice, it alerts once per 6 hours (the `usageAlert` command). A refresh hand-over in progress doesn't count.
 - **Memory details.** Right-click a memory pill (This Mac / the other Mac) for the breakdown Activity Monitor shows (app, wired, compressed, cached, free), swap, memory pressure, the biggest apps and the SSD's free space.
 - **Grid order.** Cards run busy first, then by most recent use; sessions unused for a while move to the back.
+- **Simple view blink.** Running cards blink a green border on and off (0.8 s), cards waiting for you a yellow one (1.6 s). It's the only animation Simple view keeps; with Reduce Motion the border stays steady.
 - **iPhone: sessions, not the mesh.** The phone page works like the Claude app: no mesh animation and no tab bar; the session's live terminal (Mesh terminals and tmux panes alike) fills the screen under a round ☰ and a title pill, with a floating input. ☰ or a drag from the left pulls the conversation aside as a rounded card that follows the finger, revealing the drawer underneath: Grid, All sessions, then every session (busy first, then most recent; a spinner while working, a blue dot when it waits for you). Opening the app (or coming back to it) shows "Connecting to your Mac…" until live data arrives, then "Can't reach your Mac" after 8 s.
 - **Each device gets its own terminal size.** The device you're using sets a session's size, as if the session ran there: on a Mac, typing, clicking, scrolling or switching to the Mesh window; on the phone, opening a session, turning the phone, coming back to the app or touching the terminal (at a readable 10.5pt font). Claude Code redraws for that size. The other devices show that grid scaled until they're used again.
 - **Prompt times reach back further.** The times beside prompts and replies come from the last 64 MB of the transcript, then only from what's appended (transcript-stamps.js); long lines such as pasted images are skipped. With 8 MB, a session full of screenshots had times for its last 40 minutes only.
