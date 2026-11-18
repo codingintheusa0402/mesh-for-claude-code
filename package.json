@@ -79,7 +79,7 @@
       "live-cdp.js",
       "live-job.js",
       "phone-server.js",
-      "peer.js",
+      "peer.js", "peer-config.js", "view-peers.js",
       "handoff.js",
       "hangar-main.js",
       "tmux-panes.js",
