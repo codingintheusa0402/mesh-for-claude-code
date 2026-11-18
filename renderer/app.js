@@ -979,8 +979,8 @@ function mirrorTerm(p) {
   // only real keystrokes go back: xterm's automatic replies to terminal queries (device attributes, cursor
   // position, focus, colour reports) are already answered by the host's own terminal, and would land as typed text
   const isReport = d => /^\x1b\[[?>=]?[\d;]*[cnRtIOy]$/.test(d) || /^\x1b\[[IO]$/.test(d) || d.startsWith('\x1b]') || d.startsWith('\x1bP');
-  term.onData(d => { if (!isReport(d)) window.api.pty.write(p.id, d); });
-  const send = d => window.api.pty.write(p.id, d); wireEditKeys(term, send);
+  term.onData(d => { if (!isReport(d)) termWrite(p.id, d); });
+  const send = d => termWrite(p.id, d); wireEditKeys(term, send);
   // our own tmux panes use this view too: their files stay on this machine; only the other machine's terminals get an upload
   el.addEventListener('paste', async e => { e.preventDefault(); e.stopPropagation(); const r = await clipboardInsert(!!p.onPeer); if (r.text) term.paste(r.text); }, true);
   el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('dropping'); });
@@ -1045,13 +1045,37 @@ function windowUsed(e) {
   if (e.type === 'keydown' && (e.metaKey || ['Meta', 'Shift', 'Alt', 'Control', 'CapsLock'].includes(e.key))) return;
   for (const [, t] of terms) if (t.term.hasSelection()) return;
   if (e.type === 'mouseup' && (getSelection() || '').toString()) return;
+  // the click that switches tabs runs before the new tab is shown: check again once it is (2026-11-18: a terminal last
+  // sized by the other Mac or the phone kept that size until you scrolled)
+  setTimeout(() => claimVisible(e.type), 120);
   if (Date.now() - lastUse < 700) return; lastUse = Date.now();
+  claimVisible(e.type);
+}
+function claimVisible(why) {
   for (const [id, t] of terms) {
     if (!termVisible(t)) continue;
     // a host build that can't resize (or didn't confirm a minute ago) is left alone: asking again would flip the size back and forth
-    if (t.peer && !t.driving && (t.local || peerCanResize()) && !(t.noClaimUntil > Date.now())) { t.driving = true; t.sentCols = t.sentRows = 0; fitOwn(id, t); }
-    else if (!t.peer && t.remote) { t.remote = false; fitOwn(id, t); }
+    if (t.peer && !t.driving && (t.local || peerCanResize()) && !(t.noClaimUntil > Date.now())) { holdKeys(t, 1200); t.driving = true; t.sentCols = t.sentRows = 0; fitOwn(id, t); }
+    else if (!t.peer && t.remote) { holdKeys(t, 400); t.remote = false; fitOwn(id, t); }
   }
+}
+// Keys typed while a terminal changes to this window's size wait until the new size is in place and Claude Code has
+// redrawn for it, then go out in order (2026-11-18: typing first left the text drawn over the old layout).
+function holdKeys(t, ms) { t.holdUntil = Date.now() + ms; }
+function termWrite(id, d) {
+  const t = terms.get(id);
+  if (t && t.holdUntil > Date.now()) {
+    (t.held = t.held || []).push(d);
+    clearTimeout(t.holdT); t.holdT = setTimeout(() => releaseKeys(id), t.holdUntil - Date.now());
+    return;
+  }
+  window.api.pty.write(id, d);
+}
+function releaseKeys(id) {
+  const t = terms.get(id); if (!t) return;
+  t.holdUntil = 0; clearTimeout(t.holdT);
+  const h = t.held || []; t.held = [];
+  for (const d of h) window.api.pty.write(id, d);
 }
 // (not window focus: bringing the app to the front — e.g. `open` over ssh — is not using it)
 ['keydown', 'mouseup', 'wheel'].forEach(ev => addEventListener(ev, windowUsed, true));
@@ -1078,7 +1102,7 @@ window.api.peerTerm.onSize((id, i) => {
   const t = terms.get(id); if (!t) return;
   t.hostCols = i.cols; t.hostRows = i.rows;
   const asked = t.driving && t.asked ? t.asked.indexOf(`${i.cols}x${i.rows}`) : -1;
-  if (asked >= 0) t.asked.splice(0, asked + 1);                       // our own request, confirmed (a newer one may be on its way)
+  if (asked >= 0) { t.asked.splice(0, asked + 1); if (t.holdUntil) { clearTimeout(t.holdT); t.holdT = setTimeout(() => releaseKeys(id), 220); } }   // our own request, confirmed (a newer one may be on its way)
   else if (!(t.driving && i.cols === t.cols && i.rows === t.rows)) { t.driving = false; t.cols = i.cols; t.rows = i.rows; }   // the host (or a phone) set another size
   gridInLine(t, i.cols, i.rows);
 });
@@ -1111,8 +1135,8 @@ async function newTerm(opts) {
   const ser = new SerializeAddon.SerializeAddon(); term.loadAddon(ser);
   term.open(el.querySelector('.xt'));
   wireOsc52(term);
-  term.onData(d => window.api.pty.write(info.id, d));
-  const send = d => window.api.pty.write(info.id, d); wireEditKeys(term, send);
+  term.onData(d => termWrite(info.id, d));
+  const send = d => termWrite(info.id, d); wireEditKeys(term, send);
   // ⌘V: Finder-copied files → their paths, screenshot/image → saved PNG path, else plain text.
   // (Ctrl+V still goes straight to Claude Code, which reads image clipboards itself.)
   el.addEventListener('paste', async e => {

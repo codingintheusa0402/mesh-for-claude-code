@@ -663,7 +663,7 @@ $('#navBtn').onclick = () => toggleNav(); $('#scrim').onclick = () => toggleNav(
     const t = e.touches[0]; open = document.body.classList.contains('navOpen'); sx = null; mode = null;
     // like the Claude app: a swipe to the right opens it from anywhere, over the terminal too (the terminal only keeps
     // vertical drags); text boxes, the key row (it scrolls sideways), the grid and sheets keep their own gestures
-    if (!open && t.clientX >= 40 && e.target.closest('textarea, input, .keys, #grid, .sheet')) return;
+    if (!open && t.clientX >= 40 && e.target.closest('textarea, input, .keys, .sheet')) return;
     onTerm = t.clientX >= 40 && !!e.target.closest('#pxt, #xt');
     if (!open) renderDrawer();
     sx = lastX = t.clientX; sy = t.clientY; st = Date.now(); w = D.offsetWidth || 300; window.__navDrag = true;
@@ -671,12 +671,18 @@ $('#navBtn').onclick = () => toggleNav(); $('#scrim').onclick = () => toggleNav(
   addEventListener('touchmove', e => {
     if (sx == null) return; const t = e.touches[0], dx = t.clientX - sx, dy = t.clientY - sy; lastX = t.clientX;
     const need = onTerm && !open ? 16 : 10, ratio = onTerm && !open ? 2 : 1.4;   // over the terminal: clearly sideways only
-    if (!mode) { if (Math.abs(dx) > need && Math.abs(dx) > Math.abs(dy) * ratio && (open ? dx < 0 : dx > 0)) mode = 'drag'; else if (Math.abs(dy) > 12 || Math.abs(dx) > 10) { sx = null; return; } else return; }
+    // like the Mac window: right to left shows the session board (Grid), left to right on the board goes back. The drawer
+    // stays on left-to-right everywhere else, and on the board from the left edge or ☰
+    if (!mode && !open && Math.abs(dx) > need && Math.abs(dx) > Math.abs(dy) * ratio && (dx < 0 ? view !== 'grid' : view === 'grid' && sx >= 40)) { mode = 'page'; return; }
+    if (mode === 'page') return;
+    if (!mode) { if (Math.abs(dx) > need && Math.abs(dx) > Math.abs(dy) * ratio && (open ? dx < 0 : dx > 0) && !(view === 'grid' && sx >= 40)) mode = 'drag'; else if (Math.abs(dy) > 12 || Math.abs(dx) > 10) { sx = null; return; } else return; }
     place(open ? Math.min(0, dx) : Math.min(0, -w + dx));
   }, { passive: true });
   addEventListener('touchcancel', () => { window.__navDrag = false; if (mode === 'drag') { cancelAnimationFrame(raf); raf = 0; want = null; for (const el of [A, SC, D]) el.removeAttribute('style'); } sx = null; mode = null; }, { passive: true });
   addEventListener('touchend', e => {
-    window.__navDrag = false; if (sx == null || mode !== 'drag') { sx = null; return; }
+    window.__navDrag = false;
+    if (mode === 'page') { const dx = lastX - sx; if (Math.abs(dx) > 60) { const to = dx < 0 ? 'grid' : (localStorage.getItem('mesh.prevView') || 'split'); if (dx < 0) localStorage.setItem('mesh.prevView', view === 'grid' ? 'split' : view); setTab(to); } sx = null; mode = null; return; }
+    if (sx == null || mode !== 'drag') { sx = null; return; }
     const dx = lastX - sx, v = dx / Math.max(1, Date.now() - st);   // px per ms (the last move, not touchend's point)
     cancelAnimationFrame(raf); raf = 0; want = null;
     A.style.transition = SC.style.transition = D.style.transition = A.style.transform = A.style.borderRadius = SC.style.opacity = SC.style.pointerEvents = D.style.transform = D.style.opacity = '';
