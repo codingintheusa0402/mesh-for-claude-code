@@ -1308,6 +1308,22 @@ function setSimple(on) {
 }
 $('#simpleBtn').onclick = () => { lockSimple = false; setSimple(!isSimple()); toast(isSimple() ? 'Simple mode on: no animation' : 'Simple mode off'); };
 setSimple(store.get('simple', false));
+// a two-finger trackpad swipe over the Mesh panel: right to left shows the session board (Simple mode), left to right brings
+// the Mesh back. One switch per gesture (it ends when its wheel events pause). Horizontal only, so scroll-zoom is untouched.
+{ let acc = 0, t = 0, lock = false;
+  $('#meshWrap').addEventListener('wheel', e => {
+    if (e.ctrlKey || Math.abs(e.deltaX) <= Math.abs(e.deltaY) * 1.5) return;
+    e.preventDefault(); e.stopPropagation();
+    const now = performance.now(), gap = now - t; t = now;
+    if (gap > 250) { acc = 0; lock = false; }
+    if (lock) return;
+    acc += e.deltaX;
+    if (Math.abs(acc) < 90) return;
+    lock = true;
+    const want = acc > 0;                                     // fingers moved right to left → board
+    if (want !== isSimple()) { lockSimple = false; setSimple(want); }
+  }, { capture: true, passive: false });
+}
 $('#bell').classList.toggle('on', bell);
 $('#bell').onclick = () => { bell = !bell; store.set('bell', bell); $('#bell').classList.toggle('on', bell); toast(bell ? 'Notifications on' : 'Notifications off'); };
 addEventListener('keydown', e => {
