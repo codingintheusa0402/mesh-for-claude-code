@@ -259,3 +259,16 @@ button svg.ic { pointer-events: none; }
 #top { min-height: var(--hdr); height: calc(env(safe-area-inset-top) + var(--hdr)); box-sizing: border-box; padding-top: env(safe-area-inset-top); padding-bottom: 4px; }
 body[data-view="split"] #split, body[data-view="grid"] #grid { top: calc(env(safe-area-inset-top) + var(--hdr) + 4px) !important; }
 body.kb[data-view="split"] #split { top: calc(env(safe-area-inset-top) + var(--hdr)) !important; }
+
+/* 2026-11-18, closer to the Claude app: the drawer underneath slides in a little from the left and brightens while the
+   card moves (parallax); one spring-like curve for card, drawer and scrim; GPU layers only (transform/opacity) */
+body #drawer { transform: translate3d(-22%,0,0) !important; opacity: .35; will-change: transform, opacity;
+  transition: transform .42s cubic-bezier(.22,1,.36,1), opacity .42s cubic-bezier(.22,1,.36,1) !important; }
+body.navOpen #drawer { transform: translate3d(0,0,0) !important; opacity: 1; }
+body #app { transition: transform .42s cubic-bezier(.22,1,.36,1), border-radius .42s cubic-bezier(.22,1,.36,1), box-shadow .42s; backface-visibility: hidden; }
+body.navOpen #app { transform: translate3d(min(80vw, 340px),0,0); }
+body #scrim { transition: opacity .42s cubic-bezier(.22,1,.36,1) !important; }
+#drawer .dRow, #drawer .dItem { transition: background .15s; -webkit-tap-highlight-color: transparent; }
+#drawer .dRow:active, #drawer .dItem:active { background: rgba(255,255,255,.14); }
+/* terminal: crisper glyphs and a little side padding so text doesn't touch the card edge */
+#pxt .xterm, #xt .xterm { -webkit-font-smoothing: antialiased; padding: 0 4px; }

@@ -388,11 +388,12 @@ let termId = null, term = null, tes = null;
 const KEYS = [['Esc', '\x1b'], ['Tab', '\t'], ['↑', '\x1b[A'], ['↓', '\x1b[B'], ['←', '\x1b[D'], ['→', '\x1b[C'], ['⏎', '\r'], ['^C', '\x03'], ['⇧Tab', '\x1b[Z']];
 const termControls = () => `<div class="keys">${KEYS.map(([l, k]) => `<button data-k="${encodeURIComponent(k)}">${l}</button>`).join('')}</div>
     <div class="tin"><input class="tIn" placeholder="Type, then Send (adds Enter)" autocapitalize="off" autocorrect="off" enterkeyhint="send"><button class="tAtt" aria-label="Attach a photo or file">${ICON.plus}</button><button class="primary tGo" aria-label="Send">${ICON.up}</button></div>`;
+const TLH = 1.12;   // terminal line height: a little air between lines, like the Claude app's text
 function mountTerm(host, id, box, sid) {
   termId = id; tes && tes.close(); if (term) { term._ro && term._ro.disconnect(); term._stamps && term._stamps.dispose(); term.dispose(); }
   const W = host.clientWidth - 8 - (window.attachTermStamps && sid ? 40 : 0);
-  term = new Terminal({ fontFamily: 'Menlo, monospace', fontSize: 9, convertEol: false, disableStdin: false, scrollback: 20000,
-    theme: { background: '#000000', foreground: '#e6e9f2', cursor: '#ede6d6' } });
+  term = new Terminal({ fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace', fontSize: 9, lineHeight: TLH, fontWeightBold: '600', letterSpacing: 0, convertEol: false, disableStdin: false, scrollback: 20000,
+    theme: { background: '#000000', foreground: '#ececec', cursor: '#ede6d6', selectionBackground: 'rgba(255,255,255,.25)' } });
   term.open(host); touchScroll(host);
   // a time column beside each prompt / reply (term-stamps.js; times from the session's transcript on the Mac)
   if (window.attachTermStamps && sid) term._stamps = attachTermStamps(term, host, { sid: () => sid, fetch: s => api('/api/stamps?sid=' + encodeURIComponent(s)) });
@@ -415,7 +416,7 @@ function mountTerm(host, id, box, sid) {
   // coming back to the app or touching the terminal resizes the session to this screen at a readable font, and Claude
   // Code redraws for it. When another device takes the size, its grid is shown scaled until the phone is used again.
   const PF = 10.5, mine = () => { const w = host.clientWidth - 10 - (term._stamps ? 40 : 0), h = host.clientHeight - 8;
-    return { cols: Math.max(30, Math.floor(w / (PF * .602))), rows: Math.max(10, Math.floor(h / (PF * 1.17))) }; };
+    return { cols: Math.max(30, Math.floor(w / (PF * .602))), rows: Math.max(10, Math.floor(h / (PF * 1.17 * TLH))) }; };
   let lastClaim = 0;
   const claim = force => { if (!term || termId !== id || document.hidden) return; const d = mine(); if (d.cols < 30 || host.clientHeight < 60) return;
     if (!force && term.cols === d.cols && term.rows === d.rows) return; if (Date.now() - lastClaim < 800 && !force) return; lastClaim = Date.now();
@@ -649,24 +650,36 @@ $('#navBtn').onclick = () => toggleNav(); $('#scrim').onclick = () => toggleNav(
 // drag it left to push it back; on release it snaps open or shut (a quick flick counts too)
 { let sx = null, sy = null, st = 0, mode = null, w = 1, open = false; const D = $('#drawer'), SC = $('#scrim'), A = $('#app');
   // like the Claude app: the drawer lies underneath and the conversation slides right as a rounded card
-  const place = off => { const x = w + off, f = Math.max(0, Math.min(1, x / w)); A.style.transition = SC.style.transition = 'none';
-    A.style.transform = `translateX(${x}px)`; A.style.borderRadius = `${Math.round(28 * f)}px`; SC.style.opacity = String(f); SC.style.pointerEvents = 'none'; };
+  // the finger drives three layers (once per frame): the card slides and rounds its corners, the drawer underneath comes in
+  // from a little to the left and brightens (parallax), the scrim fades
+  let want = null, raf = 0, onTerm = false, lastX = 0;
+  const paint = () => { raf = 0; if (want == null) return; const x = w + want, f = Math.max(0, Math.min(1, x / w));
+    A.style.transition = SC.style.transition = D.style.transition = 'none';
+    A.style.transform = `translate3d(${x}px,0,0)`; A.style.borderRadius = `${Math.round(28 * f)}px`;
+    D.style.transform = `translate3d(${Math.round(-w * 0.22 * (1 - f))}px,0,0)`; D.style.opacity = String(0.35 + 0.65 * f);
+    SC.style.opacity = String(f); SC.style.pointerEvents = 'none'; };
+  const place = off => { want = off; if (!raf) raf = requestAnimationFrame(paint); };
   addEventListener('touchstart', e => {
     const t = e.touches[0]; open = document.body.classList.contains('navOpen'); sx = null; mode = null;
-    if (!open && !(t.clientX < 40 || !e.target.closest('#pxt, #xt, textarea, input, .keys, #grid'))) return;
+    // like the Claude app: a swipe to the right opens it from anywhere, over the terminal too (the terminal only keeps
+    // vertical drags); text boxes, the key row (it scrolls sideways), the grid and sheets keep their own gestures
+    if (!open && t.clientX >= 40 && e.target.closest('textarea, input, .keys, #grid, .sheet')) return;
+    onTerm = t.clientX >= 40 && !!e.target.closest('#pxt, #xt');
     if (!open) renderDrawer();
-    sx = t.clientX; sy = t.clientY; st = Date.now(); w = D.offsetWidth || 300; window.__navDrag = true;
+    sx = lastX = t.clientX; sy = t.clientY; st = Date.now(); w = D.offsetWidth || 300; window.__navDrag = true;
   }, { passive: true });
   addEventListener('touchmove', e => {
-    if (sx == null) return; const t = e.touches[0], dx = t.clientX - sx, dy = t.clientY - sy;
-    if (!mode) { if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.4 && (open ? dx < 0 : dx > 0)) mode = 'drag'; else if (Math.abs(dy) > 12 || Math.abs(dx) > 10) { sx = null; return; } else return; }
+    if (sx == null) return; const t = e.touches[0], dx = t.clientX - sx, dy = t.clientY - sy; lastX = t.clientX;
+    const need = onTerm && !open ? 16 : 10, ratio = onTerm && !open ? 2 : 1.4;   // over the terminal: clearly sideways only
+    if (!mode) { if (Math.abs(dx) > need && Math.abs(dx) > Math.abs(dy) * ratio && (open ? dx < 0 : dx > 0)) mode = 'drag'; else if (Math.abs(dy) > 12 || Math.abs(dx) > 10) { sx = null; return; } else return; }
     place(open ? Math.min(0, dx) : Math.min(0, -w + dx));
   }, { passive: true });
-  addEventListener('touchcancel', () => { window.__navDrag = false; }, { passive: true });
+  addEventListener('touchcancel', () => { window.__navDrag = false; if (mode === 'drag') { cancelAnimationFrame(raf); raf = 0; want = null; for (const el of [A, SC, D]) el.removeAttribute('style'); } sx = null; mode = null; }, { passive: true });
   addEventListener('touchend', e => {
     window.__navDrag = false; if (sx == null || mode !== 'drag') { sx = null; return; }
-    const dx = e.changedTouches[0].clientX - sx, v = dx / Math.max(1, Date.now() - st);   // px per ms
-    A.style.transition = SC.style.transition = A.style.transform = A.style.borderRadius = SC.style.opacity = SC.style.pointerEvents = '';
+    const dx = lastX - sx, v = dx / Math.max(1, Date.now() - st);   // px per ms (the last move, not touchend's point)
+    cancelAnimationFrame(raf); raf = 0; want = null;
+    A.style.transition = SC.style.transition = D.style.transition = A.style.transform = A.style.borderRadius = SC.style.opacity = SC.style.pointerEvents = D.style.transform = D.style.opacity = '';
     toggleNav(open ? !(dx < -w * 0.3 || v < -0.5) : (dx > w * 0.3 || v > 0.5)); sx = null; mode = null;
   }, { passive: true });
 }
