@@ -22,7 +22,7 @@ const JOB_ID = /^[0-9]{8}-[0-9]{6}-[a-z0-9-]{1,40}$/;
 const ALIAS = /^[A-Za-z0-9._-]{1,64}$/;
 const SSH = () => process.env.MESH_VIEW_SSH || '/usr/bin/ssh';     // QA points this at a fake gate
 const SSH_OPTS = ['-o', 'BatchMode=yes', '-o', 'ServerAliveInterval=15', '-o', 'ConnectTimeout=10'];
-const MAX_TEXT = 64 * 1024;
+const MAX_TEXT = 16 * 1024;     // UTF-8 bytes; as base64url it stays under Windows' 32,767-char command line
 
 const nameOf = e => String(e.name || e.label || (() => { try { return new URL(e.url).hostname; } catch { return 'peer'; } })()).replace(/[^\w.-]+/g, '-').slice(0, 40) || 'peer';
 const aliasOf = url => { const m = /^ssh:\/\/([^/?#]+)\/?$/.exec(String(url || '')); return m && ALIAS.test(m[1]) ? m[1] : null; };
@@ -114,7 +114,7 @@ function createLink(entry, onChange) {
   const job = id => ((last && last.sessions) || []).find(s => s.id === id);
   async function send(id, text) {
     text = String(text || ''); if (!text) return { ok: false, err: 'empty' };
-    if (text.length > MAX_TEXT) return { ok: false, err: 'text too long' };
+    if (Buffer.byteLength(text, 'utf8') > MAX_TEXT) return { ok: false, err: 'text too long (16 KB max for this machine)' };
     if (kind === 'http') return httpReq('POST', '/api/send', { sid: id, text }).catch(e => ({ ok: false, err: e.message }));
     if (!JOB_ID.test(id)) return { ok: false, err: 'bad job id' };
     const j = job(id); if (j && j.status !== 'running') return { ok: false, err: `the job is ${j.status}: send only works while it runs` };
