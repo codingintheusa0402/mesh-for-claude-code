@@ -109,6 +109,7 @@ let cmdMenu = null;
 async function openCmdMenu(sid, x, y) {
   closeCmdMenu();
   const s = snap.sessions.find(q => q.sid === sid); if (!s) return;
+  if (s.viewPeer) { toast(`${s.name} runs on ${s.hostLabel}, a view-only machine: send a prompt or stop it from the session panel`); return; }
   const refreshCmds = s.pane || s.onPeer ? [{ cmd: 'Refresh now', desc: 'Handoff, then a fresh session with the same name, folder and model', group: 'Session', grp: 'refresh' },
     { cmd: 'Session refresh…', desc: 'Nightly refresh, per-session schedule, last refresh times', group: 'Session', grp: 'refreshcfg' }] : [];
   const all = [{ cmd: 'Code map', desc: "Interactive map of this session's project code: files, functions, how they connect (Graphify, builds in seconds)", group: 'Project', grp: 'codemap' },
@@ -170,7 +171,7 @@ $('#mesh').addEventListener('contextmenu', e => { const h = viz.hit(e); if (h &&
 
 // ---------------- panel: quick command chips + "/" autocomplete in the prompt box ----------------
 function enhanceCtl() {
-  const s = cur(), box = $('#pCtl'); if (!box || !s || box.querySelector('.cmd-chips')) return;
+  const s = cur(), box = $('#pCtl'); if (!box || !s || s.viewPeer || box.querySelector('.cmd-chips')) return;   // view-only machine: send and stop only
   const sec = box.querySelector('.sec');
   const chips = document.createElement('div'); chips.className = 'cmd-chips';
   chips.innerHTML = `<h3 style="margin-top:12px">Commands</h3><div class="btns">${QUICK_CMDS.map(c => `<button data-c="${c}">${c}</button>`).join('')}<button id="cAll">All commands…</button></div>

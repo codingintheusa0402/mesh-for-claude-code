@@ -55,7 +55,7 @@ let snap = { sessions: [], models: [], agents: [] }, selected = null, openTab = 
 // which machine serves this page: the Mac app, or the server program (server/mesh-server.js) — wording follows it
 const onServer = () => !!(snap.host && snap.host.kind === 'server');
 // a session running on the OTHER machine (merged in by peer.js): "on Mac" / "on server", greyed when offline
-const PEERTAG = s => s.onPeer ? ` · <b class="peerTag">on ${s.hostKind === 'mac' ? 'Mac' : 'server'}${s.offline ? ' (offline)' : ''}</b>` : '';
+const PEERTAG = s => s.viewPeer ? ` · <b class="peerTag">on ${esc(s.hostLabel)} · ${esc(s.offline ? 'offline' : s.jobStatus || 'job')}</b>` : s.onPeer ? ` · <b class="peerTag">on ${s.hostKind === 'mac' ? 'Mac' : 'server'}${s.offline ? ' (offline)' : ''}</b>` : '';
 const HOSTN = () => onServer() ? 'the server' : 'your Mac', INAPP = () => onServer() ? 'tmux' : 'in-app', TERMN = () => onServer() ? 'shell' : 'Terminal.app';
 // the native iPhone shell listens here: 'offline' → it tries the next paired host (Mac ↔ server)
 const native = msg => { try { webkit.messageHandlers.mesh.postMessage(msg); } catch { } };
@@ -65,7 +65,7 @@ viz.onTrash = (sid, phase) => {
   const s = snap.sessions.find(q => q.sid === sid);
   if (phase === 'refuse') return toast('Groups can\'t go in the black hole');
   if (!s) return phase === 'check' ? 'gone' : undefined;
-  if (phase === 'check') { if (!s.offline && (s.owner || (s.tty && s.kind !== 'bg') || s.onPeer)) return true; toast(`${s.name} is view-only`); return false; }
+  if (phase === 'check') { if (!s.viewPeer && !s.offline && (s.owner || (s.tty && s.kind !== 'bg') || s.onPeer)) return true; toast(`${s.name} is view-only`); return false; }
   if (phase === 'send') return api('/api/send', { sid: s.sid, text: '/exit' }).then(r => toast(r.ok === false || r.out === 'notfound' ? 'Failed' : `/exit → ${s.name}`));
   if (phase === 'stuck') toast(`${s.name} didn't exit`);
 };
@@ -224,6 +224,7 @@ function openSession(sid) { selected = sid; viz.selected = sid; openTab = 'sessi
 function renderSession(first) {
   const s = cur();
   if (!s) { if (first) sheet('session', `<div class="sh-h"><h2>Session ended</h2><button class="x">×</button></div>`); return; }
+  if (s.viewPeer) return renderViewSession(s);
   if (s.onPeer && s.offline) {
     const where = s.hostKind === 'mac' ? 'your Mac' : 'the server';
     sheet('session', `<div class="sh-h"><span class="dot offline"></span><h2>${esc(s.name)}</h2><button class="x">×</button></div>
@@ -270,6 +271,20 @@ function renderSession(first) {
     const task = prompt('Task for the agent (optional)', '') || '';
     toast('Starting agent…'); const r = await api('/api/convert', { sid: s.sid, task }); toast(r.ok ? 'Agent started' : 'Convert failed');
   };
+}
+// a job on a view-only machine (view-peers.js): send a prompt or stop it while it runs; nothing else
+function renderViewSession(s) {
+  const col = FAMILY_COLOR[s.family] || '#9fb4d8';
+  const meta = `<div class="meta"><span style="color:${col}">${esc(s.model || 'no model yet')}</span><span style="color:${HEALTH_COLOR[s.health] || '#999'}">${esc(s.offline ? 'offline' : s.jobStatus || s.health)}</span><span>${s.turns || 0} turns${s.jobCost ? ' · $' + s.jobCost.toFixed(2) : ''}</span><span class="peerTag">on ${esc(s.hostLabel)}</span></div>`;
+  if (sheetKind === 'session' && $('#vStats') && $('#vStats').dataset.sid === s.sid) { $('#vStats').innerHTML = meta + (s.last ? `<p class="m">${esc(s.last)}</p>` : ''); return; }
+  sheet('session', `<div class="sh-h"><span class="dot ${s.health}"></span><h2>${esc(s.name)}</h2><button class="x">×</button></div>
+    <div id="vStats" data-sid="${esc(s.sid)}">${meta}${s.last ? `<p class="m">${esc(s.last)}</p>` : ''}</div>
+    ${s.canSend ? `<textarea id="sText" rows="3" placeholder="Message ${esc(s.name)}…"></textarea>
+    <div class="row"><button class="primary" id="sSend">Send</button><button id="sInt">Stop job</button></div>` : '<div class="meta">Send and stop work only while the job runs.</div>'}
+    <div class="meta">${esc(s.hostLabel)} is a view-only machine: no terminal, no transcript, no resume.</div>`);
+  if (!s.canSend) return;
+  $('#sSend').onclick = async () => { const v = $('#sText').value.trim(); if (!v) return; const r = await api('/api/send', { sid: s.sid, text: v }); if (r.ok === false) return toast('Send failed' + (r.err ? ': ' + r.err : '')); $('#sText').value = ''; toast('Sent'); };
+  $('#sInt').onclick = async () => { if (!confirm(`Stop the job ${s.name}?`)) return; const r = await api('/api/interrupt', { sid: s.sid }); toast(r.ok === false ? 'Stop failed' + (r.err ? ': ' + r.err : '') : 'Stop sent'); };
 }
 async function runCmd(s, cmd) {
   if (/^\/(clear|exit)$/.test(cmd) && !confirm(`Run ${cmd} in ${s.name}? This can't be undone.`)) return;

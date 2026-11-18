@@ -22,6 +22,7 @@ const { Collector } = require(path.join(ROOT, 'collector'));
 const { createPhoneServer } = require(path.join(ROOT, 'phone-server'));
 const { createCore, linuxToken, HOME } = require(path.join(ROOT, 'core'));
 const { createPeer } = require(path.join(ROOT, 'peer'));
+const { createViewPeers } = require(path.join(ROOT, 'view-peers'));
 
 const MESH = require(path.join(ROOT, 'mesh-name')), APP_NAME = MESH.name;
 const USERDATA = process.env.MESH_USERDATA || path.join(HOME, '.mesh-server');   // env override: isolated test runs
@@ -167,13 +168,14 @@ async function tick() {
 }
 
 const peerLink = createPeer({ userData: USERDATA, selfKind: 'server' });   // the Mac (peer.json), one mesh for the iPhone
+const viewPeers = createViewPeers({ userData: USERDATA });                // view-only machines (peer.json mode "view")
 function main() {
   fs.mkdirSync(USERDATA, { recursive: true });
   cleanupStale();
   const cli = process.argv.includes('--pair') || process.argv.includes('--status');
   phone = createPhoneServer({
     root: ROOT, userData: USERDATA, ptys, ptyBus, termOpen, termClose, passive: cli,
-    peer: cli ? null : peerLink,
+    peer: cli ? null : peerLink, viewPeers: cli ? null : viewPeers,
     getSnap: () => lastSnap,
     getHistory: () => core.listHistory(),
     details: sid => core.sessionDetails(sid),
@@ -190,10 +192,10 @@ function main() {
   if (process.argv.includes('--pair')) return pair();
   if (process.argv.includes('--status')) return status();
   phone.setEnabled(true);
-  peerLink.start();
+  peerLink.start(); viewPeers.start();
   log(`${APP_NAME} server on :${phone.status().port} — ${phone.status().urls.map(u => u.url.replace(/t=.*/, 't=…')).join(', ') || 'no Tailscale address yet'}`);
   tick();
-  process.on('SIGTERM', () => { for (const id of [...streams.keys()]) { streams.get(id).n = 1; termClose(id); } process.exit(0); });
+  process.on('SIGTERM', () => { viewPeers.stop(); for (const id of [...streams.keys()]) { streams.get(id).n = 1; termClose(id); } process.exit(0); });
 }
 function pair() {
   const urls = phone.status().urls.filter(u => /Tailscale/.test(u.kind));

@@ -510,7 +510,8 @@ function sessInterrupt(s) {
   if (s.onPeer) return window.api.peer.interrupt(s.sid);
   return s.owner ? window.api.pty.write(s.owner, '\x1b') : window.api.ext.interrupt(s.tty);
 }
-const peerTag = s => s.onPeer ? `<span class="tag peer" title="Runs on ${esc(s.hostLabel)}">${esc(s.hostLabel)}${s.offline ? ' · offline' : ''}</span>`
+const peerTag = s => s.viewPeer ? `<span class="tag peer" title="Job on ${esc(s.hostLabel)} (view-only machine: send and stop only)">${esc(s.hostLabel)} · ${esc(s.offline ? 'offline' : s.jobStatus || 'job')}</span>`
+  : s.onPeer ? `<span class="tag peer" title="Runs on ${esc(s.hostLabel)}">${esc(s.hostLabel)}${s.offline ? ' · offline' : ''}</span>`
   : s.hostLabel ? `<span class="tag peer" title="Runs on this machine (${s.owner ? 'in-app' : s.kind === 'bg' ? 'background' : 'Terminal'})">${esc(s.hostLabel)}</span>` : '';
 
 // bubble colour picker: Auto (by model) + the five palettes in organism.js (PICK_COLORS)
@@ -542,7 +543,7 @@ function renderPanel() {
   box.innerHTML = `
   <div class="ph"><div class="row1"><span class="hdot h-${s.health}"></span><h2 title="${esc(s.name)}">${esc(s.name)}</h2><button class="close" id="pClose">×</button></div>
     <div class="meta"><span style="color:${col}">${esc(s.model || 'no model yet')}</span><span>${s.health}${s.status && s.status !== 'busy' && s.status !== 'idle' ? ' (' + esc(s.status) + ')' : ''}</span>
-    <span>pid ${s.pid}</span><span>${s.tty ? s.tty.replace('/dev/', '') : 'no tty'}</span><span>${s.onPeer ? 'on ' + esc(s.hostLabel) : s.owner ? 'in-app' : s.kind === 'bg' ? 'background' : 'Terminal.app'}</span>
+    <span>${s.viewPeer ? "job " + esc(s.jobId) : "pid " + s.pid}</span><span>${s.tty ? s.tty.replace('/dev/', '') : 'no tty'}</span><span>${s.onPeer ? 'on ' + esc(s.hostLabel) : s.owner ? 'in-app' : s.kind === 'bg' ? 'background' : 'Terminal.app'}</span>
     ${s.remote ? '<span>remote-control on</span>' : ''}<span>v${esc(s.version)}</span><span title="${esc(s.cwd)}">${esc(s.cwd.replace(/^\/Users\/[^/]+/, '~'))}</span></div></div>
   <div class="sec"><h3>Bubble colour</h3><div class="swatches">${colorSwatches(s)}</div></div>
   <div class="sec"><h3>Live</h3><div class="kpis">
@@ -589,7 +590,7 @@ function drawSpark(c, data, col, peak) {
 // Controls stay mounted while stats re-render, so typing isn't interrupted.
 // ---------------- move a session to the other Mac (main.js → handoff.js) ----------------
 // shown when the other Mac is paired and online, for a session that runs (or ran) in a terminal, not a background agent
-const canMove = s => !!(s && snap.peer && snap.peer.online && window.api.handoff && s.kind !== 'bg' && (s.onPeer ? !s.offline : true));
+const canMove = s => !!(s && !s.viewPeer && snap.peer && snap.peer.online && window.api.handoff && s.kind !== 'bg' && (s.onPeer ? !s.offline : true));
 async function moveSession(s) {
   const to = s.onPeer ? 'this Mac' : snap.peer.label, nm = s.name || s.sid.slice(0, 8);
   if (s.health === 'working' && !confirm(`${nm} is in the middle of a turn. Moving stops it now and resumes it on ${to}. Move anyway?`)) return;
@@ -609,8 +610,32 @@ if (window.api.handoff) {
   });
 }
 
+// a job on a view-only machine (view-peers.js): its last line, send a prompt, stop. No terminal, transcript, move or resume.
+function renderViewCtl(s, box) {
+  const usd = s.jobCost ? ' · $' + s.jobCost.toFixed(2) : '';
+  box.innerHTML = `<div class="sec ctl"><h3>Control</h3>
+    ${s.last ? `<div class="note" style="margin-bottom:6px">${esc(s.last)}</div>` : ''}
+    <textarea id="cText" placeholder="${s.canSend ? 'Type a prompt for this job… (⌘↩ to send)' : 'Send and stop work only while the job runs'}"></textarea>
+    <div class="btns"><button class="primary" id="cSend">Send</button><button class="danger" id="cEsc" title="Stop this job">Stop job</button></div>
+    <div class="note">Job on ${esc(s.hostLabel)}: ${esc(s.offline ? 'offline' : s.jobStatus || '?')}, ${s.turns || 0} turn${s.turns === 1 ? '' : 's'}${usd}${s.sender ? ', sent from ' + esc(s.sender) : ''}. ${esc(s.hostLabel)} is a view-only machine: you can send a prompt or stop the job, nothing else (no terminal, no transcript).</div></div>`;
+  const ta = $('#cText');
+  $('#cSend').onclick = async () => {
+    const v = ta.value.trim(); if (!v) return;
+    const r = await sessSend(s, v);
+    if (r && r.ok === false) toast('Send failed: ' + (r.err || '')); else { ta.value = ''; viz.command(s.sid); toast('Sent to ' + s.name); }
+  };
+  ta.onkeydown = e => { if (e.key === 'Enter' && e.metaKey) { e.preventDefault(); $('#cSend').click(); } };
+  $('#cEsc').onclick = async () => {
+    if (!confirm(`Stop the job ${s.name} on ${s.hostLabel}?`)) return;
+    const r = await sessInterrupt(s);
+    toast(r && r.ok === false ? 'Stop failed: ' + (r.err || '') : 'Stop sent to ' + s.name);
+  };
+  if (!s.canSend) for (const id of ['#cSend', '#cEsc', '#cText']) $(id).disabled = true;
+}
+
 function renderCtl() {
   const s = cur(); const box = $('#pCtl'); if (!box || !s) return;
+  if (s.viewPeer) return renderViewCtl(s, box);
   const peer = !!s.onPeer, live = peer ? !s.offline && (s.owner || (s.tty && s.kind !== 'bg')) : false;
   const owned = !peer && !!s.owner, ext = !peer && !owned && s.tty && s.kind !== 'bg';
   box.innerHTML = `<div class="sec ctl"><h3>Control</h3>

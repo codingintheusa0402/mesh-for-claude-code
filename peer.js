@@ -7,10 +7,12 @@
 // Config: <userData>/peer.json  { "url": "http://100.x.y.z:47320", "token": "<the peer's phone token>",
 //                                 "kind": "mac" | "server", "label": "mini" (optional display name),
 //                                 "selfLabel": "MacMini" (optional — tags THIS machine's own sessions) }
+// or a list of such entries (peer-config.js): this module takes the first "full" one; "view" entries are view-peers.js.
 // Nothing here touches Electron.
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const { readPeers } = require('./peer-config');
 
 const POLL_MS = 4000, OFFLINE_KEEP_MS = 7 * 24 * 3600 * 1000;
 const MISSES_OFFLINE = 3;                   // one slow/failed poll is a hiccup; three in a row (~12 s) is offline
@@ -32,7 +34,7 @@ function createPeer({ userData, selfKind }) {
   let cfg = null, last = null, lastOk = 0, online = false, timer = null, misses = 0;
 
   function loadCfg() {
-    try { const c = JSON.parse(fs.readFileSync(file, 'utf8')); cfg = c && c.url && c.token ? c : null; } catch { cfg = null; }
+    try { const c = readPeers(userData).full; cfg = c && c.url && c.token ? c : null; } catch { cfg = null; }
     return cfg;
   }
   const kind = () => (cfg && cfg.kind) || (selfKind === 'server' ? 'mac' : 'server');

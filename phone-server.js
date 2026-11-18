@@ -42,7 +42,9 @@ function createPhoneServer(ctx) {
   };
 
   const peer = ctx.peer || null;
-  const view = s => peer && s ? peer.merge(s) : s;              // what the phone sees: local + the other machine
+  const viewPeers = ctx.viewPeers || null;                       // view-only machines (view-peers.js): cards + send/stop
+  const view = s => { if (peer && s) s = peer.merge(s); return viewPeers && s ? viewPeers.merge(s) : s; };   // what the phone sees: local + the other machine(s)
+  const viewSid = sid => !!(viewPeers && viewPeers.owns(sid));
   const remote = sid => !!(peer && sid && peer.owns(sid));
   const termId = p => { try { return decodeURIComponent(p.slice(10)); } catch { return p.slice(10); } };   // tmux pane ids (%0) arrive encoded
   const body = (req, max = 2e6) => new Promise(res => { let b = ''; req.on('data', c => { b += c; if (b.length > max) req.destroy(); }); req.on('end', () => { try { res(JSON.parse(b || '{}')); } catch { res({}); } }); });
@@ -83,6 +85,8 @@ function createPhoneServer(ctx) {
       const sid = u.searchParams.get('sid') || '';
       return json(res, 200, await (p === '/api/codemap' ? ctx.codemap.status(sid) : ctx.codemap.html(sid)));
     }
+    if (['/api/details', '/api/card', '/api/chat', '/api/stamps'].includes(p) && viewSid(u.searchParams.get('sid') || ''))   // view-only machine: no transcripts
+      return json(res, 200, p === '/api/stamps' ? [] : p === '/api/details' ? { ok: false, err: 'view-only machine: no details' } : null);
     if (p === '/api/details') {
       const sid = u.searchParams.get('sid') || '';
       if (remote(sid)) return json(res, 200, await peer.forward('GET', '/api/details', undefined, { sid }).catch(e => ({ ok: false, err: 'Couldn\'t reach the other Mac: ' + e.message })));
@@ -138,6 +142,7 @@ function createPhoneServer(ctx) {
     if (req.method !== 'POST') return json(res, 405, {});
     const b = await body(req, p === '/api/upload' ? 40e6 : 2e6);
     if (p === '/api/upload') {                                           // a file pasted/dropped into the peer's mirror of our terminal
+      if (viewSid(b.sid)) return json(res, 200, { ok: false, err: 'view-only machine: files are not sent there' });
       // from the iPhone: the file belongs on the machine that runs the session / terminal it's attached to
       if ((b.sid && remote(b.sid)) || (b.term && peer && peer.ownsTerm(b.term)))
         return json(res, 200, await peer.upload(b.name, b.b64).catch(e => ({ ok: false, err: `${peer.label()}: ${e.message}` })));
@@ -148,6 +153,11 @@ function createPhoneServer(ctx) {
       return json(res, 200, { ok: true, path: f });
     }
     if (ctx.noteInput && (p === '/api/send' || p.startsWith('/api/term/'))) ctx.noteInput();
+    if (viewSid(b.sid)) {                                               // view-only machine: send and stop, nothing else
+      if (p === '/api/send') return json(res, 200, await viewPeers.send(b.sid, String(b.text || '')));
+      if (p === '/api/interrupt') return json(res, 200, await viewPeers.interrupt(b.sid));
+      return json(res, 200, { ok: false, err: 'view-only machine: only send and stop' });
+    }
     if (['/api/send', '/api/interrupt', '/api/rename'].includes(p) && remote(b.sid))
       return json(res, 200, await peer.forward('POST', p, b).catch(e => ({ ok: false, err: `${peer.label()}: ${e.message}` })));
     if (p.startsWith('/api/term/') && peer && peer.ownsTerm(termId(p)))

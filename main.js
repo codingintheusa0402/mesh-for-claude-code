@@ -16,7 +16,9 @@ const { Collector } = require('./collector');
 const { EventEmitter } = require('events');
 const { createPhoneServer } = require('./phone-server');
 const { createHandoff } = require('./handoff');
-const { createPeer } = require('./peer');             // the paired machine: one mesh on the iPhone whichever machine serves it
+const { createPeer } = require('./peer');
+const { createViewPeers, VIEW_PREFIX } = require('./view-peers');   // view-only machines (peer.json mode "view"): cards + send/stop only
+const { readPeers } = require('./peer-config');             // the paired machine: one mesh on the iPhone whichever machine serves it
 const { createCore, cleanEnv, loginShell, linuxToken, winClaudeBin } = require('./core');
 const IS_WIN = process.platform === 'win32';
 const ptyBus = new EventEmitter(); ptyBus.setMaxListeners(50);   // pty output fan-out (desktop + phone terminals)
@@ -685,7 +687,7 @@ function linkSubSessions(snap) {
   for (const s of snap.sessions) { const p = s.spawnedBy && here.has(s.spawnedBy) ? s.spawnedBy : subParents[s.sid]; if (p) s.parent = p; }
 }
 // token usage (usage-main.js)
-const USAGE_MACHINE = (() => { try { const c = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'peer.json'), 'utf8')); if (c.selfLabel) return c.selfLabel; } catch { } return os.hostname().split('.')[0]; })();
+const USAGE_MACHINE = (() => { try { const l = readPeers(app.getPath('userData')).selfLabel; if (l) return l; } catch { } return os.hostname().split('.')[0]; })();
 const usageBoard = require('./usage-main').createUsage({ userData: app.getPath('userData'), machine: USAGE_MACHINE,
   snapshot: () => lastSnap, limits: () => (core.usage() || {}).limits || null, limitsPending: () => !core.usage() && !core.usageTried(), peer: () => peerLink, mask: t => cards.mask(t), onAlert: a => { if (phone) phone.alert(a); },
   models: () => (refresher ? refresher.models() : {}) });
@@ -1019,7 +1021,7 @@ ipcMain.handle('hist:list', async () => {
   const extra = theirs.filter(h => h && h.sid && !mine.has(h.sid)).map(h => ({ ...h, file: null, onPeer: true, hostLabel: label }));
   return [...local, ...extra].sort((a, b) => b.mtime - a.mtime);
 });
-ipcMain.handle('peer:resume', (_e, sid, opts) => peerLink ? peerLink.forward('POST', '/api/resume', { sid, ...(opts || {}) }).catch(e => ({ ok: false, err: String(e.message || e) })) : { ok: false, err: 'no peer' });
+ipcMain.handle('peer:resume', (_e, sid, opts) => isView(sid) ? { ok: false, err: 'view-only machine: no Resume here' } : peerLink ? peerLink.forward('POST', '/api/resume', { sid, ...(opts || {}) }).catch(e => ({ ok: false, err: String(e.message || e) })) : { ok: false, err: 'no peer' });
 ipcMain.handle('hist:rename', async (_e, sid, name) => {
   const s = liveSession(sid);
   if (s && s.watchOnly) return { ok: false, err: 'a watched script keeps the name set in mesh.local.json' };
@@ -1043,8 +1045,8 @@ ipcMain.handle('peer:upload', async (_e, paths) => {
   }
   return err ? { err } : { paths: out };
 });
-ipcMain.handle('peer:send', (_e, sid, text) => peerLink ? peerLink.forward('POST', '/api/send', { sid, text }).catch(e => ({ ok: false, err: String(e.message || e) })) : { ok: false, err: 'no peer' });
-ipcMain.handle('peer:interrupt', (_e, sid) => peerLink ? peerLink.forward('POST', '/api/interrupt', { sid }).catch(e => ({ ok: false, err: String(e.message || e) })) : { ok: false, err: 'no peer' });
+ipcMain.handle('peer:send', (_e, sid, text) => isView(sid) ? (viewPeers ? viewPeers.send(sid, text) : { ok: false, err: 'not ready' }) : peerLink ? peerLink.forward('POST', '/api/send', { sid, text }).catch(e => ({ ok: false, err: String(e.message || e) })) : { ok: false, err: 'no peer' });
+ipcMain.handle('peer:interrupt', (_e, sid) => isView(sid) ? (viewPeers ? viewPeers.interrupt(sid) : { ok: false, err: 'not ready' }) : peerLink ? peerLink.forward('POST', '/api/interrupt', { sid }).catch(e => ({ ok: false, err: String(e.message || e) })) : { ok: false, err: 'no peer' });
 // stop a running session (one outside the app — in-app terminals are closed by the renderer)
 ipcMain.handle('session:stop', async (_e, pid) => {
   pid = +pid; if (!pid || pid === process.pid) return { ok: false, err: 'bad pid' };
@@ -1111,9 +1113,11 @@ ipcMain.handle('clip:read', async () => {
 ipcMain.handle('usage:refresh', () => refreshUsage(true));
 
 // ---------------- phone access (phone-server.js) ----------------
-let peerLink = null, handoff = null, switches = null;
+let peerLink = null, viewPeers = null, handoff = null, switches = null;
+const isView = sid => typeof sid === 'string' && sid.startsWith(VIEW_PREFIX);
 // the session panel / right-click menu: "Move to <other Mac>" — run here if it runs here, else by the other Mac
 ipcMain.handle('handoff:move', async (_e, sid) => {
+  if (isView(sid)) return { ok: false, err: 'view-only machine: sessions there cannot be moved' };
   if (!handoff) return { ok: false, err: 'not ready' };
   const local = lastSnap && lastSnap.sessions.find(s => s.sid === sid && !s.onPeer);
   if (!local && peerLink.owns(sid)) return peerLink.forward('POST', '/api/handoff/move', { sid }, undefined, 15 * 60e3).catch(e => ({ ok: false, err: e.message }));
@@ -1121,6 +1125,7 @@ ipcMain.handle('handoff:move', async (_e, sid) => {
 });
 function initPhone() {
   peerLink = createPeer({ userData: app.getPath('userData'), selfKind: 'mac' }); peerLink.start();
+  viewPeers = createViewPeers({ userData: app.getPath('userData') }); viewPeers.start();
   switches = require('./switches').createSwitches({ peer: () => peerLink, machine: USAGE_MACHINE });   // mode switches (switches.js)
   if (!process.env.MESH_QA) folderMirror.createMirror({ machine: USAGE_MACHINE, peer: () => peerLink, folders: localFolders, enabled: !!require('./mesh-name').folderMirror }).start();
   // moving a session to the other Mac (handoff.js): this side stops / sends, the other side receives / starts it in-app
@@ -1131,7 +1136,7 @@ function initPhone() {
     progress: p => win && win.webContents.send('handoff:progress', p),
   });
   phone = createPhoneServer({
-    root: __dirname, userData: app.getPath('userData'), ptys: { get: id => ptys.get(id) || panes.proc(id) }, ptyBus, peer: peerLink, termSnapshot, termResize,
+    root: __dirname, userData: app.getPath('userData'), ptys: { get: id => ptys.get(id) || panes.proc(id) }, ptyBus, peer: peerLink, viewPeers, termSnapshot, termResize,
     termOpen: id => panes.has(id) ? panes.open(id) : null, termClose: id => { if (panes.has(id)) panes.close(id); },
     getSnap: () => lastSnap,
     getHistory: () => scanHistory(),
@@ -1169,10 +1174,11 @@ function initPhone() {
 ipcMain.handle('phone:status', () => phone.status());
 // when each prompt / reply in a session was made (renderer/term-stamps.js time column)
 const { stampsFor } = require('./transcript-stamps');
-ipcMain.handle('stamps', (_e, sid) => stampsFor(core.findTranscript(String(sid || ''))));
+ipcMain.handle('stamps', (_e, sid) => isView(String(sid || '')) ? [] : stampsFor(core.findTranscript(String(sid || ''))));
 // the chat theme (renderer/chat-theme.js): a session's last messages from its transcript; one on the other Mac goes there
 const { chatFor } = require('./transcript-chat');
-ipcMain.handle('chat:get', (_e, sid, n) => { sid = String(sid || ''); const s = liveSession(sid); return peerLink && ((s && s.onPeer) || (!s && peerLink.owns(sid)))
+ipcMain.handle('chat:get', (_e, sid, n) => { sid = String(sid || ''); if (isView(sid)) return null;   // view-only machine: no transcripts
+  const s = liveSession(sid); return peerLink && ((s && s.onPeer) || (!s && peerLink.owns(sid)))
   ? peerLink.forward('GET', '/api/chat', undefined, { sid, n: String(+n || 150) }).catch(() => null) : chatFor(core.findTranscript(sid), n); });
 ipcMain.handle('phone:set', (_e, v) => { phone.setEnabled(v); return phone.status(); });
 ipcMain.handle('phone:regen', () => { phone.regenerate(); return phone.status(); });
@@ -1209,7 +1215,7 @@ function recordSessions(snap) {
 // (once per launch: a window reload must not reopen sessions from the list read at startup)
 ipcMain.handle('restore:get', () => { if (restoreAnswered) return { sessions: [], auto: true }; if (restorePending === null) restorePending = readLastSessions() || { sessions: [] }; return { ...restorePending, auto: !uiHidden.askRestore }; });
 ipcMain.handle('restore:done', () => { restoreAnswered = true; return true; });
-app.on('before-quit', () => { quitting = true; panes.stopAll(); try { updater.quitting(); } catch { } });
+app.on('before-quit', () => { quitting = true; panes.stopAll(); if (viewPeers) viewPeers.stop(); try { updater.quitting(); } catch { } });
 
 // ---------------- this machine's memory (what Activity Monitor calls "Memory Used") ----------------
 // app memory (anonymous − purgeable) + wired + compressed, from vm_stat; pressure 1 normal / 2 warning / 4 critical
@@ -1277,7 +1283,8 @@ async function loop() {
       if (fallback) { fallback.decorate(snap); if (Date.now() - fallbackAt > 15000) { fallbackAt = Date.now(); fallback.tick(); } }
       paintSessions(snap.sessions); groupSessions(snap); linkSubSessions(snap);
       // the window shows BOTH machines (the peer's sessions and terminals merged in); phone + peer keep the local snap
-      const shown = peerLink ? peerLink.merge(snap) : snap;
+      // view-only machines (view-peers.js) are added for this window and the phone, never for the paired Mac
+      const shown = viewPeers ? viewPeers.merge(peerLink ? peerLink.merge(snap) : snap) : peerLink ? peerLink.merge(snap) : snap;
       if (shown !== snap) { paintSessions(shown.sessions); groupSessions(shown); }   // includes the peer's terminals (peer:… ids, onPeer)
       win.webContents.send('telemetry', shown);
       if (Date.now() - dupAt > 60e3) { dupAt = Date.now(); watchDuplicates(shown); }
