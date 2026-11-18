@@ -272,7 +272,7 @@ ipcMain.handle('pty:spawn', async (_e, opts) => {
   return { id, pid: proc.pid, title, cwd };
 });
 ipcMain.on('pty:write', (_e, id, data) => {
-  updater.noteInput();
+  updater.noteInput(data);
   if (peerLink && peerLink.ownsTerm(id)) return void peerLink.termWrite(id, data).catch(() => { });   // a mirrored terminal of the peer
   if (panes.has(id)) return panes.write(id, data);                                                     // a tmux pane on this machine
   const p = ptys.get(id); if (p) p.proc.write(data);
@@ -1150,7 +1150,7 @@ function initPhone() {
     cards: { summary: () => cards.summary(localSessions()), get: (sid, force) => { const s = localSessions().find(x => x.sid === sid); return s ? cards.card(s, { force: !!force, waitMs: 1500 }).then(c => c && { ...c, refreshed: refresher && refresher.lastFor(s.name) }) : null; }, ask: sid => sendToSession(sid, CARD_ASK) },   // times beside prompts/replies in the phone terminal
     commandsFor,
     sendToSession, interruptSession,
-    logEngine, noteInput: () => updater.noteInput(), hotRoot: () => updater.hotRoot(), resumeOnMac: (sid, opts) => { if (!win) return { ok: false }; win.webContents.send('phone:resume', sid, opts); return { ok: true }; },
+    logEngine, noteInput: d => updater.noteInput(d), hotRoot: () => updater.hotRoot(), resumeOnMac: (sid, opts) => { if (!win) return { ok: false }; win.webContents.send('phone:resume', sid, opts); return { ok: true }; },
     handoff,
     orchestrator: { get: cwd => orchestratorFor(fromTildeP(cwd)), set: (cwd, o) => setOrchestrator(fromTildeP(cwd), o) },
     hermesNew: o => spawnHermes(o || {}),

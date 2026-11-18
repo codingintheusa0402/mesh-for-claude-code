@@ -168,7 +168,7 @@ Machine- or team-specific add-ons can go in `local/` (gitignored); `local/main.j
 Mesh updates itself. `install.sh` installs in place and leaves `update.json` in the app's data folder; the running app (`updater.js`) does the rest:
 
 - Mesh checks for an update when install.sh writes `update.json` (file watch, 60 s fallback). `running.json` always names the live process; a run that ended without a clean quit (crash, force quit) is logged to `update.log` and `exits.jsonl`.
-- **Quiet** means no input in Mesh and no keyboard or mouse input on the Mac. A keep-awake mouse jiggler (the cursor nudged and put back after 20+ idle seconds) doesn't count, so it can't block quiet updates and automatic session refreshes forever.
+- **Quiet** means no input in Mesh and no keyboard or mouse input on the Mac. A keep-awake mouse jiggler (the cursor nudged and put back after 20+ idle seconds) doesn't count, so it can't block quiet updates and automatic session refreshes forever. Only a person's keys count as input in Mesh: a terminal's own answers (device attributes, cursor reports, focus in/out, colour replies), mouse reports, size claims and sends from scripts on this Mac (Bridge, relays, wakers) don't.
 - **UI only:** the window reloads in place after 30 quiet seconds. Window position, panels, the selected session, the active tab, scroll, an unsent prompt and terminal contents all stay.
 - **Anything else:** Mesh restarts itself once you've been away for 10 minutes, then puts the view back.
 - **Never** while you're typing here, on the other Mac's mirror or on the phone, or while a session is waiting for you.

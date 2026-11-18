@@ -22,7 +22,12 @@ function createUpdater({ app, powerMonitor, getWin, userData, sessions, inAppBus
   })();
   const stamp = extra => write('running.json', { commit: running, base: build.commit, pid: process.pid, at: Date.now(), ...extra });
 
-  const noteInput = () => { lastInput = Date.now(); };
+  // Only a person's keys count. Bytes a terminal makes by itself are not typing: xterm's answers (device attributes,
+  // cursor/status reports, focus in/out, OSC/DCS replies) and mouse reports (a mouse jiggler moving the cursor over a
+  // mouse-tracking Claude pane sent one every ~25 s, so the whole 11-18 nightly refresh skipped "you are typing").
+  const MACHINE = /\x1b\[<\d+;\d+;\d+[Mm]|\x1b\[M[\s\S]{3}|\x1b\[[?>=]?[\d;]*[cnRtIOy]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1bP[\s\S]*?\x1b\\/g;
+  const isTyping = d => d == null || String(d).replace(MACHINE, '') !== '';
+  const noteInput = d => { if (isTyping(d)) lastInput = Date.now(); };
   // A mouse jiggler (a keep-awake tool) nudges the cursor 1 px and back whenever the Mac has been idle ~25 s, so the system
   // idle time never passes 30 s and nothing automatic (refresh, quiet restart) ever ran. Sample the idle clock every 2 s:
   // a reset after >= 20 s idle with the cursor back where it was is a jiggle, not you. Typing in Mesh is counted by noteInput.
@@ -123,6 +128,6 @@ osascript -e 'display notification "The new version did not start, so the previo
     const next = u && u.commit && u.commit !== running && !(hold && hold.commit === u.commit) ? u : { commit: running, subject: 'restart' };
     restart(next);
   }
-  return { restartNow, start, ready, quitting, noteInput, quietFor, saved, handoff, check, rollback: () => helper(running, 'rollback'), info: () => ({ ...build, running, hotRoot }), hotRoot: () => hotRoot, blocker };
+  return { restartNow, start, ready, quitting, noteInput, isTyping, quietFor, saved, handoff, check, rollback: () => helper(running, 'rollback'), info: () => ({ ...build, running, hotRoot }), hotRoot: () => hotRoot, blocker };
 }
 module.exports = { createUpdater };
