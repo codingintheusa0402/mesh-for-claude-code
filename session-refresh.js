@@ -286,7 +286,7 @@ function createRefresh(ctx) {
     const bg = backgroundOf(s); if (bg && !force) return 'background tasks (' + bg + ')';
     const js = jobsOf(s); if (js.length && !force) return `${js.length} child job(s) still running (${js.map(j => j.kind).join(', ')})`;
     // unsent text no longer blocks: it is saved, cleared, and typed back into the new session (refresh step 0)
-    if (!manual && ctx.quietFor() < 60) return 'you are typing in Mesh';      // automatic refreshes wait for a quiet minute
+    if (!manual && ctx.quietFor() < 60) return 'you are typing in Mesh' + (ctx.quietWhy ? ' (' + ctx.quietWhy() + ')' : '');      // automatic refreshes wait for a quiet minute
     const lp = loopInfo(s); if (lp && lp.next - Date.now() < 5 * 60e3 && lp.next - Date.now() > -10 * 60e3) return 'its loop ticks within 5 minutes';
     const nb = notBeforeOf(s.name); if (nb && Date.now() < nb) return 'not before ' + new Date(nb).toLocaleString('sv-SE').slice(0, 16);
     if (modeOf(s.name) === 'sunday' && usMarketOpen()) return 'US market hours';

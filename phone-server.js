@@ -155,8 +155,8 @@ function createPhoneServer(ctx) {
     // A person typing: keys from the phone / the other Mac, or a send from another device. Not input: size claims, the
     // terminal's own reports (noteInput filters them) and sends from scripts on this Mac (Bridge, relays, wakers).
     const local = /^(::1|(::ffff:)?127\.)/.test(req.socket.remoteAddress || '');
-    if (ctx.noteInput && p.startsWith('/api/term/') && !b.resize) ctx.noteInput(String(b.data || ''));
-    if (ctx.noteInput && p === '/api/send' && !local) ctx.noteInput();
+    if (ctx.noteInput && p.startsWith('/api/term/') && !b.resize) ctx.noteInput(String(b.data || ''), 'remote terminal (' + (req.socket.remoteAddress || '?').replace('::ffff:', '') + ')');
+    if (ctx.noteInput && p === '/api/send' && !local) ctx.noteInput(null, 'send from ' + (req.socket.remoteAddress || '?').replace('::ffff:', ''));
     if (viewSid(b.sid)) {                                               // view-only machine: send and stop, nothing else
       if (p === '/api/send') return json(res, 200, await viewPeers.send(b.sid, String(b.text || '')));
       if (p === '/api/interrupt') return json(res, 200, await viewPeers.interrupt(b.sid));

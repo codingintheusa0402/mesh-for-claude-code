@@ -1150,7 +1150,7 @@ function initPhone() {
     cards: { summary: () => cards.summary(localSessions()), get: (sid, force) => { const s = localSessions().find(x => x.sid === sid); return s ? cards.card(s, { force: !!force, waitMs: 1500 }).then(c => c && { ...c, refreshed: refresher && refresher.lastFor(s.name) }) : null; }, ask: sid => sendToSession(sid, CARD_ASK) },   // times beside prompts/replies in the phone terminal
     commandsFor,
     sendToSession, interruptSession,
-    logEngine, noteInput: d => updater.noteInput(d), hotRoot: () => updater.hotRoot(), resumeOnMac: (sid, opts) => { if (!win) return { ok: false }; win.webContents.send('phone:resume', sid, opts); return { ok: true }; },
+    logEngine, noteInput: (d, src) => updater.noteInput(d, src), hotRoot: () => updater.hotRoot(), resumeOnMac: (sid, opts) => { if (!win) return { ok: false }; win.webContents.send('phone:resume', sid, opts); return { ok: true }; },
     handoff,
     orchestrator: { get: cwd => orchestratorFor(fromTildeP(cwd)), set: (cwd, o) => setOrchestrator(fromTildeP(cwd), o) },
     hermesNew: o => spawnHermes(o || {}),
@@ -1330,7 +1330,7 @@ function initRefresh() {
   refresher = require('./session-refresh').createRefresh({
     userData: app.getPath('userData'), getSnap: () => lastSnap, panes, hermes, spawnHermes, sendToSession, loginShell, hermesDraft,
     tmux: args => { try { return execFileSync(TMUX, args, { timeout: 8000, env: TMUX_ENV }).toString(); } catch { return null; } },
-    findTranscript: sid => core.findTranscript(sid), sql: require('./hermes-sessions').sql, quietFor: () => updater.quietFor(), alert: alertOwner,
+    findTranscript: sid => core.findTranscript(sid), sql: require('./hermes-sessions').sql, quietFor: () => updater.quietFor(), quietWhy: () => updater.quietWhy(), alert: alertOwner,
     claudeBin: () => core.resolveClaude(),
     report: text => { const to = (require('./mesh-name').refreshReportTo || APP_NAME); const g = ((lastSnap && lastSnap.sessions) || []).find(x => x.name === to && !x.onPeer); if (g) sendToSession(g.sid, text); },   // results the owner asked to hear about go to the session named like the app (or refreshReportTo)
     modelFor: name => fallback && fallback.modelFor(name),

@@ -27,7 +27,11 @@ function createUpdater({ app, powerMonitor, getWin, userData, sessions, inAppBus
   // mouse-tracking Claude pane sent one every ~25 s, so the whole 11-18 nightly refresh skipped "you are typing").
   const MACHINE = /\x1b\[<\d+;\d+;\d+[Mm]|\x1b\[M[\s\S]{3}|\x1b\[[?>=]?[\d;]*[cnRtIOy]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1bP[\s\S]*?\x1b\\/g;
   const isTyping = d => d == null || String(d).replace(MACHINE, '') !== '';
-  const noteInput = d => { if (isTyping(d)) lastInput = Date.now(); };
+  let lastSrc = '', lastData = '';
+  const noteInput = (d, src = 'Mesh window') => {
+    if (!isTyping(d)) return;
+    lastInput = Date.now(); lastSrc = src; lastData = d == null ? 'send' : JSON.stringify(String(d).slice(0, 12)).slice(1, -1);
+  };
   // A mouse jiggler (a keep-awake tool) nudges the cursor 1 px and back whenever the Mac has been idle ~25 s, so the system
   // idle time never passes 30 s and nothing automatic (refresh, quiet restart) ever ran. Sample the idle clock every 2 s:
   // a reset after >= 20 s idle with the cursor back where it was is a jiggle, not you. Typing in Mesh is counted by noteInput.
@@ -44,6 +48,11 @@ function createUpdater({ app, powerMonitor, getWin, userData, sessions, inAppBus
     prev = { idle, t: now, pos };
   }, 2000).unref();
   const quietFor = () => Math.min((Date.now() - quietSince) / 1000, (Date.now() - lastInput) / 1000);
+  // why it isn't quiet, for logs: which clock is young and, for Mesh input, where it came from (first bytes, escaped)
+  const quietWhy = () => {
+    const mac = Math.round((Date.now() - quietSince) / 1000), mesh = Math.round((Date.now() - lastInput) / 1000);
+    return mac <= mesh ? `keyboard/mouse on this Mac ${mac} s ago` : `${lastSrc} input ${mesh} s ago: ${lastData}`;
+  };
   function blocker(need) {
     if (quietFor() < need) return 'you are active';
     const w = sessions().filter(s => s.health === 'waiting' && s.status !== 'shell'); if (w.length) return `${w[0].name} is waiting for you`;
@@ -128,6 +137,6 @@ osascript -e 'display notification "The new version did not start, so the previo
     const next = u && u.commit && u.commit !== running && !(hold && hold.commit === u.commit) ? u : { commit: running, subject: 'restart' };
     restart(next);
   }
-  return { restartNow, start, ready, quitting, noteInput, isTyping, quietFor, saved, handoff, check, rollback: () => helper(running, 'rollback'), info: () => ({ ...build, running, hotRoot }), hotRoot: () => hotRoot, blocker };
+  return { restartNow, start, ready, quitting, noteInput, isTyping, quietFor, quietWhy, saved, handoff, check, rollback: () => helper(running, 'rollback'), info: () => ({ ...build, running, hotRoot }), hotRoot: () => hotRoot, blocker };
 }
 module.exports = { createUpdater };

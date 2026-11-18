@@ -2,6 +2,9 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-19
+- **Refresh skips say why.** A "you are typing in Mesh" skip now names the source: keyboard/mouse on this Mac, or Mesh input from this window, a remote terminal or a send (with its address and first bytes). The 11-19 night still skipped most sessions after the typing fix; the log will show what keeps the input clock young.
+
 ## 2026-11-18
 - **Nightly refresh no longer thinks you're typing.** The whole 11-18 night refresh skipped every session with "you are typing in Mesh". Terminal-made bytes (mouse reports while a keep-awake jiggler moved the cursor, focus and device-attribute replies), size claims and local script sends counted as typing. Now only real keys from this Mac, the other Mac or the phone, and sends from another device, do.
 - **Terminal size from another device, fixed.** Opening a terminal tab last sized by the other Mac or the phone now takes this window's size right away, without a scroll first. Keys typed while it changes size wait until Claude Code has redrawn (at most about 1.2 s), so the text no longer lands over the old layout.
