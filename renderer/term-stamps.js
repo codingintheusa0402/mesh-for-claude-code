@@ -70,3 +70,13 @@
   }
   window.attachTermStamps = attachTermStamps;
 })();
+// Plain text glyphs for Claude Code's symbols (2026-11-19, Kevin): iOS (and sometimes macOS) draws ⏺ ⏸ ⏹ ✔ ⚠ … as colour
+// emoji (a blue box with a white circle). Display only, applied to what is written into xterm; the session's text is
+// untouched. ⏺ becomes ● (same width; Claude Code's own colour codes still colour it: grey/white, green while working,
+// red on error); the other emoji-capable symbols get U+FE0E (text presentation). CSS adds font-variant-emoji: text.
+(() => {
+  const DOT = /⏺(?:️|︎)?/g;
+  // only symbols whose default is text (UI marks like ⏸ ⏹ ⏵ ✔ ⚠ ➡); default-emoji ones (✅ ❌ ⭐ ⏳) are left alone
+  const VS = /([\u23ED-\u23EF\u23F1\u23F2\u23F4-\u23F9\u2139\u2194-\u2199\u21A9\u21AA\u2328\u23CF\u25B6\u25C0\u25FB\u25FC\u2611\u2639\u263A\u26A0\u2714\u2716\u2733\u2734\u2747\u2764\u27A1\u2B05-\u2B07])(?![\uFE0E\uFE0F])/g;
+  window.textGlyphs = d => typeof d === 'string' && d ? d.replace(DOT, '●').replace(VS, '$1︎') : d;
+})();

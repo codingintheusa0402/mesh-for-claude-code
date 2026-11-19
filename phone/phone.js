@@ -397,7 +397,7 @@ const TLH = 1.12;   // terminal line height: a little air between lines, like th
 function mountTerm(host, id, box, sid) {
   termId = id; tes && tes.close(); if (term) { term._ro && term._ro.disconnect(); term._stamps && term._stamps.dispose(); term.dispose(); }
   const W = host.clientWidth - 8 - (window.attachTermStamps && sid ? 40 : 0);
-  term = new Terminal({ fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace', fontSize: 9, lineHeight: TLH, fontWeightBold: '600', letterSpacing: 0, convertEol: false, disableStdin: false, scrollback: 20000,
+  term = new Terminal({ fontFamily: 'ui-monospace, "SF Mono", Menlo, "Apple Symbols", "Hiragino Sans", monospace', fontSize: 9, lineHeight: TLH, fontWeightBold: '600', letterSpacing: 0, convertEol: false, disableStdin: false, scrollback: 20000,
     theme: { background: '#000000', foreground: '#ececec', cursor: '#ede6d6', selectionBackground: 'rgba(255,255,255,.25)' } });
   term.open(host); touchScroll(host);
   // a time column beside each prompt / reply (term-stamps.js; times from the session's transcript on the Mac)
@@ -414,7 +414,7 @@ function mountTerm(host, id, box, sid) {
   if (term.onRender) term.onRender(() => pin());
   window.meshPinTerm = () => { if (!term) return; term.scrollToBottom(); pin(true); };
   tes.addEventListener('init', ev => {
-    const i = JSON.parse(ev.data); fitTo(i.cols, i.rows); term.reset(); term.write(keepHist(i.backlog), () => pin(true));
+    const i = JSON.parse(ev.data); fitTo(i.cols, i.rows); term.reset(); term.write(textGlyphs(keepHist(i.backlog)), () => pin(true));
     pin(true);
   });
   // the phone claims the session's size, as if it were running here (2026-11-16): opening it, turning the phone,
@@ -435,7 +435,7 @@ function mountTerm(host, id, box, sid) {
   box.addEventListener('focusin', () => claim());
   if (window.ResizeObserver) { let rt = 0; const ro2 = new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => claim(), 300); }); ro2.observe(host); }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(() => claim(true), 600); });
-  tes.addEventListener('data', ev => term.write(keepHist(JSON.parse(ev.data))));
+  tes.addEventListener('data', ev => term.write(textGlyphs(keepHist(JSON.parse(ev.data)))));
   tes.addEventListener('exit', () => term.write('\r\n\x1b[90m[process exited]\x1b[0m\r\n'));
   box.querySelectorAll('.keys button').forEach(b => b.onclick = () => write(decodeURIComponent(b.dataset.k)));
   const inp = box.querySelector('.tIn'), go = () => { const v = inp.value; write(v); setTimeout(() => write('\r'), 60); inp.value = ''; };

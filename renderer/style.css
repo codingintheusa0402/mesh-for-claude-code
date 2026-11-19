@@ -716,3 +716,6 @@ body.simple .bcard.b-waiting { animation: bBlinkWarn 1.6s steps(1, end) infinite
 .relays { color: #ffcf8a; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tag.sun, body:not(.pixel) .tag.sun { color: #ffd27a; border-color: rgba(255,196,110,.5); }
 .tag.dup, body:not(.pixel) .tag.dup { color: #ff9a8a; border-color: rgba(255,122,106,.45); }
+
+/* Claude Code symbols as text, never colour emoji (2026-11-19; term-stamps.js textGlyphs does the rest) */
+.xterm .xterm-rows, .xterm .xterm-rows span { font-variant-emoji: text; }

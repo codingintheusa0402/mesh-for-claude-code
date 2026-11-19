@@ -286,3 +286,6 @@ body[data-peer] #split, body[data-peer] #grid { backface-visibility: hidden; con
   body #app, body #scrim { transition-duration: .12s !important; }
   body #drawer { transform: none !important; transition: opacity .12s !important; }
 }
+
+/* Claude Code symbols as text, never colour emoji (2026-11-19; term-stamps.js textGlyphs does the rest) */
+.xterm .xterm-rows, .xterm .xterm-rows span { font-variant-emoji: text; }

@@ -886,7 +886,7 @@ function setTermTheme(id) {
 // Apple's SF Mono (the monospaced member of the SF family apple.com uses). It ships inside macOS but isn't reachable by
 // name, so style.css loads it from /System/Library/Fonts as "Mesh SF Mono"; Menlo if it's missing. Terminals measure their
 // cells when created, so once the font has loaded every open one is told again
-const TERM_FONT = '"Mesh SF Mono", Menlo, monospace';
+const TERM_FONT = '"Mesh SF Mono", Menlo, "Apple Symbols", "Hiragino Sans", monospace';   // text fallbacks before any emoji font
 document.fonts && document.fonts.load('12.5px "Mesh SF Mono"').then(f => { if (!f.length) return;
   for (const [, t] of terms) { t.term.options.fontFamily = 'Menlo'; t.term.options.fontFamily = TERM_FONT; } requestAnimationFrame(() => typeof fitAll === 'function' && fitAll()); }).catch(() => { });
 const termOpts = () => ({
@@ -1098,7 +1098,7 @@ window.api.termSnap.onRequest((rq, id) => {
 window.api.peerTerm.onInit((id, i) => {
   const t = terms.get(id); if (!t) return;
   t.inited = true; t.cols = t.hostCols = i.cols; t.rows = t.hostRows = i.rows; t.sizing = 0; t.asked = []; t.term.reset(); t.term.options.fontSize = BASE_FONT; fitScaled(t);
-  t.term.write(i.backlog || '', () => requestAnimationFrame(() => { if (!terms.has(id)) return; try { fitScaled(t); t.term.refresh(0, t.term.rows - 1); } catch { } }));   // draw the first screen even if it landed before the tab was laid out
+  t.term.write(textGlyphs(i.backlog || ''), () => requestAnimationFrame(() => { if (!terms.has(id)) return; try { fitScaled(t); t.term.refresh(0, t.term.rows - 1); } catch { } }));   // draw the first screen even if it landed before the tab was laid out
   if (t.driving) { t.sentCols = t.sentRows = 0; fitOwn(id, t); }   // reconnected while this window had the size: ask again
 });
 window.api.peerTerm.onSize((id, i) => {
@@ -1150,7 +1150,7 @@ async function newTerm(opts) {
   term.onResize(({ cols, rows }) => window.api.pty.resize(info.id, cols, rows));
   term.textarea && term.textarea.addEventListener('focus', () => { activeTerm = info.id; markFocus(); });
   terms.set(info.id, { term, fit, ser, el, send, title: info.title, kind: opts.kind, stamps: addStamps(term, el, info.id) });
-  if (opts.saved) term.write(opts.saved, () => window.api.update.adopted(info.id));
+  if (opts.saved) term.write(textGlyphs(opts.saved), () => window.api.update.adopted(info.id));
   $('#noTerms').style.display = 'none';
   activate(info.id); if (isMini()) miniShow('term');
   return info.id;
@@ -1158,11 +1158,11 @@ async function newTerm(opts) {
 
 // A terminal nobody can see takes its output in batches every 2 seconds. Terminal queries still go through at once: the program waits for the answer.
 const QUERY = /\x1b\[[?>]?[\d;]*[cn]|\x1b\][\d;]*;\?|\x1bP/;
-function flushTerm(t) { clearTimeout(t.feedT); t.feedT = 0; if (t.q) { const d = t.q; t.q = ''; t.term.write(d); } }
+function flushTerm(t) { clearTimeout(t.feedT); t.feedT = 0; if (t.q) { const d = t.q; t.q = ''; t.term.write(textGlyphs(d)); } }
 window.api.pty.onData((id, d, seq) => {
   const t = terms.get(id); if (!t) return;
   if (seq) t.seq = seq;
-  if ((termVisible(t) && !document.hidden && !viz.offscreen) || QUERY.test(d)) { flushTerm(t); t.term.write(d); return; }
+  if ((termVisible(t) && !document.hidden && !viz.offscreen) || QUERY.test(d)) { flushTerm(t); t.term.write(textGlyphs(d)); return; }
   t.q = (t.q || '') + d; if (!t.feedT) t.feedT = setTimeout(() => flushTerm(t), 2000);
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) for (const [, t] of terms) if (termVisible(t)) flushTerm(t); });
