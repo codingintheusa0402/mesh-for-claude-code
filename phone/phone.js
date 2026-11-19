@@ -198,7 +198,8 @@ function setTab(t, quiet) {
   openTab = t;
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   if (quiet) return;
-  if (t === 'mesh' || t === 'split' || t === 'grid') { if (sheetKind) closeSheet(); setView(t); }
+  if (t === 'mesh') { if (sheetKind) closeSheet(); setView(t); }
+  if (t === 'split' || t === 'grid') { if (sheetKind) closeSheet(); if (view !== t) Pager.go(t); else setView(t); }
   if (t === 'sessions') renderSessions(true);
   if (t === 'history') openHistory();
   if (t === 'term' && termId) openTerminal(termId);
@@ -512,7 +513,7 @@ function setView(v) {
 function tapSession(sid) { if (view === 'split') pickSplit(sid); else openSession(sid); }
 function pickSplit(sid) {
   splitSid = sid; localStorage.setItem('mesh.splitSid', sid); viz.selected = sid;
-  if (view !== 'split') { setTab('split', true); setView('split'); } else renderSplit(true);
+  if (view !== 'split') Pager.go('split'); else renderSplit(true);
 }
 function splitSession() {
   const S = snap.sessions;
@@ -647,51 +648,119 @@ if (window.visualViewport) {
 $('#kbDone').addEventListener('pointerdown', e => { e.preventDefault(); const a = document.activeElement; if (a && a.blur) a.blur(); });
 addEventListener('orientationchange', () => setTimeout(() => { viz.resize(); if (view === 'split' && paneKind && paneKind.startsWith('term')) renderSplit(true); }, 350));
 { const v0 = localStorage.getItem('mesh.view'); const v1 = v0 === 'grid' ? 'grid' : 'split'; setTab(v1, true); setView(v1); }
-// the session drawer (like the Claude app): ☰ or a swipe from the left edge opens it, a tap outside or on a session closes it
-function toggleNav(open) { const o = typeof open === 'boolean' ? open : !document.body.classList.contains('navOpen'); document.body.classList.toggle('navOpen', o); if (o) renderDrawer(); }
+// ---------- horizontal navigation (2026-11-19, Kevin): [session drawer] <-> [Sessions] <-> [Grid] ----------
+// One feel for every sideways transition: the finger drives the layers 1:1 (GPU transforms, written once per frame),
+// the next screen slides in beside it, and on release it springs on past ~35 % of the width or on a flick, otherwise it
+// springs back. Same curve for the drawer and the pages; the spring gets shorter the faster the finger was moving.
+// The drawer belongs to Sessions only: on Grid a right swipe (or ☰) goes back to Sessions. Reduced motion: a quick fade.
+const RM = matchMedia('(prefers-reduced-motion: reduce)'), SPRING = 'cubic-bezier(.22,1,.36,1)';
+const springMs = (rest, v) => Math.round(Math.max(170, Math.min(420, rest / Math.max(Math.abs(v || 0), 1.1))));
+const commits = (d, v, W) => v > 0.45 || (d > W * 0.35 && v > -0.3);   // d, v: distance (px) and speed (px/ms) toward the next screen
+const imp = (el, k, v) => v === '' ? el.style.removeProperty(k) : el.style.setProperty(k, v, 'important');   // beats the CSS !important rules
+const pageEl = v => v === 'grid' ? $('#grid') : $('#split');
+const Pager = (() => {
+  let from = null, to = null, W = 1, want = 0, raf = 0, busy = false;
+  const side = t => t === 'grid' ? 1 : -1;                              // Grid waits on the right, Sessions on the left
+  const put = (a, xa, b, xb, tr) => { a.style.transition = b.style.transition = tr || 'none';
+    a.style.transform = `translate3d(${xa}px,0,0)`; b.style.transform = `translate3d(${xb}px,0,0)`; };
+  const paint = () => { raf = 0; if (from) put(pageEl(from), want, pageEl(to), want + side(to) * W); };
+  const clean = () => { for (const el of [$('#split'), $('#grid')]) el.style.transition = el.style.transform = el.style.willChange = '';
+    delete document.body.dataset.peer; from = to = null; busy = false; };
+  const show = t => { setTab(t, true); setView(t); };
+  function fade(fn) { const A = $('#app'); busy = true; A.style.transition = 'opacity 90ms linear'; A.style.opacity = '0';
+    setTimeout(() => { fn(); A.style.opacity = '1'; setTimeout(() => { A.style.transition = A.style.opacity = ''; busy = false; }, 110); }, 95); }
+  return {
+    busy: () => busy,
+    // a finger drag from the current page toward `t`
+    begin(t) { from = view; to = t; W = innerWidth; want = 0; busy = true; if (RM.matches) return;
+      if (t === 'grid') renderGrid();
+      document.body.dataset.peer = t; for (const el of [pageEl(from), pageEl(to)]) el.style.willChange = 'transform'; paint(); },
+    move(dx) { if (!from || RM.matches) return; want = side(to) > 0 ? Math.max(-W, Math.min(0, dx)) : Math.min(W, Math.max(0, dx)); if (!raf) raf = requestAnimationFrame(paint); },
+    end(go, v) { cancelAnimationFrame(raf); raf = 0; const t = to;
+      if (RM.matches) { from = to = null; busy = false; if (go) fade(() => show(t)); return; }
+      const endX = go ? -side(t) * W : 0, ms = springMs(Math.abs(endX - want), v);
+      put(pageEl(from), endX, pageEl(t), endX + side(t) * W, `transform ${ms}ms ${SPRING}`);
+      setTimeout(() => { if (go) show(t); clean(); }, ms + 20); },
+    // a tap that changes the page (☰ on Grid, a Grid card, the drawer's links): the same slide, untouched
+    go(t) { if (view === t) return show(t); if (busy) return show(t); if (RM.matches) return fade(() => show(t));
+      const f = view, a = pageEl(f), b = pageEl(t), W0 = innerWidth, s = side(t); busy = true;
+      show(t); document.body.dataset.peer = f;                         // the new page renders first; the old one stays as the peer
+      a.style.willChange = b.style.willChange = 'transform'; put(a, 0, b, s * W0);
+      requestAnimationFrame(() => requestAnimationFrame(() => put(a, -s * W0, b, 0, `transform 380ms ${SPRING}`)));
+      setTimeout(clean, 410); },
+  };
+})();
+function toggleNav(open) { const o = typeof open === 'boolean' ? open : !document.body.classList.contains('navOpen');
+  if (o && view === 'grid') return Pager.go('split');                  // the drawer lives on Sessions only
+  document.body.classList.toggle('navOpen', o); if (o) renderDrawer(); }
 $('#navBtn').onclick = () => toggleNav(); $('#scrim').onclick = () => toggleNav(false);
-// iOS-style: drag right (from the left edge, or anywhere outside the terminal) pulls the drawer out with the finger,
-// drag it left to push it back; on release it snaps open or shut (a quick flick counts too)
-{ let sx = null, sy = null, st = 0, mode = null, w = 1, open = false; const D = $('#drawer'), SC = $('#scrim'), A = $('#app');
-  // like the Claude app: the drawer lies underneath and the conversation slides right as a rounded card
-  // the finger drives three layers (once per frame): the card slides and rounds its corners, the drawer underneath comes in
-  // from a little to the left and brightens (parallax), the scrim fades
-  let want = null, raf = 0, onTerm = false, lastX = 0;
+{ let sx = null, sy = null, mode = null, w = 1, open = false, onTerm = false, lastX = 0, lastT = 0, vx = 0, hs = null;
+  const D = $('#drawer'), SC = $('#scrim'), A = $('#app');
+  // the drawer: the conversation card slides right and rounds its corners, the drawer underneath comes in from a little
+  // to the left and brightens (parallax), the scrim fades
+  let want = null, raf = 0;
   const paint = () => { raf = 0; if (want == null) return; const x = w + want, f = Math.max(0, Math.min(1, x / w));
-    A.style.transition = SC.style.transition = D.style.transition = 'none';
-    A.style.transform = `translate3d(${x}px,0,0)`; A.style.borderRadius = `${Math.round(28 * f)}px`;
-    D.style.transform = `translate3d(${Math.round(-w * 0.22 * (1 - f))}px,0,0)`; D.style.opacity = String(0.35 + 0.65 * f);
-    SC.style.opacity = String(f); SC.style.pointerEvents = 'none'; };
-  const place = off => { want = off; if (!raf) raf = requestAnimationFrame(paint); };
+    for (const el of [A, SC, D]) imp(el, 'transition', 'none');
+    imp(A, 'transform', `translate3d(${x}px,0,0)`); imp(A, 'border-radius', `${Math.round(28 * f)}px`);
+    imp(D, 'transform', `translate3d(${Math.round(-w * 0.22 * (1 - f))}px,0,0)`); imp(D, 'opacity', String(0.35 + 0.65 * f));
+    imp(SC, 'opacity', String(f)); imp(SC, 'pointer-events', 'none'); };
+  const place = off => { if (RM.matches) return; want = off; if (!raf) raf = requestAnimationFrame(paint); };
+  const unpaint = ms => { cancelAnimationFrame(raf); raf = 0; want = null;
+    for (const [el, ks] of [[A, ['transform', 'border-radius']], [D, ['transform', 'opacity']], [SC, ['opacity', 'pointer-events']]]) for (const k of ks) imp(el, k, '');
+    if (!ms) { for (const el of [A, SC, D]) imp(el, 'transition', ''); return; }
+    imp(A, 'transition', `transform ${ms}ms ${SPRING}, border-radius ${ms}ms ${SPRING}, box-shadow ${ms}ms`);
+    imp(D, 'transition', `transform ${ms}ms ${SPRING}, opacity ${ms}ms ${SPRING}`); imp(SC, 'transition', `opacity ${ms}ms ${SPRING}`);
+    setTimeout(() => { for (const el of [A, SC, D]) imp(el, 'transition', ''); }, ms + 30); };
+  // sideways scrollers (the key row, a wide table…) keep the drag while they can still scroll that way
+  const scroller = n => { for (; n && n !== document.body; n = n.parentElement) if (n.scrollWidth > n.clientWidth + 1) { const o = getComputedStyle(n).overflowX; if (o === 'auto' || o === 'scroll') return n; } return null; };
+  const canScroll = (el, dx) => dx > 0 ? el.scrollLeft > 1 : el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
   addEventListener('touchstart', e => {
     const t = e.touches[0]; open = document.body.classList.contains('navOpen'); sx = null; mode = null;
-    // like the Claude app: a swipe to the right opens it from anywhere, over the terminal too (the terminal only keeps
-    // vertical drags); text boxes, the key row (it scrolls sideways), the grid and sheets keep their own gestures
-    if (!open && t.clientX >= 40 && e.target.closest('textarea, input, .keys, .sheet')) return;
-    onTerm = t.clientX >= 40 && !!e.target.closest('#pxt, #xt');
-    if (!open) renderDrawer();
-    sx = lastX = t.clientX; sy = t.clientY; st = Date.now(); w = D.offsetWidth || 300; window.__navDrag = true;
+    if (e.touches.length !== 1 || Pager.busy()) return;
+    const edge = t.clientX < 40;                                         // from the left edge: always a page/drawer swipe
+    if (!open && !edge && e.target.closest('textarea, input, .sheet')) return;
+    hs = open || edge ? null : scroller(e.target);
+    onTerm = !edge && !!e.target.closest('#pxt, #xt');                  // over the terminal: clearly sideways only
+    if (!open && view !== 'grid') renderDrawer();
+    sx = lastX = t.clientX; sy = t.clientY; lastT = e.timeStamp; vx = 0; w = D.offsetWidth || 300; window.__navDrag = true;
+    bindTarget(e.target);
   }, { passive: true });
-  addEventListener('touchmove', e => {
-    if (sx == null) return; const t = e.touches[0], dx = t.clientX - sx, dy = t.clientY - sy; lastX = t.clientX;
-    const need = onTerm && !open ? 16 : 10, ratio = onTerm && !open ? 2 : 1.4;   // over the terminal: clearly sideways only
-    // like the Mac window: right to left shows the session board (Grid), left to right on the board goes back. The drawer
-    // stays on left-to-right everywhere else, and on the board from the left edge or ☰
-    if (!mode && !open && Math.abs(dx) > need && Math.abs(dx) > Math.abs(dy) * ratio && (dx < 0 ? view !== 'grid' : view === 'grid' && sx >= 40)) { mode = 'page'; return; }
-    if (mode === 'page') return;
-    if (!mode) { if (Math.abs(dx) > need && Math.abs(dx) > Math.abs(dy) * ratio && (open ? dx < 0 : dx > 0) && !(view === 'grid' && sx >= 40)) mode = 'drag'; else if (Math.abs(dy) > 12 || Math.abs(dx) > 10) { sx = null; return; } else return; }
-    place(open ? Math.min(0, dx) : Math.min(0, -w + dx));
-  }, { passive: true });
-  addEventListener('touchcancel', () => { window.__navDrag = false; if (mode === 'drag') { cancelAnimationFrame(raf); raf = 0; want = null; for (const el of [A, SC, D]) el.removeAttribute('style'); } sx = null; mode = null; }, { passive: true });
-  addEventListener('touchend', e => {
-    window.__navDrag = false;
-    if (mode === 'page') { const dx = lastX - sx; if (Math.abs(dx) > 60) { const to = dx < 0 ? 'grid' : (localStorage.getItem('mesh.prevView') || 'split'); if (dx < 0) localStorage.setItem('mesh.prevView', view === 'grid' ? 'split' : view); setTab(to); } sx = null; mode = null; return; }
-    if (sx == null || mode !== 'drag') { sx = null; return; }
-    const dx = lastX - sx, v = dx / Math.max(1, Date.now() - st);   // px per ms (the last move, not touchend's point)
-    cancelAnimationFrame(raf); raf = 0; want = null;
-    A.style.transition = SC.style.transition = D.style.transition = A.style.transform = A.style.borderRadius = SC.style.opacity = SC.style.pointerEvents = D.style.transform = D.style.opacity = '';
-    toggleNav(open ? !(dx < -w * 0.3 || v < -0.5) : (dx > w * 0.3 || v > 0.5)); sx = null; mode = null;
-  }, { passive: true });
+  // a re-render can replace the element under the finger; its touch events then stop bubbling to window, so the
+  // gesture also listens on that element itself (each event is handled once)
+  let tgt = null, seen = null;
+  const once = f => e => { if (e === seen) return; seen = e; f(e); };
+  const onMove = once(e => {
+    if (sx == null) return; const t = e.touches[0], dt = e.timeStamp - lastT;
+    if (dt > 0) vx = 0.7 * ((t.clientX - lastX) / dt) + 0.3 * vx;      // px per ms, smoothed over the last moves
+    lastX = t.clientX; lastT = e.timeStamp;
+    let dx = t.clientX - sx; const dy = t.clientY - sy;
+    if (!mode) {
+      const need = onTerm && !open ? 16 : 10, ratio = onTerm && !open ? 2 : 1.4;
+      if (!(Math.abs(dx) > need && Math.abs(dx) > Math.abs(dy) * ratio)) { if (Math.abs(dy) > 12 || Math.abs(dx) > need) { sx = null; window.__navDrag = false; } return; }
+      if (hs && canScroll(hs, dx)) { sx = null; window.__navDrag = false; return; }
+      if (open) mode = dx < 0 ? 'drag' : null;
+      else if (view === 'grid') { if (dx > 0) { mode = 'page'; Pager.begin('split'); } }
+      else if (dx > 0) mode = 'drag'; else { mode = 'page'; Pager.begin('grid'); }
+      if (!mode) { sx = null; window.__navDrag = false; return; }
+      sx = t.clientX - Math.sign(dx); dx = Math.sign(dx);               // start tracking from here: no jump
+    }
+    if (mode === 'page') Pager.move(dx); else place(open ? Math.min(0, dx) : Math.min(0, -w + dx));
+  });
+  const onCancel = once(() => { unbindTarget(); window.__navDrag = false; if (mode === 'page') Pager.end(false, 0); else if (mode === 'drag') unpaint(0); sx = null; mode = null; });
+  const onEnd = once(e => {
+    unbindTarget(); window.__navDrag = false;
+    if (sx == null || !mode) { sx = null; mode = null; return; }
+    const dx = lastX - sx, v = e.timeStamp - lastT > 90 ? 0 : vx;      // a finger that stopped before lifting has no flick
+    if (mode === 'page') { const s = view === 'grid' ? 1 : -1; Pager.end(commits(s * dx, s * v, innerWidth), v); }
+    else { const s = open ? -1 : 1, go = commits(s * dx, s * v, w), shut = open ? go : !go;
+      unpaint(springMs(shut ? (open ? w + Math.min(0, dx) : Math.max(0, dx)) : (open ? -Math.min(0, dx) : w - Math.max(0, dx)), v));
+      toggleNav(!shut); }
+    sx = null; mode = null;
+  });
+  const EV = [['touchmove', onMove], ['touchend', onEnd], ['touchcancel', onCancel]];
+  function bindTarget(el) { unbindTarget(); tgt = el; for (const [k, f] of EV) el.addEventListener(k, f, { passive: true }); }
+  function unbindTarget() { if (tgt) for (const [k, f] of EV) tgt.removeEventListener(k, f); tgt = null; }
+  for (const [k, f] of EV) addEventListener(k, f, { passive: true });
 }
 function renderDrawer() {
   const d = $('#drawer'); if (!document.body.classList.contains('navOpen') && d.dataset.ready) return; d.dataset.ready = 1;
@@ -702,11 +771,11 @@ function renderDrawer() {
     <button class="dRow${view === 'grid' ? ' on' : ''}" data-go="grid"><span class="ic">▦</span>Grid</button>
     <button class="dRow" data-go="history"><span class="ic">↺</span>All sessions</button>
     <div class="dSec">Sessions</div>
-    <div class="dList">${S.map(x => `<button class="dItem${view === 'split' && x.sid === splitSid ? ' on' : ''}" data-sid="${x.sid}"><span class="ic">${x.kind === 'hermes' ? ICON.spark : ICON.code}</span><span class="cn">${esc(x.name)}</span>${st(x)}</button>`).join('')
+    <div class="dList">${S.map(x => `<button class="dItem${view === 'split' && x.sid === splitSid ? ' on' : ''}" data-sid="${x.sid}"><span class="ic">${x.kind === 'hermes' ? ICON.spark : ICON.code}</span><span class="cn">${esc(x.name)}${SUNTAG(x)}</span>${st(x)}</button>`).join('')
       || `<div class="meta" style="padding:10px 14px">${snap.ready ? 'No sessions running.' : 'Connecting…'}</div>`}</div>`;
   // rebuild only when something shows differently, and never under a finger: a replaced element loses its touchend
   if (html === d._html || window.__navDrag) return; d._html = html; d.innerHTML = html;
-  d.querySelectorAll('[data-sid]').forEach(b => b.onclick = () => { toggleNav(false); if (view !== 'split') { setTab('split', true); setView('split'); } pickSplit(b.dataset.sid); });
+  d.querySelectorAll('[data-sid]').forEach(b => b.onclick = () => { toggleNav(false); pickSplit(b.dataset.sid); });
   d.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { toggleNav(false); setTab(b.dataset.go); });
 }
 

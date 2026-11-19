@@ -76,7 +76,7 @@ h3 { font-size: 13px; color: var(--dim); font-weight: 600; margin: 16px 0 6px; }
 
 /* Sessions (2026-11-15): no mesh animation on the phone — a collapsible session list on the left, the terminal on the right */
 #stage, #hint { display: none !important; }
-body[data-view="split"] #split { display: flex; flex-direction: row; position: fixed; left: 0; right: 0; top: calc(env(safe-area-inset-top) + 41px); bottom: var(--tabbar); z-index: 3;
+body[data-view="split"] #split, body[data-peer="split"] #split { display: flex; flex-direction: row; position: fixed; left: 0; right: 0; top: calc(env(safe-area-inset-top) + 41px); bottom: var(--tabbar); z-index: 3;
   background: #000; border-top: 1px solid var(--line); padding: 0 calc(env(safe-area-inset-right) + 6px) 6px env(safe-area-inset-left); }
 #switch { display: flex; flex-direction: column; gap: 3px; width: 132px; flex: none; overflow-y: auto; overflow-x: hidden; padding: 8px 6px 8px 6px;
   border-right: 1px solid var(--line); scrollbar-width: none; -webkit-overflow-scrolling: touch; }
@@ -111,7 +111,7 @@ body.kb[data-view="split"] #top { background: #000; }
 /* Grid — a wall of live session cards */
 body[data-view="grid"] #stage { display: none; }
 body[data-view="grid"] #top { background: #000; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
-body[data-view="grid"] #grid { display: grid; position: fixed; left: 0; right: 0; top: calc(env(safe-area-inset-top) + 41px); bottom: var(--tabbar); overflow-y: auto; -webkit-overflow-scrolling: touch;
+body[data-view="grid"] #grid, body[data-peer="grid"] #grid { display: grid; position: fixed; left: 0; right: 0; top: calc(env(safe-area-inset-top) + 41px); bottom: var(--tabbar); overflow-y: auto; -webkit-overflow-scrolling: touch;
   grid-template-columns: repeat(auto-fill, minmax(164px, 1fr)); gap: 10px; align-content: start;
   padding: 12px calc(env(safe-area-inset-right) + 12px) 16px calc(env(safe-area-inset-left) + 12px); scrollbar-width: none; }
 #grid::-webkit-scrollbar { display: none; }
@@ -257,7 +257,7 @@ button svg.ic { pointer-events: none; }
 /* 2026-11-16: the header is as tall as its pill and buttons (it was 41px, so they spilled over the divider and the row below) */
 :root { --hdr: 62px; }
 #top { min-height: var(--hdr); height: calc(env(safe-area-inset-top) + var(--hdr)); box-sizing: border-box; padding-top: env(safe-area-inset-top); padding-bottom: 4px; }
-body[data-view="split"] #split, body[data-view="grid"] #grid { top: calc(env(safe-area-inset-top) + var(--hdr) + 4px) !important; }
+body[data-view="split"] #split, body[data-view="grid"] #grid, body[data-peer="split"] #split, body[data-peer="grid"] #grid { top: calc(env(safe-area-inset-top) + var(--hdr) + 4px) !important; }
 body.kb[data-view="split"] #split { top: calc(env(safe-area-inset-top) + var(--hdr)) !important; }
 
 /* 2026-11-18, closer to the Claude app: the drawer underneath slides in a little from the left and brightens while the
@@ -278,3 +278,11 @@ body #scrim { transition: opacity .42s cubic-bezier(.22,1,.36,1) !important; }
 .stag { font-size: 10px; padding: 0 5px; border-radius: 4px; border: 1px solid; vertical-align: 1px; font-weight: 500; }
 .stag.sun { color: #ffd27a; border-color: rgba(255,196,110,.5); }
 .stag.dup { color: #ff9a8a; border-color: rgba(255,122,106,.45); }
+
+/* 2026-11-19 pages: Sessions <-> Grid follow the finger like the drawer (phone.js Pager). While a page moves, the
+   other one is shown beside it (data-peer) and both ride GPU transforms; nothing else changes layout. */
+body[data-peer] #split, body[data-peer] #grid { backface-visibility: hidden; contain: layout paint; }
+@media (prefers-reduced-motion: reduce) {
+  body #app, body #scrim { transition-duration: .12s !important; }
+  body #drawer { transform: none !important; transition: opacity .12s !important; }
+}
