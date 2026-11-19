@@ -3,6 +3,7 @@
 Newest first. Older changes are in the git log.
 
 ## 2026-11-19
+- **Per-project refresh steps.** `extra` entries in `local/session-refresh.json` take `first`, `after` and `flush` (see README). A flush that isn't confirmed in time skips that day's refresh and alerts you.
 - **Refresh skips say why.** A "you are typing in Mesh" skip now names the source: keyboard/mouse on this Mac, or Mesh input from this window, a remote terminal or a send (with its address and first bytes). The 11-19 night still skipped most sessions after the typing fix; the log will show what keeps the input clock young.
 
 ## 2026-11-18

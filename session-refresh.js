@@ -63,11 +63,15 @@ const TEMPLATE = `# HANDOFF: <session name>  (updated <date time>)
 ## 9. Not saved anywhere else yet: facts from this conversation that are not in any file`;
 
 // Projects that need more in their handoff and their verification: local/session-refresh.json "extra": [{ "match": "^Name", "handoff": "...", "verify": "..." }]
-const EXTRA = (LOCAL.extra || []).map(x => [new RegExp(x.match, 'i'), { handoff: x.handoff || '', verify: x.verify || '' }]);
+// Optional per project: "first" (added to the new session's load message, e.g. its own knowledge files), "after" (added to
+// the "continue" message, e.g. a self-check to run), "flush": { "ask", "reply", "minutes" } (asked of the OLD session before
+// its handoff: save what isn't in its files yet and confirm; no confirmation in time → no refresh today, the owner is alerted).
+const EXTRA = (LOCAL.extra || []).map(x => [new RegExp(x.match, 'i'), { handoff: x.handoff || '', verify: x.verify || '', first: x.first || '', after: x.after || '', flush: x.flush || null }]);
 // and for every session: local/session-refresh.json "always": { "handoff": "...", "verify": "..." } (standing rules every generation inherits)
 const ALWAYS = LOCAL.always || {};
 const extraFor = name => { const x = (EXTRA.find(([re]) => re.test(name)) || [, {}])[1];
-  return { handoff: [ALWAYS.handoff, x.handoff].filter(Boolean).join('\n'), verify: [ALWAYS.verify, x.verify].filter(Boolean).join(' ') }; };
+  return { handoff: [ALWAYS.handoff, x.handoff].filter(Boolean).join('\n'), verify: [ALWAYS.verify, x.verify].filter(Boolean).join(' '),
+    first: x.first || '', after: x.after || '', flush: x.flush || null }; };
 
 // Sessions that act AS the owner (reply in his name, run his monitors): a refresh fails unless the new session
 // really re-read its rulebook (incident 2026-11-17: a new generation worked from the handoff summary and broke detailed rules)
@@ -431,6 +435,16 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
         if (!await clearDraft(s)) { draft = null; return fail('unsent text in its input box could not be cleared (saved at ' + f.replace(HOME, '~') + ', still in the box)'); }
         log(`DRAFT ${name}: unsent text saved to ${f.replace(HOME, '~')} and cleared (${dt.length} chars)`);
       }
+      // 0b. the project's own flush step (local "flush"): the old session saves its unsaved knowledge and confirms first
+      const fl = extraFor(name).flush;
+      if (fl && fl.ask) {
+        const fn = crypto.randomBytes(3).toString('hex').toUpperCase(), tag = `${fl.reply || 'FLUSHED'}-${fn}`, f0 = Date.now(), mins = +fl.minutes || 10;
+        const fs0 = await ctx.sendToSession(s.sid, `[Mesh session refresh] Before this session is replaced: ${fl.ask} Don't start other work. When done, reply with exactly one line: ${tag}`);
+        const okF = !(fs0 && fs0.ok === false) && await waitFor(isH ? 'hermes' : 'claude', s.sid, f0, new RegExp(tag), mins * 60e3);
+        if (!okF) { (cfg.flushSkip || (cfg.flushSkip = {}))[name] = dayKey(); save();
+          return fail(`no ${fl.reply || 'FLUSHED'} confirmation within ${mins} min, so today's refresh is skipped`); }
+        log(`FLUSH ${name}: confirmed ${tag}`);
+      }
       log(`START ${name} (${isH ? 'Hermes' : eng.ollama ? 'Claude Code on ' + eng.ollama : 'Claude Code'}, ${why})`);
       // 1. a complete handoff
       const fb = handoffDir(s); fs.mkdirSync(fb, { recursive: true });
@@ -500,6 +514,7 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
       step('load'); const kind = isH ? 'hermes' : 'claude', since2 = Date.now();
       const first = `Read ${hand} IN FULL (every line, not a skim), then ${isH ? '.hermes.md' : 'CLAUDE.md'} and the project's rule files, then continue where the previous session left off. `
         + (rb.length ? `Its rulebook (section 0): read EACH of these files IN FULL too, the whole file with no offset or limit; the handoff's summary never replaces them: ${rb.map(f => f.replace(HOME, '~')).join(', ')}. ` : '')
+        + (ex.first ? ex.first + ' ' : '')
         + `Where your memory files disagree with the handoff, the handoff is newer and wins: go with the handoff, and update the memory file once you are live. `
         + (jobs.length ? `The previous session left ${jobs.length} job(s) running (section 5 of the handoff): you take them over and collect their results when they finish; never kill them. ` : '')
         + `First only load them: don't run or change anything yet. Reply with the line REFRESH-LOADED-${nonce} when they are loaded; you will be asked a few questions, then told to continue.`;
@@ -536,7 +551,7 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
       }
       // 5. go
       step('continue');
-      await ctx.sendToSession(newSid, 'Verified. You are now the live session: continue where the previous session left off.');
+      await ctx.sendToSession(newSid, 'Verified. You are now the live session: continue where the previous session left off.' + (ex.after ? ' ' + ex.after : ''));
       if (loop) { await sleep(20000); for (let i = 0; i < 60 && live(newSid) && live(newSid).health === 'working'; i++) await sleep(5000);
         await ctx.sendToSession(newSid, loop.prompt); log(`LOOP  ${name}: re-armed (${loop.prompt.slice(0, 80)})`); watchTick(name, newSid, Date.now()); }
       // 6. everything that pointed at the old one now points at the new one
@@ -694,6 +709,7 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
     // parents first, then their sub-sessions (a child's parent takes it over in its handoff before the child is refreshed)
     const list = local().filter(s => named(s) && modeOf(s.name) !== 'exclude').sort((a, b) => (a.parent ? 1 : 0) - (b.parent ? 1 : 0));
     for (const s of list) {
+      if ((cfg.flushSkip || {})[s.name] === today) continue;                                  // its flush went unconfirmed today
       if (s.parent && list.some(p => p.sid === s.parent && dueNightly(p, now))) continue;      // its parent goes first
       const why = dueNightly(s, now) ? 'nightly' : overUse(s); if (!why) continue;
       // the nightly refresh is for sessions that worked: no prompt or reply since the last refresh (or in 24 h) → skip
