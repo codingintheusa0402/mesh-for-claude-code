@@ -396,7 +396,6 @@ const termControls = () => `<div class="keys">${KEYS.map(([l, k]) => `<button da
 const TLH = 1.12;   // terminal line height: a little air between lines, like the Claude app's text
 function mountTerm(host, id, box, sid) {
   termId = id; tes && tes.close(); if (term) { term._ro && term._ro.disconnect(); term._stamps && term._stamps.dispose(); term.dispose(); }
-  const W = host.clientWidth - 8 - (window.attachTermStamps && sid ? 40 : 0);
   term = new Terminal({ fontFamily: 'ui-monospace, "SF Mono", Menlo, "Apple Symbols", "Hiragino Sans", monospace', fontSize: 9, lineHeight: TLH, fontWeightBold: '600', letterSpacing: 0, convertEol: false, disableStdin: false, scrollback: 20000,
     theme: { background: '#000000', foreground: '#ececec', cursor: '#ede6d6', selectionBackground: 'rgba(255,255,255,.25)' } });
   term.open(host); touchScroll(host);
@@ -428,7 +427,14 @@ function mountTerm(host, id, box, sid) {
     api('/api/term/' + encodeURIComponent(id), { resize: d }); };
   // always the size the host reports (a grid that differs from the host's garbles Claude's redraws): our own size at the
   // readable font, anyone else's shrunk to fit
-  const fitTo = (cols, rows) => { const d = mine(); term.options.fontSize = cols === d.cols ? PF : Math.max(6.5, Math.min(PF, W / (cols * .6))); term.resize(cols, rows); };
+  // 2026-11-19 (Kevin): never wider than the screen. Another device's wider grid is shrunk until it fits exactly (measured,
+  // no minimum font); the session's real width is untouched. Touching the terminal still claims it at the readable size.
+  const avail = () => host.clientWidth - 8 - (term._stamps ? 40 : 0);
+  const shrink = () => { if (!term) return; const sc = host.querySelector('.xterm-screen'); if (!sc) return;
+    for (let i = 0; i < 3; i++) { const w = sc.getBoundingClientRect().width, a = avail(); if (!w || w <= a + 0.5) break;
+      term.options.fontSize = Math.max(2, Math.floor(term.options.fontSize * a / w * 100) / 100); } };
+  const fitTo = (cols, rows) => { const d = mine(); term.options.fontSize = cols === d.cols ? PF : Math.min(PF, avail() / (cols * .6)); term.resize(cols, rows); shrink(); };
+  if (window.ResizeObserver) { const ro3 = new ResizeObserver(() => shrink()); ro3.observe(host); }
   tes.addEventListener('size', ev => { const i = JSON.parse(ev.data); fitTo(i.cols, i.rows); });
   tes.addEventListener('init', () => setTimeout(() => claim(true), 250));
   host.addEventListener('touchstart', () => claim(), { passive: true, capture: true });
@@ -719,6 +725,7 @@ $('#navBtn').onclick = () => toggleNav(); $('#scrim').onclick = () => toggleNav(
     if (e.touches.length !== 1 || Pager.busy()) return;
     const edge = t.clientX < 40;                                         // from the left edge: always a page/drawer swipe
     if (!open && !edge && e.target.closest('textarea, input, .sheet')) return;
+    if (!open && e.target.closest('.keys')) return;                       // the key row scrolls itself, never switches pages
     hs = open || edge ? null : scroller(e.target);
     onTerm = !edge && !!e.target.closest('#pxt, #xt');                  // over the terminal: clearly sideways only
     if (!open && view !== 'grid') renderDrawer();
@@ -735,7 +742,7 @@ $('#navBtn').onclick = () => toggleNav(); $('#scrim').onclick = () => toggleNav(
     lastX = t.clientX; lastT = e.timeStamp;
     let dx = t.clientX - sx; const dy = t.clientY - sy;
     if (!mode) {
-      const need = onTerm && !open ? 16 : 10, ratio = onTerm && !open ? 2 : 1.4;
+      const need = onTerm && !open ? 14 : 10, ratio = onTerm && !open ? 1.6 : 1.4;
       if (!(Math.abs(dx) > need && Math.abs(dx) > Math.abs(dy) * ratio)) { if (Math.abs(dy) > 12 || Math.abs(dx) > need) { sx = null; window.__navDrag = false; } return; }
       if (hs && canScroll(hs, dx)) { sx = null; window.__navDrag = false; return; }
       if (open) mode = dx < 0 ? 'drag' : null;

@@ -289,3 +289,9 @@ body[data-peer] #split, body[data-peer] #grid { backface-visibility: hidden; con
 
 /* Claude Code symbols as text, never colour emoji (2026-11-19; term-stamps.js textGlyphs does the rest) */
 .xterm .xterm-rows, .xterm .xterm-rows span { font-variant-emoji: text; }
+
+/* the terminal never scrolls sideways (2026-11-19): it is fitted to the width, and sideways drags go to page swipes */
+#pxt, #xt { overflow-x: hidden !important; touch-action: pan-y; overscroll-behavior-x: none; }
+#pxt .xterm-viewport, #xt .xterm-viewport { overflow-x: hidden !important; }
+.keys { overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-x; }
+#pxt .xterm, #xt .xterm { box-sizing: border-box; max-width: 100%; }
