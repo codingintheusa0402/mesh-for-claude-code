@@ -121,7 +121,7 @@ The rest of this page is the detailed manual.
 The app's name lives in one setting, used everywhere it appears (window title, menus, the app bundle, the phone page, the iPhone app, installers, logs). The default is **Mesh for Claude Code**.
 
 - Quick: `MESH_NAME="SpongeBob Mesh" npm start`
-- Permanent: copy `mesh.local.example.json` to `mesh.local.json` (gitignored) and set `name`, `appId`, `dataDir`, `signId`, `tmuxSession`, `serverHosts`, `chatThemeName` (the chat theme's label). `bash install.sh` then builds and installs `/Applications/SpongeBob Mesh.app`.
+- Permanent: copy `mesh.local.example.json` to `mesh.local.json` (gitignored) and set `name`, `appId`, `dataDir`, `signId`, `tmuxSession`, `serverHosts`, `chatThemeName` (the chat theme's label), `sunSession` (which session is the sun; default: the app's name). `bash install.sh` then builds and installs `/Applications/SpongeBob Mesh.app`.
 - iPhone app: put `MESH_NAME`, `MESH_BUNDLE_ID` and `DEVELOPMENT_TEAM` in `ios/Local.xcconfig` (gitignored).
 
 Machine- or team-specific add-ons can go in `local/` (gitignored); `local/main.js` is loaded if present.
@@ -135,6 +135,8 @@ Machine- or team-specific add-ons can go in `local/` (gitignored); `local/main.j
 | **Live mesh** | Each session is a bubble whose interior is a swirling nebula with sparks and a beating heart-knot. It is coloured by model: Opus violet/cyan, Sonnet green, Fable red/magenta, Haiku amber. Bubbles darken as the session spends during the day and reset at midnight. |
 | **Server sessions** | A session that reaches a server you list in `serverHosts` (mesh.local.json), over ssh/scp/rsync or Tailscale SSH, gets its own orb style and a **⇄ server** tag. |
 | **Mother bubble** | A burning star at the centre with a heat-haze ripple. Its layers age from young (blue-white) to old (red-orange) with usage: the **rim** follows the 5-hour session limit, the **body** the weekly limit, and the **core** the month. A **Usage left** card below it shows each limit and when it resets. |
+| **The sun** | The session that runs the app (named like the app, or `sunSession` in mesh.local.json) is the mother star itself: fixed in the middle, a little larger, with a warm still halo and its name, status, last activity and relays today above it. Click the star to open that session; right-click it for the star menu (Broadcast, Token usage). If several sessions carry that name, the current generation of its handoff lineage is the sun and the others are labelled **duplicate**. It still shows in the session list, the Simple board and Grid like every other session, tagged **sun**. |
+| **Relays** | Messages between sessions (Claude Code's SendMessage / cross-session messages, read from the transcripts) are counted per session: **⇄ N** today in the list, the Simple board and on the iPhone. On the mesh each new one is drawn as a beam for 4 s, from the sender to the receiver; the sun's own messages and messages from the app itself start or end at the star. Nothing animates between relays; with Reduce Motion the beams are still lines that fade. |
 | **Load strands** | Glowing curved strands tie each session to the mother, with light pulses running along them. The harder a session works (smoothed tok/s), the more strands it has (1 → 50), and the older their star colour: young blue-white when light, through gold, to red-orange under heavy load. |
 | **Navigation** | Pinch or scroll to zoom (0.65×–2×). Drag empty space to pan (the map extends 40% past the window). Double-click empty space to reset the view. Every session keeps its own slow orbit; new sessions take the widest free gap, and nothing re-slots when others come, go or move. Drag a session to give it a new orbit: farther orbits turn slower, closer ones faster. Double-click a session to release it back to an automatic orbit. Clicking empty space only ripples and never pushes sessions. |
 | **Stats** | Header shows per-model spend, tok/s and burn $/h, plus counts of working/idle/attention sessions and API errors. The panel shows speed now and last reply, burn, today, session total, errors, sub-agents, CPU/mem, a context gauge, a 5-minute sparkline, token breakdown, spend by model and an activity log. |
@@ -209,6 +211,7 @@ renderer/
   app.js       Header, session list, detail panel, terminals, views, modals, notifications
   mesh.js      Canvas engine: camera (zoom/pan), backdrop, input, links/fx, frame loop
   mother.js    Mother star: star-ageing colour model, heat-haze rendering, usage card
+  sun.js       The sun (the session that runs the app) and relay beams
   bubbles.js   Orbits (Kepler-ish, stable per session), drag-to-orbit, load strands
   organism.js  Session "living universe" bubbles (nebula, fibres, sparks, heart-knot, glass rim)
   pixel.js     Pixel-mode renderer

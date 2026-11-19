@@ -5,6 +5,9 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // token counts the way people say them: 950, 7.7k, 77k, 1.1M, 12M, 1.3B
 const fmtTok = v => { v = Math.max(0, v || 0); const u = v >= 1e9 ? [1e9, 'B'] : v >= 1e6 ? [1e6, 'M'] : v >= 1e3 ? [1e3, 'k'] : null; if (!u) return String(Math.round(v)); const x = v / u[0]; return (x < 10 ? x.toFixed(1).replace(/\.0$/, '') : Math.round(x)) + u[1]; };
+// relays today (collector.js) and the sun / duplicate mark (main.js markSun)
+const RELAYS = s => s.relaysToday ? ` · <span class="relays">⇄ ${s.relaysToday}</span>` : '';
+const SUNTAG = s => s.sun ? ' <span class="stag sun">sun</span>' : s.dupOf ? ' <span class="stag dup">duplicate</span>' : '';
 const ago = s => s < 60 ? Math.round(s) + 's' : s < 3600 ? Math.round(s / 60) + 'm' : s < 86400 ? (s / 3600).toFixed(1) + 'h' : Math.round(s / 86400) + 'd';
 
 // ---------- pairing ----------
@@ -93,6 +96,7 @@ cv.addEventListener('touchstart', e => {
   if (e.touches.length === 1) {
     const p = pt(e.touches[0]), h = viz.hit(p);
     T = startPan(p, h);
+    if (h === 'hub' && viz.sunNode && viz.sunNode()) holdT = setTimeout(() => { if (T && !T.moved && T.hit === 'hub') { T.held = true; navigator.vibrate && navigator.vibrate(10); openStarSheet(); } }, 520);   // the sun: tap = its session, hold = star menu
     if (h && h !== 'hub' && !h.startsWith('grp:')) holdT = setTimeout(() => { if (T && !T.moved && T.hit === h) { T.held = true; navigator.vibrate && navigator.vibrate(10); openDetails(h); } }, 520);
   } else if (e.touches.length >= 2) T = startPinch(e);
 }, { passive: false });
@@ -117,7 +121,7 @@ cv.addEventListener('touchend', e => {
     T = e.touches.length === 1 ? Object.assign(startPan(pt(e.touches[0]), null), { moved: true }) : e.touches.length >= 2 ? startPinch(e) : null; return;
   }
   if (e.touches.length) return;
-  if (!T.moved && !T.held) { if (T.hit === 'hub') openStarSheet(); else if (T.hit && T.hit.startsWith('grp:')) viz.toggleGroup(T.hit.slice(4)); else if (T.hit) tapSession(T.hit); }
+  if (!T.moved && !T.held) { if (T.hit === 'hub') { if (viz.sunNode && viz.sunNode()) tapSession(viz.sunSid); else openStarSheet(); } else if (T.hit && T.hit.startsWith('grp:')) viz.toggleGroup(T.hit.slice(4)); else if (T.hit) tapSession(T.hit); }
   T = null;
 }, { passive: false });
 // iOS cancels touches when the keyboard, a sheet or a system gesture takes over — never leave a gesture half-open
@@ -206,8 +210,8 @@ const subsOpen = new Set();                                              // main
 function renderSessions(open) {
   const S = snap.sessions, A = snap.agents || [], live = new Set(S.map(s => s.sid)), subs = new Map();
   for (const s of S) if (s.parent && live.has(s.parent)) { if (!subs.has(s.parent)) subs.set(s.parent, []); subs.get(s.parent).push(s); }
-  const row = (s, cls = '') => `<div class="item${cls}" data-sid="${s.sid}"><span class="dot ${s.health}"></span><div class="t"><div class="n">${esc(s.name)}</div>
-      <div class="m">${esc((s.model || '—').replace('claude-', ''))} · ${fmtTok(s.todayTok)} · ${s.health === 'working' ? Math.round(s.tps) + ' tok/s' : s.health}${s.owner ? ' · ' + INAPP() : ''}${PEERTAG(s)}${pcBadges(s.sid)}</div>${cls ? '' : pcIntro(s.sid)}</div>›</div>`;
+  const row = (s, cls = '') => `<div class="item${cls}" data-sid="${s.sid}"><span class="dot ${s.health}"></span><div class="t"><div class="n">${esc(s.name)}${SUNTAG(s)}</div>
+      <div class="m">${esc((s.model || '—').replace('claude-', ''))} · ${fmtTok(s.todayTok)} · ${s.health === 'working' ? Math.round(s.tps) + ' tok/s' : s.health + ' · ' + ago(s.sinceUse ?? s.sinceWrite) + ' ago'}${RELAYS(s)}${s.owner ? ' · ' + INAPP() : ''}${PEERTAG(s)}${pcBadges(s.sid)}</div>${cls ? '' : pcIntro(s.sid)}</div>›</div>`;
   const tree = s => { const k = subs.get(s.sid); if (!k) return row(s); const on = subsOpen.has(s.sid);
     return row(s) + `<div class="subtog" data-sub="${s.sid}">${on ? '▾' : '▸'} ${k.length} sub-session${k.length > 1 ? 's' : ''}</div>` + (on ? k.map(x => row(x, ' insub')).join('') : ''); };
   const html = `<div class="sh-h"><h2>Sessions · ${S.length}</h2><button class="x">×</button></div>` +
@@ -585,8 +589,8 @@ function renderGrid() {
     const col = FAMILY_COLOR[s.family] || '#9fb4d8', pct = s.ctxMax ? Math.min(100, s.ctx / s.ctxMax * 100) : 0, work = s.health === 'working';
     const last = [...s.log].reverse().find(l => l.kind === 'claude' || l.kind === 'you' || l.kind === 'tool');
     c.className = 'gcard ' + s.health;
-    c.innerHTML = `<div class="gh"><span class="dot ${s.health}"></span><span class="gn">${esc(s.name)}</span></div>
-      <div class="gm"><span style="color:${col}">${esc((s.model || '—').replace('claude-', '').replace(/-\d.*$/, ''))}</span><span>${s.owner ? INAPP() : s.kind === 'bg' ? 'bg' : 'terminal'}</span>${s.serverUses ? '<span>⇄ server</span>' : ''}</div>
+    c.innerHTML = `<div class="gh"><span class="dot ${s.health}"></span><span class="gn">${esc(s.name)}</span>${SUNTAG(s)}</div>
+      <div class="gm"><span style="color:${col}">${esc((s.model || '—').replace('claude-', '').replace(/-\d.*$/, ''))}</span><span>${s.owner ? INAPP() : s.kind === 'bg' ? 'bg' : 'terminal'}</span>${s.serverUses ? '<span>⇄ server</span>' : ''}${s.relaysToday ? `<span class="relays">⇄ ${s.relaysToday}</span>` : ''}</div>
       <div class="gv"><b>${work ? Math.round(s.tps) : fmtTok(s.todayTok)}</b><small>${work ? ' tok/s' : ' today'}</small><span class="gs">${work ? fmtTok(s.todayTok) : ago(s.sinceWrite) + ' ago'}</span></div>
       <svg class="gsp" viewBox="0 0 100 26" preserveAspectRatio="none"><path d="${sparkPath(s.spark || [0, 0], s.sparkPeak, 100, 26)}" stroke="${col}" /></svg>
       <div class="gbar"><div style="width:${pct}%;background:${pct > 85 ? 'var(--err)' : pct > 60 ? 'var(--warn)' : col}"></div></div>

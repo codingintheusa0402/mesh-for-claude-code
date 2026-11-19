@@ -272,3 +272,9 @@ body #scrim { transition: opacity .42s cubic-bezier(.22,1,.36,1) !important; }
 #drawer .dRow:active, #drawer .dItem:active { background: rgba(255,255,255,.14); }
 /* terminal: crisper glyphs and a little side padding so text doesn't touch the card edge */
 #pxt .xterm, #xt .xterm { -webkit-font-smoothing: antialiased; padding: 0 4px; }
+
+/* the sun session, its duplicates and relays today (2026-11-19) */
+.relays { color: #ffcf8a; white-space: nowrap; }
+.stag { font-size: 10px; padding: 0 5px; border-radius: 4px; border: 1px solid; vertical-align: 1px; font-weight: 500; }
+.stag.sun { color: #ffd27a; border-color: rgba(255,196,110,.5); }
+.stag.dup { color: #ff9a8a; border-color: rgba(255,122,106,.45); }

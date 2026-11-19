@@ -669,6 +669,25 @@ const projFolders = createFolders({ findTranscript: sid => core.findTranscript(s
 // (e.g. web-42 in ~/web → Shop Project, whose folders are ~/web + ~/api). Sessions tree it in Sessions. Worked out when
 // the set of sessions changes and every 10 min (transcripts are read), then just applied to each snapshot.
 let subParents = {}, subKey = '', subAt = 0;
+// The sun (2026-11-19): the session that runs this app (by default the one named like the app; mesh.local.json
+// "sunSession" overrides) sits in the middle of the mesh. Several sessions can carry that name; the real one is the
+// current generation of its handoff lineage (<handoffs>/<name>/lineage.json), else the most recently used one. The
+// others are shown as "<name> (duplicate)" with dupOf set. Returns a copy for the window / phone: the snapshot main
+// works with (refresh, duplicate watch) keeps the real names.
+const SUN_NAME = String(MESH.sunSession || APP_NAME).trim();
+let sunLid = { at: 0, lid: null };
+function markSun(snapshot) {
+  const norm = x => String(x || '').trim().toLowerCase(), C = (snapshot.sessions || []).filter(s => norm(s.name) === norm(SUN_NAME) && s.kind !== 'hermes' && !s.headless && !s.spawnedBy);
+  if (!C.length) return { ...snapshot, sun: null };
+  if (Date.now() - sunLid.at > 60e3) { sunLid = { at: Date.now(), lid: null }; try { sunLid.lid = (require('./lineage').read(require('./session-refresh').paths.handoffs, SUN_NAME) || {}).lid || null; } catch { } }
+  const ago = s => Math.min(...[s.sinceUse, s.sinceWrite].filter(v => typeof v === 'number' && v >= 0), 9e9);
+  const own = sunLid.lid && C.filter(s => s.lineage === sunLid.lid);
+  const pick = (own && own.length ? own : C).slice().sort((a, b) => (!!a.onPeer - !!b.onPeer) || ago(a) - ago(b))[0];
+  const base = s => String(s.sid || '').replace(/^peer:/, '');
+  return { ...snapshot, sun: pick.sid, sessions: snapshot.sessions.map(s => s === pick ? { ...s, sun: true }
+    : C.includes(s) && base(s) !== base(pick) ? { ...s, name: s.name + ' (duplicate)', dupOf: pick.sid } : s) };
+}
+
 function linkSubSessions(snap) {
   const kid = s => s.auto || s.headless, key = snap.sessions.map(s => s.sid + (kid(s) ? '*' : '')).sort().join();
   if (key !== subKey || Date.now() - subAt > 10 * 60e3) {
@@ -1138,7 +1157,7 @@ function initPhone() {
   phone = createPhoneServer({
     root: __dirname, userData: app.getPath('userData'), ptys: { get: id => ptys.get(id) || panes.proc(id) }, ptyBus, peer: peerLink, viewPeers, termSnapshot, termResize,
     termOpen: id => panes.has(id) ? panes.open(id) : null, termClose: id => { if (panes.has(id)) panes.close(id); },
-    getSnap: () => lastSnap,
+    getSnap: () => lastSnap && markSun(lastSnap),
     getHistory: () => scanHistory(),
     codemap: { status: sid => cmCall(sid, 'status'), html: sid => cmCall(sid, 'html'), op: (sid, op) => ['generate', 'cancel'].includes(op) ? cmCall(sid, op) : { ok: false } },
     details: sid => sessionDetails(sid),
@@ -1286,9 +1305,9 @@ async function loop() {
       // view-only machines (view-peers.js) are added for this window and the phone, never for the paired Mac
       const shown = viewPeers ? viewPeers.merge(peerLink ? peerLink.merge(snap) : snap) : peerLink ? peerLink.merge(snap) : snap;
       if (shown !== snap) { paintSessions(shown.sessions); groupSessions(shown); }   // includes the peer's terminals (peer:… ids, onPeer)
-      win.webContents.send('telemetry', shown);
+      win.webContents.send('telemetry', markSun(shown));
       if (Date.now() - dupAt > 60e3) { dupAt = Date.now(); watchDuplicates(shown); }
-      lastSnap = snap; watchEngines(snap); if (phone) phone.broadcast(snap); recordSessions(snap);
+      lastSnap = snap; watchEngines(snap); if (phone) phone.broadcast(markSun(snap)); recordSessions(snap);
       const sig = snap.sessions.map(s => s.sid + s.health).join();
       if (sig !== loopSig || snap.sessions.some(s => s.health === 'working')) { loopSig = sig; loopBusyAt = Date.now(); }
     }

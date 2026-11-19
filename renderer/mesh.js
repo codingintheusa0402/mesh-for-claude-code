@@ -88,7 +88,7 @@ class Mesh {
       if (p.moved) { this.cam.ttx = p.tx + e.clientX - p.x0; this.cam.tty = p.ty + e.clientY - p.y0; this.clampCam(); this.cam.tx = this.cam.ttx; this.cam.ty = this.cam.tty; }
     });
     addEventListener('mouseup', () => {
-      if (this.hubPress) { this.hubPress = null; this.c.style.cursor = ''; return this.onHub(); }
+      if (this.hubPress) { this.hubPress = null; this.c.style.cursor = ''; clearTimeout(this.hubHoldT); return this.hubClick ? this.hubClick() : this.onHub(); }   // sun.js: the sun's session
       if (this.probeGrab) return this.probeGrabEnd();
       if (this.objDrag) return this.objDragEnd();
       if (this.spinDrag) return this.spinEnd();

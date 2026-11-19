@@ -379,10 +379,13 @@ function renderList() {
 const FOLDER_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.75 7.5a2 2 0 0 1 2-2h3.6l2.1 2.25h6.8a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2H5.75a2 2 0 0 1-2-2z"/><path d="M3.75 10.25h16.5"/></svg>';
 const foldBtn = s => { const f = window.sessionFolders && window.sessionFolders[s.sid]; return f ? `<span class="fold" ${f.pending ? 'style="opacity:.4"' : ''} data-fold="${esc(f.path)}" title="${f.pending ? `${esc(f.label)}: ${esc(f.why)}` : `Open ${esc(f.label)} in Finder (${esc(f.why)})`}">${FOLDER_SVG}</span>` : ''; };
 // one session row; draggable onto another row (→ new group of both) or onto a group header (→ joins it)
+// relays today (messages to/from other sessions, collector.js) and the sun mark (sun.js)
+const relayChip = s => s.relaysToday ? `<span class="relays" title="${s.relaysToday} message${s.relaysToday > 1 ? 's' : ''} to or from other sessions today">⇄ ${s.relaysToday}</span>` : '';
+const sunTag = s => s.sun ? '<span class="tag sun" title="Runs this app: the star in the middle of the mesh">sun</span>' : s.dupOf ? '<span class="tag dup" title="Another session with the same name; not the one that runs this app">duplicate</span>' : '';
 const cardBits = s => window.cardRowBits ? window.cardRowBits(s) : { badges: '', intro: '' };
 const srowHtml = (s, cls, cb = cardBits(s)) => `<div class="srow${cls} ${s.sid === selected ? 'sel' : ''}${doneCls(s.sid)}" data-sid="${s.sid}" draggable="true">
-    <div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${s.onPeer || s.hostLabel ? peerTag(s) : s.owner ? '<span class="tag">app</span>' : s.kind === 'bg' ? '<span class="tag">bg</span>' : ''}${cb.badges}${foldBtn(s)}<span class="more" data-more="${s.sid}" title="Commands (or right-click)">⋯</span></div>
-    <div class="m"><span style="color:${FAMILY_COLOR[s.family]}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${fmtTok(s.todayTok)}</span><span>${s.health === 'working' ? Math.round(s.tps) + ' tok/s' : ago(s.sinceUse ?? s.sinceWrite)}</span></div>${cb.intro}
+    <div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${sunTag(s)}${s.onPeer || s.hostLabel ? peerTag(s) : s.owner ? '<span class="tag">app</span>' : s.kind === 'bg' ? '<span class="tag">bg</span>' : ''}${cb.badges}${foldBtn(s)}<span class="more" data-more="${s.sid}" title="Commands (or right-click)">⋯</span></div>
+    <div class="m"><span style="color:${FAMILY_COLOR[s.family]}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${fmtTok(s.todayTok)}</span><span>${s.health === 'working' ? Math.round(s.tps) + ' tok/s' : ago(s.sinceUse ?? s.sinceWrite)}</span>${relayChip(s)}</div>${cb.intro}
   </div>`;
 
 // ---------------- groups: drag & drop in the list, header clicks ----------------
@@ -446,8 +449,8 @@ const boardOrder = ss => [...ss].sort((a, b) => ((b.health === 'working' || b.he
 function renderBoard() {
   if (!isSimple()) return;
   const html = (window.cleanupBar ? window.cleanupBar() : '') + (boardOrder(snap.sessions).map(s => `<div class="bcard b-${s.health}${s.sid === selected ? ' sel' : ''}" data-sid="${s.sid}">
-    <div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${peerTag(s)}${usageRing(s)}</div>
-    <div class="m"><span style="color:${FAMILY_COLOR[s.family]}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${fmtTok(s.todayTok)}</span><span>${s.health === 'working' ? 'working' : s.health}</span></div>
+    <div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${sunTag(s)}${peerTag(s)}${usageRing(s)}</div>
+    <div class="m"><span style="color:${FAMILY_COLOR[s.family]}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${fmtTok(s.todayTok)}</span><span>${s.health === 'working' ? 'working' : ago(s.sinceUse ?? s.sinceWrite)}</span>${relayChip(s)}</div>
   </div>`).join('') || '<div class="bempty">No live sessions.</div>');
   if (html === lastBoard) return;
   lastBoard = html; $('#board').innerHTML = html;

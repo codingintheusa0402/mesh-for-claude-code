@@ -17,5 +17,6 @@
       "operator": true
     }
   ],
-  "chatThemeName": "Chat"
+  "chatThemeName": "Chat",
+  "sunSession": ""
 }

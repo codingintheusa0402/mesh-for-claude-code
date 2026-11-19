@@ -711,3 +711,8 @@ body.simple .bcard.b-waiting { animation: bBlinkWarn 1.6s steps(1, end) infinite
 #memMenu .mmBar b { display: block; height: 100%; background: #7fd18b; }
 #memMenu .mmBar.warn b { background: #e6c140; } #memMenu .mmBar.crit b { background: #e5534b; }
 #memMenu .mm-high { color: #e6c140; } #memMenu .mm-critical { color: #e5534b; }
+
+/* sun.js / relays (2026-11-19): the session that runs this app, its duplicates, and messages between sessions today */
+.relays { color: #ffcf8a; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tag.sun, body:not(.pixel) .tag.sun { color: #ffd27a; border-color: rgba(255,196,110,.5); }
+.tag.dup, body:not(.pixel) .tag.dup { color: #ff9a8a; border-color: rgba(255,122,106,.45); }

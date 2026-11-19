@@ -67,6 +67,7 @@ class SessionStats {
     this.log = [];              // [{t, kind, text}]
     this.turns = 0;
     this.turnTimes = [];        // timestamps of replies in the last 24 h (activity frequency)
+    this.relays = [];           // cross-session messages, last 24 h: [{t, dir: 'in'|'out', pid, name}] (noteRelay)
     this.roots = new Map();     // what runs for this session: key -> {kind: loop|cron|monitor|agent, label, at (last activity), born}
   }
   touchRoot(key, kind, label, ts) {
@@ -248,6 +249,31 @@ print(json.dumps(out))`;
     if (!t.isSub) this.stat(t.sid).lastWriteAt = st.mtimeMs;
   }
 
+  // Relays (2026-11-19): messages between sessions. Received: a user turn that starts with <cross-session-message from=…
+  // from-name=…> (not a tool result that merely quotes one). Sent: a SendMessage / CrossSessionMessage tool call (each
+  // call once, by its tool id). The other end is a socket (uds:…/<pid>.sock → that Claude process) or a session name.
+  noteRelay(t, line, ts, isAsst) {
+    if (ts < Date.now() - 864e5) return;
+    const s = this.stat(t.sid), add = (dir, peer) => {
+      const m = /cc-socks\/(\d+)\.sock/.exec(peer.addr || ''), name = String(peer.name || '').replace(/\s*\[[0-9a-f]{4,}\]$/, '').trim();
+      s.relays.push({ t: ts, dir, pid: m ? +m[1] : 0, name: name && !/^uds:/.test(name) && name !== '...' ? name : '' });
+      if (s.relays.length > 300) s.relays.splice(0, s.relays.length - 300);
+    };
+    if (isAsst) {
+      const seen = t.relaySeen || (t.relaySeen = new Set());
+      for (const m of line.matchAll(/"id":"(toolu_[^"]+)","name":"(?:SendMessage|CrossSessionMessage)","input":\{"to":"((?:[^"\\]|\\.)*)"/g)) {
+        if (seen.has(m[1])) continue; seen.add(m[1]); if (seen.size > 500) seen.delete(seen.values().next().value);
+        add('out', /^uds:/.test(m[2]) ? { addr: m[2] } : { name: m[2] });
+      }
+      return;
+    }
+    if (!line.includes('"type":"user"') || line.includes('"tool_result"') || !line.includes('"content":"Another Claude session sent a message')) return;
+    for (const m of line.matchAll(/<cross-session-message (from=[^>]*)>/g)) {
+      const attr = k => { const r = new RegExp(k + '=\\\\"([^"\\\\]*)\\\\"').exec(m[1]); return r ? r[1] : ''; };
+      add('in', { addr: attr('from'), name: attr('from-name') });
+    }
+  }
+
   processLine(t, line, quiet) {
     if (t.isSub && line) {
       const tsm0 = /"timestamp":"([^"]+)"/.exec(line), ts0 = tsm0 ? Date.parse(tsm0[1]) : 0;
@@ -262,6 +288,7 @@ print(json.dumps(out))`;
     const tsm = /"timestamp":"([^"]+)"/.exec(line);
     const ts = tsm ? Date.parse(tsm[1]) : 0;
     const isAsst = line.includes('"type":"assistant"');
+    if (!t.isSub && ts && (line.includes('cross-session-message from=') || line.includes('"name":"SendMessage"') || line.includes('"name":"CrossSessionMessage"'))) this.noteRelay(t, line, ts, isAsst);
     if (!t.isSub) {                                          // when you or Claude last really did something (a resume only adds housekeeping lines)
       const st = this.stat(t.sid), asked = !isAsst && line.includes('"type":"user"') && !line.includes('"isMeta":true') && !line.includes('"tool_result"') && !line.includes('<local-command') && !line.includes('<command-name>/exit');
       if (ts && (isAsst || asked) && ts > (st.lastUseAt || 0)) st.lastUseAt = ts;
@@ -481,6 +508,8 @@ print(json.dumps(out))`;
         freq: s.turnTimes.reduce((a, x) => a + Math.pow(.5, (now - x) / 108e5), 0),
         subagents: subActive, errors5m: err5, errors1h: s.errors.length, lastError: s.lastError, serverUses: s.serverUses || 0, serverAt: s.serverAt || 0,
         sinceWrite, sinceUse: s.lastUseAt ? (now - s.lastUseAt) / 1000 : sinceWrite, spark, sparkPeak,
+        // relays: messages to/from other sessions today, and the last 90 s of them (the mesh draws those as beams)
+        relaysToday: s.relays.filter(r => r.t >= this.dayStart).length, relaysRecent: s.relays.filter(r => r.t > now - 90e3).slice(-12),
         // nobody named it (Claude's folder + id, e.g. web-42), or a script's `claude -p` run nobody ever typed into
         spawnedBy: this.spawnedBy(pid), auto: j.nameSource === 'derived' && !s.customTitle && !s.aiTitle, headless: j.entrypoint === 'sdk-cli' || (!!s.sdk && !s.cliAsked),
  log: s.log.slice(-40), owner,
