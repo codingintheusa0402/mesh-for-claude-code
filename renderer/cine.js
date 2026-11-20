@@ -18,7 +18,7 @@ Object.assign(Mesh.prototype, {
     const st = document.createElement('style'); st.textContent = 'body.cine #meshHint, body.cine #toast { opacity: 0 !important; transition: opacity .6s; }'; document.head.appendChild(st);
     // the Mac's idle clock (any app); polled, so a key pressed elsewhere also ends the show within a second
     if (window.api && window.api.sys && window.api.sys.idle) {
-      const poll = async () => { try { const s = await window.api.sys.idle(); if (typeof s !== 'number' || !Number.isFinite(s)) return; this.sysIdle = s; if (this.cine && this.cine.phase !== 'out' && s < 1) this.cineEnd(); } catch { } };
+      const poll = async () => { if (this.off('mCine') && !this.cineManual && !this.cine) return; try { const s = await window.api.sys.idle(); if (typeof s !== 'number' || !Number.isFinite(s)) return; this.sysIdle = s; if (this.cine && this.cine.phase !== 'out' && s < 1) this.cineEnd(); } catch { } };
       setInterval(poll, 1000); poll();
     }
   },

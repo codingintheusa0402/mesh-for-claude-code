@@ -15,7 +15,7 @@ const SYNC = ['existsSync', 'statSync', 'lstatSync', 'readdirSync', 'readFileSyn
   'realpathSync', 'readlinkSync', 'writeFileSync', 'appendFileSync', 'mkdirSync', 'renameSync', 'unlinkSync', 'rmSync',
   'copyFileSync', 'utimesSync', 'chmodSync', 'truncateSync'];
 
-function createGuard({ home = os.homedir(), roots = null, probe = null, every = 15000, slowMs = 2000, onChange = () => { } } = {}) {
+function createGuard({ home = os.homedir(), roots = null, probe = null, every = 60000, slowMs = 2000, onChange = () => { } } = {}) {
   const state = new Map();        // root -> 'ok' | 'stuck'
   const busy = new Set();         // roots with a probe in flight
   let aliases = [];               // [link path, target]: ~/.claude/skills -> ~/Desktop/repo/skills

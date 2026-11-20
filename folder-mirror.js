@@ -1,14 +1,18 @@
 // Project folders on the other Mac. A session's folder button works from either Mac: the same path under home if this Mac
 // has it (a synced repo), otherwise a copy kept in iCloud Drive under "Mesh Folders/<machine>/".
 // The copy is a one-way viewing copy, never the working folder: git repos, databases and running jobs don't survive being
-// live in iCloud. Only folders the other Mac lacks are copied, without secrets, repos, dependencies, logs or big files, and
-// edits made in the copy aren't overwritten (--update) but don't reach the original either. Off unless mesh.local.json sets
-// "folderMirror": true.
+// live in iCloud. Only folders the other Mac lacks are copied, without secrets, repos, dependencies, logs, big files or media
+// work products (frames, upscales, renders, masters, video/audio). The copy mirrors the filtered source exactly (--delete):
+// edits made in the copy are lost on the next pass. A folder over 1 GB after filters isn't mirrored. Off unless
+// mesh.local.json sets "folderMirror": true.
 const fs = require('fs'), path = require('path'), os = require('os'), { execFile } = require('child_process');
 const HOME = os.homedir(), ROOT = path.join(HOME, 'Library', 'Mobile Documents', 'com~apple~CloudDocs', 'Mesh Folders');
-const EVERY = 15 * 60e3, MAX_FILE = '25m';
+const EVERY = 15 * 60e3, MAX_FILE = '10m', MAX_TOTAL = 1e9;                   // per file / per mirrored folder (bytes)
 const SKIP = ['.git', 'node_modules', '.venv', 'venv', '__pycache__', 'dist', 'build', 'DerivedData', '.build', '.next', '.cache', 'Pods', 'SourcePackages', 'logs', 'state',
-  '.env', '.env.*', '*.env', '*.pem', '*.key', '*.p12', '*.mobileprovision', 'credentials*', 'secrets*', '*secret*', '*token*', '.npmrc', '.netrc', '*.sqlite*', '*.db', '*.log', '*.plist', '*cookie*', '*session*.json', 'Local.xcconfig', '.DS_Store'];
+  '.env', '.env.*', '*.env', '*.pem', '*.key', '*.p12', '*.mobileprovision', 'credentials*', 'secrets*', '*secret*', '*token*', '.npmrc', '.netrc', '*.sqlite*', '*.db', '*.log', '*.plist', '*cookie*', '*session*.json', 'Local.xcconfig', '.DS_Store',
+  // media work products: frames, upscales, renders and masters are big, change constantly and are never needed to look at a project
+  'frames', 'frames_*', '*_frames', 'frame_*', 'seq', 'up', 'up_*', 'upscale*', 'render', 'renders', '*_render*', 'out', 'masters', 'raw',
+  'media', 'cache', 'tmp', 'work', '*.mp4', '*.mov', '*.mkv', '*.webm', '*.wav', '*.m4a', '*.mp3', '*.aac', '*.exr', '*.psd', '*.safetensors', '*.ckpt', '*.zip'];
 
 const isDir = p => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 const relOf = p => (typeof p === 'string' && p.startsWith(HOME + '/') ? p.slice(HOME.length + 1) : null);
@@ -24,9 +28,20 @@ function resolve(rel, machine) {
 
 function createMirror({ machine, peer, folders, enabled }) {
   let busy = false;
+  // The mirror is a viewing copy: --delete + --delete-excluded keep it equal to the filtered source, so pruned or newly
+  // skipped files leave iCloud too. A folder whose filtered size passes MAX_TOTAL is not mirrored, and its old copy goes.
+  const rs = (extra, src, dest, cb) => execFile('/usr/bin/nice', ['-n', '15', '/usr/bin/rsync', '-a', '--update', '--delete', '--delete-excluded',
+    '--max-size=' + MAX_FILE, ...SKIP.map(s => '--exclude=' + s), ...extra, src, dest], { timeout: 10 * 60e3, maxBuffer: 4 << 20 }, cb);
+  const dropCopy = dest => { if (dest.startsWith(path.join(ROOT, machine) + '/')) try { fs.rmSync(dest, { recursive: true, force: true }); } catch { } };
   const copy = rel => new Promise(res => {
-    const dest = path.join(ROOT, machine, rel); try { fs.mkdirSync(dest, { recursive: true }); } catch { return res(false); }
-    execFile('/usr/bin/nice', ['-n', '15', '/usr/bin/rsync', '-a', '--update', '--max-size=' + MAX_FILE, ...SKIP.map(s => '--exclude=' + s), path.join(HOME, rel) + '/', dest + '/'], { timeout: 10 * 60e3 }, e => res(!e));
+    const src = path.join(HOME, rel) + '/', dest = path.join(ROOT, machine, rel);
+    rs(['-n', '--stats'], src, '/tmp/mesh-mirror-sizecheck-none/', (e, out) => {    // dry run against an empty target = full size
+      const m = /Total file size: ([\d,]+)/.exec(out || ''), total = m ? +m[1].replace(/,/g, '') : NaN;
+      if (e || !(total >= 0)) return res(false);
+      if (total > MAX_TOTAL) { console.warn(`[mirror] ~/${rel}: ${(total / 1e9).toFixed(1)} GB after filters > cap, not mirrored`); dropCopy(dest); return res(false); }
+      try { fs.mkdirSync(dest, { recursive: true }); } catch { return res(false); }
+      rs([], src, dest + '/', e2 => res(!e2));
+    });
   });
   async function tick() {
     const p = peer(); if (busy || !enabled || !p || !p.online()) return;

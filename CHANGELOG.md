@@ -3,6 +3,8 @@
 Newest first. Older changes are in the git log.
 
 ## 2026-11-20
+- **Version 1.2.1: lighter while open.** The iPhone page no longer loads the mesh engine it stopped drawing on 11-15 (13 scripts and the three.js 3-D models): it now loads 7 scripts instead of 21, through a small stand-in (`phone/phone-viz.js`). On the Mac: the idle screen saver is off unless you tick it in View ▸ Mesh (its once-a-second idle poll stops too); the Live panel stops polling its job and its Chrome screencast while the panel is closed or the window is hidden; the All sessions list reloads every 60 s and not while hidden (was 20 s); countdowns skip hidden windows; the folder-stall check runs every 60 s (a slow call still flags a folder at once) and the memory popover's process list every 2 min.
+- **Folder mirror stays small.** The iCloud viewing copy (`folderMirror`) now skips media work products (frames, upscales, renders, masters, video and audio, caches), caps files at 10 MB and each folder at 1 GB after filters (bigger folders aren't mirrored), and mirrors exactly with `--delete`, so pruned or skipped files leave iCloud too. Edits made in the copy are lost on the next pass. Before this, one project's upscale frames filled 12 GB of iCloud Drive and stayed there after the originals were pruned.
 - **Sessions that run a skill get its folder.** A session started in the home folder that works through a hidden link (`~/.claude/skills/<name>` → the real skills folder) had no project folder, so no folder button and no Code map. Paths through a hidden link now count as the real folder they point to. Checked on 15 live sessions: three that had no folder now get their skill folder; every other session's folder is unchanged.
 
 ## 2026-11-19

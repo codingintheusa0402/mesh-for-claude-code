@@ -152,6 +152,7 @@
   async function tick(P) {
     clearTimeout(P.timer);
     if (!P.el.isConnected) return;
+    if (document.hidden || !D.isShown(P.id)) { stopBrowser(P); stopWindow(P); P.lastHtml = ''; P.timer = setTimeout(() => tick(P), 3000); return; }   // closed or hidden: no polling, no screencast
     const sid = P.pinnedSid || followSid();
     if (sid !== P.sid) { P.sid = sid; P.job = null; P.doc = null; P.docKey = ''; P.manual = null; P.view = null; stopBrowser(P); stopWindow(P); P.lastHtml = ''; }
     if (!visible(P) || P.busy) { stopBrowser(P); stopWindow(P); return; }   // hidden: no work at all (onChange / selection brings it back)

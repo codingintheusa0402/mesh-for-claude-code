@@ -95,7 +95,7 @@ function tickCountdowns() {
     el.classList.toggle('due', left <= 0);
   });
 }
-setInterval(tickCountdowns, 1000);
+setInterval(() => { if (!document.hidden) tickCountdowns(); }, 1000);
 setInterval(() => { if (document.querySelector('#swBar .swcd') && !document.hidden) renderSwitchPills(); }, 5000);
 // a switch's schedule (switches.js): the hours it may run. Edited in the pill's menu; saved only with Save
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];

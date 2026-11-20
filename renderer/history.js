@@ -282,7 +282,7 @@ window.api.onTelemetry(() => {
   const hk = snap.sessions.map(s => s.sid).join() + '|' + [...doneSids].join() + '|' + doneFade.size + '|' + (snap.agents || []).map(a => a.sessionId).join() + '|' + hist.length + '|' + Math.floor(Date.now() / 60000);
   if (hist.length && hk !== lastHistKey && !$('#hList').matches(':hover')) { lastHistKey = hk; renderHistory(); }
 });
-loadHistory(); setInterval(loadHistory, 20000);
+loadHistory(); setInterval(() => { if (!document.hidden) loadHistory(); }, 60000);
 
 // ---------------- iPhone access (phone-server.js) ----------------
 // The phone asks the Mac to resume a session → do exactly what a click in "All sessions" does.

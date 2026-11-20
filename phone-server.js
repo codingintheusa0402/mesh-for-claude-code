@@ -33,7 +33,7 @@ function createPhoneServer(ctx) {
 
   // static files: phone/ app + the shared renderer engine + xterm
   const STATIC = {
-    '/': 'phone/index.html', '/app-name.js': 'renderer/app-name.js', '/phone.js': 'phone/phone.js', '/phone.css': 'phone/phone.css', '/usage-view.js': 'renderer/usage-view.js', '/usage-view.css': 'renderer/usage-view.css', '/icon.png': 'renderer/icon.png',
+    '/': 'phone/index.html', '/app-name.js': 'renderer/app-name.js', '/phone.js': 'phone/phone.js', '/phone-viz.js': 'phone/phone-viz.js', '/phone.css': 'phone/phone.css', '/usage-view.js': 'renderer/usage-view.js', '/usage-view.css': 'renderer/usage-view.css', '/icon.png': 'renderer/icon.png',
     '/apple-touch-icon.png': 'build/icon-ios.png',
     '/mesh.js': 'renderer/mesh.js', '/mother.js': 'renderer/mother.js', '/bubbles.js': 'renderer/bubbles.js', '/sun.js': 'renderer/sun.js', '/organism.js': 'renderer/organism.js', '/portal.js': 'renderer/portal.js', '/probe.js': 'renderer/probe.js', '/probe/probe_sheet.png': 'renderer/probe/probe_sheet.png', '/blackhole.js': 'renderer/blackhole.js', '/endurance.js': 'renderer/endurance.js', '/handles.js': 'renderer/handles.js', '/probe-life.js': 'renderer/probe-life.js', '/probe-tidy.js': 'renderer/probe-tidy.js', '/probe/probe.glb': 'renderer/probe/probe.glb', '/endurance/endurance_sheet.webp': 'renderer/endurance/endurance_sheet.webp', '/endurance/endurance.json': 'renderer/endurance/endurance.json', '/endurance/endurance.glb': 'renderer/endurance/endurance.glb', '/three3d.js': 'renderer/three3d.js',
     // three.js (the 3-D Endurance + black hole): every file by name, no folder serving

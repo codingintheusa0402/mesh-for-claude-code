@@ -569,6 +569,7 @@ const MESH_ITEMS = [
 ];
 const WINDOW_MESH = [['mOrbitLines', 'Orbit lines'], ['mLinks', 'Lines to the mother star'], ['mSpinBand', 'Orbit control disk'], ['mCine', 'Screen saver after 3 min idle']];
 let uiHidden = {}; try { uiHidden = JSON.parse(fs.readFileSync(UI_FILE, 'utf8')) || {}; } catch { }
+if (!('mCine' in uiHidden)) uiHidden.mCine = true;                               // screen saver: off unless ticked in View ▸ Mesh (2026-11-20 cleanup)
 // Team use: features that need a team's own setup on this Mac appear only where it exists (local/ add-ons, below), and
 // the header can carry the team's name (<userData>/team.json). An optional guide link comes from mesh.local.json guideUrl.
 const FEATURES = {
@@ -1274,7 +1275,7 @@ function readTop() {
     memTop = Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, bytes]) => ({ name: name === 'claude' ? `Claude Code (${n[name]} sessions)` : name, bytes }));
   });
 }
-readTop(); setInterval(readTop, 30000);
+readTop(); setInterval(readTop, 120000);
 
 // ---------------- telemetry loop ----------------
 async function loop() {
