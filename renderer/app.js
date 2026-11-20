@@ -186,7 +186,7 @@ viz.onMerge = async (sid, to) => {
   await window.api.groups.create(name, [to.sid, sid]); toast(`Portal opened: ${name} (double-click it in Sessions to rename)`);
 };
 viz.onGroup = (gid, collapsed) => { window.api.groups.update(gid, { collapsed }); if (snap.groups && snap.groups[gid]) snap.groups[gid].collapsed = collapsed; renderList(); };   // a portal clicked on the mesh
-window.api.onVisible(v => { viz.offscreen = !v; if (v) { viz.wake(); for (const [, t] of terms) if (termVisible(t)) flushTerm(t); } });
+window.api.onVisible(v => { viz.offscreen = !v; document.body.classList.toggle('unseen', !v); if (v) { viz.wake(); for (const [, t] of terms) if (termVisible(t)) flushTerm(t); } });
 
 // ---------------- telemetry ----------------
 window.api.onTelemetry(s => {
@@ -1163,7 +1163,7 @@ window.api.pty.onData((id, d, seq) => {
   const t = terms.get(id); if (!t) return;
   if (seq) t.seq = seq;
   if ((termVisible(t) && !document.hidden && !viz.offscreen) || QUERY.test(d)) { flushTerm(t); t.term.write(textGlyphs(d)); return; }
-  t.q = (t.q || '') + d; if (!t.feedT) t.feedT = setTimeout(() => flushTerm(t), 2000);
+  t.q = (t.q || '') + d; if (!t.feedT) t.feedT = setTimeout(() => flushTerm(t), viz.offscreen ? 10000 : 2000);   // window unseen / nobody at the Mac: 10 s batches
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) for (const [, t] of terms) if (termVisible(t)) flushTerm(t); });
 window.api.pty.onExit((id) => {

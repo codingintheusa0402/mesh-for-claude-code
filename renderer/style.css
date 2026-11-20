@@ -498,6 +498,7 @@ body.simple .bcard .n { display: flex; align-items: center; gap: 7px; font-weigh
 body.simple .bcard .n .t { overflow: hidden; text-overflow: ellipsis; }
 body.simple .bcard .m { display: flex; gap: 8px; color: var(--dim); font-size: 11.5px; margin-top: 4px; padding-left: 15px; }
 body.simple .bempty { color: var(--dim); padding: 8px; }
+body.unseen *, body.unseen *::before, body.unseen *::after { animation-play-state: paused !important; }   /* hidden, minimised or nobody at the Mac (main.js IDLE_AWAY) */
 body.simple *, body.simple *::before, body.simple *::after { animation: none !important; transition: none !important; box-shadow: none !important; text-shadow: none !important; backdrop-filter: none !important; filter: none !important; scroll-behavior: auto !important; }
 
 /* sessions running on the other machine (peer.js) */

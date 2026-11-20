@@ -2,6 +2,9 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-21
+- **Rests when nobody is at the Mac.** After 10 minutes with no keyboard or mouse input (and no Screen Sharing viewer), the window is treated like a hidden one: the mesh stops drawing, terminals take their output in 10-second batches and CSS animations pause. The first touch brings everything back within about 2 seconds. A MacBook left on with the display awake for 5 hours had been using about 19% CPU this way. `MESH_IDLE_AWAY=<seconds>` changes the wait.
+
 ## 2026-11-20
 - **Process diagnostics.** `GET /api/procs` (pairing token required) lists the app's processes from Electron (`pid`, type, name, start time, CPU, memory) and every open web page or view with the process it runs in, so a pile-up of renderer helpers can be traced to the window that made it without restarting the app with a debug port.
 - **Terminal tabs show the session name.** The tag next to a tab said "Mac mini · command session" and squeezed the name to "GCX …". It now says only the Mac (plus Hermes / script / helper when it isn't a normal session; the full text is in the tooltip), the name keeps at least 9 characters and the tag gives way first, and tabs may be 300 px wide (was 260).

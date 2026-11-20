@@ -1000,6 +1000,24 @@ app.whenReady().then(() => {
   });
 });
 ipcMain.handle('sys:idle', () => { try { return powerMonitor.getSystemIdleTime(); } catch { return 0; } });   // seconds since any input on this Mac (the screen saver, cine.js)
+// nobody at this Mac for 10 min and no Screen Sharing viewer → the window counts as unseen: the mesh, terminal redraws and
+// CSS animations stop until the next input (2026-11-21: the MacBook, idle 5 h with the display on, drew ~19 % CPU).
+// Checked every 15 s while someone is there, every 2 s while away so the first touch wakes it quickly.
+const IDLE_AWAY = +process.env.MESH_IDLE_AWAY || 600;
+let idleAway = false;
+app.whenReady().then(() => {
+  const tick = async () => {
+    try {
+      let idle = 0; try { idle = powerMonitor.getSystemIdleTime(); } catch {}
+      const away = idle >= IDLE_AWAY && !(await vncConnected());
+      if (away !== idleAway) {
+        idleAway = away;
+        if (win && !win.isDestroyed() && win.isVisible() && !win.isMinimized()) win.webContents.send('win:visible', !away);
+      }
+    } finally { setTimeout(tick, idleAway ? 2000 : 15000); }
+  };
+  setTimeout(tick, 15000);
+});
 // the history list shows both machines: our transcripts, plus the peer's that haven't been synced here yet
 // (tagged with its name; resuming one starts it over there, where its transcript is)
 let peerHist = [];
