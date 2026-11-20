@@ -9,9 +9,11 @@ const store = { get(k, d) { try { const v = localStorage.getItem(k); return v ==
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { } } };
 
 // live-dot glow: rows are re-rendered every tick, so pin each pulse to the shared document clock (no restart flicker)
-document.addEventListener('animationstart', e => {
-  if (e.animationName === 'liveGlow') for (const a of e.target.getAnimations()) if (a.animationName === 'liveGlow') a.startTime = 0;
-});
+// (setting startTime takes the pulse out of CSS's hands, so body.unseen's animation-play-state can't pause it: pause it here too)
+const glows = el => el.getAnimations().filter(a => a.animationName === 'liveGlow');
+const glowSync = a => { if (document.body.classList.contains('unseen')) a.pause(); else a.startTime = 0; };
+document.addEventListener('animationstart', e => { if (e.animationName === 'liveGlow') glows(e.target).forEach(glowSync); });
+function glowAll() { for (const a of document.getAnimations()) if (a.animationName === 'liveGlow') glowSync(a); }
 
 let snap = { sessions: [], models: [], ptys: [] };
 let selected = null;
@@ -186,7 +188,7 @@ viz.onMerge = async (sid, to) => {
   await window.api.groups.create(name, [to.sid, sid]); toast(`Portal opened: ${name} (double-click it in Sessions to rename)`);
 };
 viz.onGroup = (gid, collapsed) => { window.api.groups.update(gid, { collapsed }); if (snap.groups && snap.groups[gid]) snap.groups[gid].collapsed = collapsed; renderList(); };   // a portal clicked on the mesh
-window.api.onVisible(v => { viz.offscreen = !v; document.body.classList.toggle('unseen', !v); if (v) { viz.wake(); for (const [, t] of terms) if (termVisible(t)) flushTerm(t); } });
+window.api.onVisible(v => { viz.offscreen = !v; document.body.classList.toggle('unseen', !v); glowAll(); if (v) { viz.wake(); for (const [, t] of terms) if (termVisible(t)) flushTerm(t); } });
 
 // ---------------- telemetry ----------------
 window.api.onTelemetry(s => {

@@ -3,6 +3,8 @@
 Newest first. Older changes are in the git log.
 
 ## 2026-11-21
+
+- **The idle pause now really stops the green "working" glow.** The pulse is synced from script, which stopped the CSS pause from reaching it, so the window kept recalculating styles about 145 times a second while nobody was there. Now the pulse pauses too, and the renderer does about 98% less work while paused.
 - **No more typing into a sub-agent by mistake.** While you look at one of a session's sub-agents, Claude Code's input box says "Message @<agent>…" and anything typed goes to that agent. Session refresh now skips such a session ("its input box is on sub-agent @…") instead of sending its handoff request there and waiting 30 minutes for an answer that never comes, and sends from the phone, relays and scripts are refused with the same reason instead of reaching the wrong conversation.
 - **Rests when nobody is at the Mac.** After 10 minutes with no keyboard or mouse input (and no Screen Sharing viewer), the window is treated like a hidden one: the mesh stops drawing, terminals take their output in 10-second batches and CSS animations pause. The first touch brings everything back within about 2 seconds. A MacBook left on with the display awake for 5 hours had been using about 19% CPU this way. `MESH_IDLE_AWAY=<seconds>` changes the wait.
 
