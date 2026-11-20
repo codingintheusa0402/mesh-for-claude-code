@@ -117,6 +117,7 @@ function createPhoneServer(ctx) {
     if (p === '/api/orchestrator' && req.method === 'GET' && ctx.orchestrator) return json(res, 200, ctx.orchestrator.get(u.searchParams.get('cwd') || '~'));   // which agent runs a project (main.js)
     if (p === '/api/switches' && req.method === 'GET' && ctx.switches) return json(res, 200, await ctx.switches.get(u.searchParams.get('hop') === '1'));   // mode switches (switches.js)
     if (p === '/api/refresh' && req.method === 'GET' && ctx.refresh) return json(res, 200, ctx.refresh.get());   // session refresh (session-refresh.js)
+    if (p === '/api/procs' && req.method === 'GET' && ctx.procs) return json(res, 200, ctx.procs());   // app processes + web contents (diagnostics)
     if (p === '/api/commands') return json(res, 200, await ctx.commandsFor(u.searchParams.get('cwd') || ''));
     if (p.startsWith('/api/term/') && req.method === 'GET') {           // live terminal of an in-app session
       const id = termId(p);

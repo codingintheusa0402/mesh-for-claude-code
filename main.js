@@ -1159,6 +1159,10 @@ function initPhone() {
     root: __dirname, userData: app.getPath('userData'), ptys: { get: id => ptys.get(id) || panes.proc(id) }, ptyBus, peer: peerLink, viewPeers, termSnapshot, termResize,
     termOpen: id => panes.has(id) ? panes.open(id) : null, termClose: id => { if (panes.has(id)) panes.close(id); },
     getSnap: () => lastSnap && markSun(lastSnap),
+    procs: () => ({                                                     // which window/view each helper process serves
+      metrics: app.getAppMetrics().map(m => ({ pid: m.pid, type: m.type, name: m.name || m.serviceName || '', created: m.creationTime, cpu: +(m.cpu.percentCPUUsage || 0).toFixed(1), kb: m.memory.workingSetSize })),
+      contents: require('electron').webContents.getAllWebContents().map(w => ({ id: w.id, pid: w.getOSProcessId(), type: w.getType(), url: String(w.getURL()).slice(0, 160), destroyed: w.isDestroyed(), hostWin: (BrowserWindow.fromWebContents(w) || {}).id || null })),
+    }),
     getHistory: () => scanHistory(),
     codemap: { status: sid => cmCall(sid, 'status'), html: sid => cmCall(sid, 'html'), op: (sid, op) => ['generate', 'cancel'].includes(op) ? cmCall(sid, op) : { ok: false } },
     details: sid => sessionDetails(sid),

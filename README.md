@@ -251,6 +251,8 @@ Updates are written **in place** into `/Applications/<name>.app` (deleting and r
 | `MESH_PANES_GUEST=1` / `=0` | Whether this instance is a guest on the tmux server. A guest (default when `MESH_USERDATA` is set) never pipes a pane: it polls the screen instead, so a test copy can't take or switch off the live app's terminal streams. The live app also re-pipes any watched pane whose pipe was switched off, sent to another file or lost its file |
 | `MESH_FSGUARD_STUCK=/dir[:/dir]` | QA: treat these protected folders as stuck (macOS) to test the folder guard; `MESH_NO_FSGUARD=1` turns the guard off |
 
+Process check without restarting: `curl -H "x-mesh-token: <token from phone.json>" http://127.0.0.1:<phone port>/api/procs` lists every helper process (type, memory, CPU, start time) and every web page or view with the process it runs in.
+
 Notes:
 - Don't run two instances at once.
 - The dev window opens under the pointer, so real scrolling can change its zoom. Stub `viz.wheelZoom` in `MESH_EVAL` for zoom tests.
