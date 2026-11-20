@@ -476,11 +476,20 @@ function claudeDraft(pane) {
   if (/^(\x1b\[[\d;]*m)*\x1b\[(2|3)m/.test(after)) return '';
   return after.replace(/\x1b\[[\d;]*m/g, '').trim();
 }
+// The prompt box is talking to a sub-agent: while you view one of a session's agents, Claude Code's box reads (dimmed)
+// "Message @<agent>…", and whatever is typed goes to that agent, not the session. Returns the agent's name, or ''.
+// (2026-11-21: a MacBook refresh typed its handoff request into "@general-purpose"; the reply never reached the session)
+function paneAgent(pane) {
+  let out = ''; try { out = execFileSync(TMUX, ['capture-pane', '-p', '-t', pane], { timeout: 5000, env: TMUX_ENV }).toString(); } catch { return ''; }
+  for (const l of out.split('\n').reverse()) { const m = /^\s*\u276f[\u00a0 ]+Message @([^\s\u2026]+)/.exec(l); if (m) return m[1]; }
+  return '';
+}
 async function sendToSession(sid, text) {
   const s = liveSession(sid); if (!s) return { ok: false, err: 'session is not running' };
   if (s.watchOnly) return { ok: false, err: 'a watched script — view only' };
   if (s.kind === 'hermes' && s.hermesPane) return hermesSend(s.hermesPane, text);
   // a Claude session in tmux: never mix into a half-typed message of yours (waits up to 2 minutes for the box to be empty)
+  if (s.pane && !s.owner) { const ag = paneAgent(s.pane); if (ag) return { ok: false, err: `its input box is on sub-agent @${ag}: switch it back to the main conversation first` }; }
   if (s.pane && !s.owner) for (let i = 0; claudeDraft(s.pane); i++) { if (i >= 119) return { ok: false, err: 'unsent text in its input box: not mixing into it' }; await new Promise(r => setTimeout(r, 1000)); }
   if (s.owner) return ctlSend(s.owner, text, true);
   if (s.tty && s.kind !== 'bg') return extSend(s.tty, text);
@@ -1370,7 +1379,7 @@ function alertOwner(title, step) {
 }
 function initRefresh() {
   refresher = require('./session-refresh').createRefresh({
-    userData: app.getPath('userData'), getSnap: () => lastSnap, panes, hermes, spawnHermes, sendToSession, loginShell, hermesDraft,
+    userData: app.getPath('userData'), getSnap: () => lastSnap, panes, hermes, spawnHermes, sendToSession, loginShell, hermesDraft, paneAgent,
     tmux: args => { try { return execFileSync(TMUX, args, { timeout: 8000, env: TMUX_ENV }).toString(); } catch { return null; } },
     findTranscript: sid => core.findTranscript(sid), sql: require('./hermes-sessions').sql, quietFor: () => updater.quietFor(), quietWhy: () => updater.quietWhy(), alert: alertOwner,
     claudeBin: () => core.resolveClaude(),

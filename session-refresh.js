@@ -288,6 +288,7 @@ function createRefresh(ctx) {
     if (s.health === 'waiting' && s.status !== 'shell') return 'waiting for your input';
     if (s.status === 'shell') return 'running a background shell';
     if (s.subagents) return 'sub-agents running';                        // never even when forced: their results come back into this conversation
+    if (s.kind !== 'hermes' && ctx.paneAgent) { const ag = ctx.paneAgent(s.pane); if (ag) return `its input box is on sub-agent @${ag} (switch back to the main conversation)`; }   // typed text would go to the agent
     if ((s.roots || []).some(r => r.kind === 'monitor' && Date.now() - r.at < 10 * 60e3)) return 'a monitor is running';
     const bg = backgroundOf(s); if (bg && !force) return 'background tasks (' + bg + ')';
     const js = jobsOf(s); if (js.length && !force) return `${js.length} child job(s) still running (${js.map(j => j.kind).join(', ')})`;
