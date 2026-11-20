@@ -2,6 +2,9 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-20
+- **Sessions that run a skill get its folder.** A session started in the home folder that works through a hidden link (`~/.claude/skills/<name>` → the real skills folder) had no project folder, so no folder button and no Code map. Paths through a hidden link now count as the real folder they point to. Checked on 15 live sessions: three that had no folder now get their skill folder; every other session's folder is unchanged.
+
 ## 2026-11-19
 - **Version 1.2.0: iPhone pages follow your finger.** The screens sit in a row: session drawer ↔ Sessions ↔ Grid. Moving between Sessions and Grid now tracks the finger 1:1 like the drawer, with the next screen sliding in beside it. On release it springs on past about 35 % of the width or on a flick, otherwise it springs back. The drawer and the pages share one curve and one threshold, and the spring is shorter the faster you swipe. Taps that change the page (☰ on Grid, a Grid card, the drawer's Grid link) slide the same way. GPU transforms only, written once per frame. Reduce Motion gets a quick fade.
 - **iPhone terminal never scrolls sideways.** When another device holds the session size (a wider grid), the phone now shrinks the font until the grid fits the screen exactly (measured, no minimum). The session's real width is unchanged; touching the terminal still takes the size at the readable font, as before. The terminal box is `overflow-x: hidden` + `touch-action: pan-y`, so every sideways swipe over it goes to page navigation. The key row (Esc/Tab/arrows) scrolls only inside itself and never switches pages. Fixed: the terminal's side padding made it 8 px wider than its box.

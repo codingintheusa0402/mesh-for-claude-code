@@ -25,8 +25,18 @@ function createFolders({ findTranscript, home }) {
       else try { for (const b of fs.readdirSync(p1)) { const p2 = path.join(p1, b); if (!b.startsWith('.') && isDir(p2) && hasMarker(p2)) n++; if (n >= 5) break; } } catch { } if (n >= 5) break; } } catch { }
     mono.set(d, n >= 5); return n >= 5;
   }
+  // a path through a hidden link (e.g. ~/.claude/skills -> ~/Desktop/…/skills) counts as the real folder it points to,
+  // so sessions that run a skill's code through ~/.claude still get that skill's folder (2026-11-20)
+  const realCache = new Map();
+  function real(p) {
+    if (!/\/\.[^/]/.test(p.slice(home.length))) return p;
+    const d = path.dirname(p); let r = realCache.get(d);
+    if (r === undefined) { try { r = fs.realpathSync(d); } catch { r = d; } realCache.set(d, r); }
+    return r === d ? p : path.join(r, path.basename(p));
+  }
   function root(p) {
     if (!p.startsWith(home + '/')) return null;
+    p = real(p); if (!p.startsWith(home + '/')) return null;
     const rel = p.slice(home.length + 1).split('/').filter(Boolean);
     if (!rel.length || rel[0].startsWith('.') || SKIP_TOP.has(rel[0])) return null;
     if (CONTAINERS.has(rel[0]) && rel.length <= 2) return null;            // a loose file in ~/Desktop, ~/Apps … isn't a project
