@@ -92,6 +92,9 @@ function createWindow() {
   const vis = v => () => win && win.webContents.send('win:visible', v);
   win.on('hide', vis(false)); win.on('minimize', vis(false)); win.on('show', vis(true)); win.on('restore', vis(true));
   app.on('hide', vis(false)); app.on('show', vis(true));
+  // a reloaded page (hot update, crash recovery) starts as "seen": repeat the current state, since the events above
+  // and the idle-away tick only send changes
+  win.webContents.on('did-finish-load', () => { if (win && (idleAway || !win.isVisible() || win.isMinimized())) win.webContents.send('win:visible', false); });
   if (process.env.MESH_DEBUG) win.webContents.on('console-message', (e, ...a) => console.log('[renderer]', JSON.stringify(e.message ?? a)));
 }
 
