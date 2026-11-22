@@ -721,3 +721,15 @@ body.simple .bcard.b-waiting { animation: bBlinkWarn 1.6s steps(1, end) infinite
 
 /* Claude Code symbols as text, never colour emoji (2026-11-19; term-stamps.js textGlyphs does the rest) */
 .xterm .xterm-rows, .xterm .xterm-rows span { font-variant-emoji: text; }
+
+/* vacation mode (switches.js setVacation): its block in the switch menu and its tag next to the pill */
+#ivMenu .swv { margin-top: 2px; }
+#ivMenu .swv summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; justify-content: space-between; text-align: left; }
+#ivMenu .swv summary::-webkit-details-marker { display: none; }
+#ivMenu .swv summary span::before { content: '▸ '; } #ivMenu .swv[open] summary span::before { content: '▾ '; }
+#ivMenu .swvRow { display: flex; align-items: center; gap: 6px; margin: 5px 0; font-size: 12px; flex-wrap: wrap; }
+#ivMenu .swvRow > span { width: 46px; opacity: .7; }
+#ivMenu .swvRow input[type=text] { flex: 1; min-width: 120px; }
+#ivMenu .swvBody.off .swvRow { opacity: .45; }
+.hpill.swvac { cursor: default; opacity: .75; }
+.hpill.swvac.on { opacity: 1; color: var(--ok, #5be3a4); border-color: currentColor; }

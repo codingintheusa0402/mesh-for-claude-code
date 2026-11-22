@@ -15,6 +15,25 @@
 // On a machine that isn't the host, get/set go to the peer (peer.js) over /api/switches.
 const fs = require('fs'), path = require('path'), os = require('os');
 
+// Optional "vacation": true in a switch's config adds a vacation block to its menu, stored in the file as
+// "vacation": { "enabled", "from": "YYYY-MM-DD", "to": "YYYY-MM-DD" (inclusive), "start": "HH:MM", "end": "HH:MM", "tz",
+//   "admin": { "name", ...ids the tool needs, kept as written }, "interval": <sec>, "peak": { "start", "end", "interval" } | null }.
+// The tool decides what it does with it (e.g. runs inside those dates and hours at that interval, asking the admin instead of
+// the owner); Mesh only stores it, shows whether it is active and runs the tool once on save.
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+function vacationNow(v, now = Date.now()) {
+  if (!v || !v.enabled) return { vacationActive: false, vacationState: 'off' };
+  try {
+    const f = new Intl.DateTimeFormat('en-CA', { timeZone: v.tz || 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(now));
+    const g = t => f.find(x => x.type === t).value, day = `${g('year')}-${g('month')}-${g('day')}`, m = +g('hour') * 60 + +g('minute');
+    if (day > v.to) return { vacationActive: false, vacationState: 'over' };
+    if (day < v.from) return { vacationActive: false, vacationState: 'upcoming' };
+    const a = hm(v.start), b = hm(v.end), on = a <= b ? a <= m && m < b : m >= a || m < b;
+    const pk = v.peak && v.peak.interval ? (hm(v.peak.start) <= m && m < hm(v.peak.end)) : false;
+    return { vacationActive: on, vacationState: on ? (pk ? 'peak' : 'on') : 'today-off-hours', vacationInterval: on ? (pk ? v.peak.interval : v.interval) : null };
+  } catch { return { vacationActive: false, vacationState: 'off' }; }
+}
+
 // is it inside the window at local weekday w (Mon=0) and minute m? (the same rule the tool applies)
 const HM = /^([01]\d|2[0-3]):[0-5]\d$|^24:00$/;
 const hm = x => +x.slice(0, 2) * 60 + +x.slice(3, 5);
@@ -43,17 +62,17 @@ function createSwitches({ peer, machine }) {
   const lastRun = s => { if (!s.tickFile) return null; try { const a = +JSON.parse(fs.readFileSync(s.tickFile.replace(/^~(?=\/|$)/, os.homedir()), 'utf8')).at; return a > 0 ? Math.round(a * 1000) : null; } catch { return null; } };
   const pub = s => ({ id: s.id, label: s.label || s.id, short: s.short || '', confirmOn: s.confirmOn || '', confirmOff: s.confirmOff || '', onLabel: s.onLabel || '', offLabel: s.offLabel || '',
     intervals: Array.isArray(s.intervals) ? s.intervals.filter(i => i && i.sec > 0).map(i => ({ sec: +i.sec, label: String(i.label || i.sec + ' s') })) : [], intervalDefault: s.intervalDefault || null,
-    hasSchedule: !!s.schedule, scheduleTz: s.scheduleTz || 'Asia/Seoul' });
+    hasSchedule: !!s.schedule, scheduleTz: s.scheduleTz || 'Asia/Seoul', hasVacation: !!s.vacation });
   function readLocal(s) {
-    try { const j = JSON.parse(fs.readFileSync(fileOf(s), 'utf8')); return { ...pub(s), enabled: j.enabled === true, by: j.by || null, at: j.at || null, from: j.from || null, interval: +j.interval || s.intervalDefault || null, lastRun: lastRun(s), schedule: j.schedule || null, ...scheduleNow(j.schedule) }; }
-    catch (e) { return { ...pub(s), enabled: false, by: null, at: null, from: null, interval: s.intervalDefault || null, lastRun: lastRun(s), schedule: null, ...scheduleNow(null), missing: e.code === 'ENOENT' }; }
+    try { const j = JSON.parse(fs.readFileSync(fileOf(s), 'utf8')); return { ...pub(s), enabled: j.enabled === true, by: j.by || null, at: j.at || null, from: j.from || null, interval: +j.interval || s.intervalDefault || null, lastRun: lastRun(s), schedule: j.schedule || null, ...scheduleNow(j.schedule), vacation: j.vacation || null, ...vacationNow(j.vacation) }; }
+    catch (e) { return { ...pub(s), enabled: false, by: null, at: null, from: null, interval: s.intervalDefault || null, lastRun: lastRun(s), schedule: null, ...scheduleNow(null), vacation: null, ...vacationNow(null), missing: e.code === 'ENOENT' }; }
   }
   function writeLocal(s, patch, from) {
     const f = fileOf(s), tmp = f + '.tmp-' + process.pid;
     fs.mkdirSync(path.dirname(f), { recursive: true });
     let old = {}; try { old = JSON.parse(fs.readFileSync(f, 'utf8')) || {}; } catch { }
     const next = 'enabled' in patch ? { ...old, enabled: !!patch.enabled, by: 'mesh', at: new Date().toISOString(), from: from || machine }
-      : { ...old, ...patch, [('schedule' in patch ? 'schedule' : 'interval') + 'By']: from || machine, [('schedule' in patch ? 'schedule' : 'interval') + 'At']: new Date().toISOString() };
+      : (k => ({ ...old, ...patch, [k + 'By']: from || machine, [k + 'At']: new Date().toISOString() }))(['schedule', 'vacation'].find(x => x in patch) || 'interval');
     if (!('enabled' in next)) next.enabled = false;
     fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + '\n');
     fs.renameSync(tmp, f);                                  // atomic: the reader never sees half a file
@@ -98,6 +117,33 @@ function createSwitches({ peer, machine }) {
       if (hop) return { ok: false, err: 'neither machine holds this switch' };
       return viaPeer('POST', { id, schedule: sc, from: from || machine, hop: 1 }).catch(e => ({ ok: false, err: 'Couldn\'t reach the other machine: ' + e.message }));
     },
+    // vacation mode (switch config "vacation": true): dates, daily hours, who stands in, how often (normal and peak)
+    async setVacation(id, v, from, hop) {
+      const s = list().find(x => x.id === id); if (!s) return { ok: false, err: 'no such switch: ' + id };
+      if (isHost(s)) {
+        if (!s.vacation) return { ok: false, err: 'this switch has no vacation mode' };
+        if (!v || typeof v.enabled !== 'boolean') return { ok: false, err: 'vacation needs enabled' };
+        if (!DATE.test(v.from || '') || !DATE.test(v.to || '') || v.from > v.to) return { ok: false, err: 'pick a start and end date (end not before start)' };
+        if (!HM.test(v.start || '') || !HM.test(v.end || '') || v.start === v.end) return { ok: false, err: 'daily hours need a start and end (HH:MM), not the same' };
+        const sec = x => Number.isInteger(+x) && +x >= 30 && +x <= 3600;
+        if (!sec(v.interval)) return { ok: false, err: 'interval must be 30 s to 1 h' };
+        let peak = null;
+        if (v.peak && v.peak.interval) { if (!HM.test(v.peak.start || '') || !HM.test(v.peak.end || '') || hm(v.peak.start) >= hm(v.peak.end) || !sec(v.peak.interval)) return { ok: false, err: 'peak needs start < end (HH:MM) and an interval of 30 s to 1 h' };
+          peak = { start: v.peak.start, end: v.peak.end, interval: +v.peak.interval }; }
+        const name = String((v.admin && v.admin.name) || '').trim().slice(0, 60);
+        if (v.enabled && !name) return { ok: false, err: 'name the admin who stands in for you' };
+        const tz = String(v.tz || s.scheduleTz || 'Asia/Seoul'); try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); } catch { return { ok: false, err: 'unknown time zone: ' + tz }; }
+        let old = {}; try { old = JSON.parse(fs.readFileSync(fileOf(s), 'utf8')).vacation || {}; } catch { }
+        // the admin's ids (user, dm space, email) are the tool's: kept unless the name changes or the menu sends new ones
+        const oldA = old.admin || {}, admin = { ...(oldA.name === name ? oldA : {}), ...Object.fromEntries(Object.entries(v.admin || {}).filter(([k, x]) => typeof x === 'string' && x.trim()).map(([k, x]) => [k, x.trim().slice(0, 200)])), name };
+        const vac = { enabled: v.enabled, from: v.from, to: v.to, start: v.start, end: v.end, tz, admin, interval: +v.interval, peak };
+        let state; try { state = writeLocal(s, { vacation: vac, runNow: new Date().toISOString() }, from); } catch (e) { return { ok: false, err: e.message }; }
+        if (s.kick) try { require('child_process').execFile('launchctl', ['kickstart', `gui/${process.getuid()}/${s.kick}`], () => { }); } catch { }
+        return { ok: true, state };
+      }
+      if (hop) return { ok: false, err: 'neither machine holds this switch' };
+      return viaPeer('POST', { id, vacation: v, from: from || machine, hop: 1 }).catch(e => ({ ok: false, err: 'Couldn\'t reach the other machine: ' + e.message }));
+    },
     // how often the tool runs: one of the switch's own "intervals" (seconds)
     async setInterval(id, sec, from, hop) {
       const s = list().find(x => x.id === id); if (!s) return { ok: false, err: 'no such switch: ' + id };
@@ -112,4 +158,4 @@ function createSwitches({ peer, machine }) {
     },
   };
 }
-module.exports = { createSwitches, scheduleNow };
+module.exports = { createSwitches, scheduleNow, vacationNow };

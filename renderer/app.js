@@ -74,15 +74,16 @@ async function renderSwitchPills() {
     const name = w.short || w.label, st = w.offline ? '?' : w.enabled ? 'ON' : 'OFF';
     const tip = w.offline ? `${w.label}: can't read the switch (${w.err || 'no answer'})` : `${w.label} is ${st}` + (w.at ? ` since ${new Date(w.at).toLocaleString()} (by ${w.from || w.by || '?'})` : ' (never switched on)') + ` — click to turn it ${w.enabled ? 'OFF' : 'ON'}`;
     const ivs = !w.offline && w.intervals && w.intervals.length;
-    const paused = w.enabled && w.scheduled && !w.inWindow;
+    const paused = w.enabled && w.scheduled && !w.inWindow && !w.vacationActive;
     const cd = paused ? `<span class="hpill swcd paused" title="${esc(`${w.label} is outside its schedule (${schedText(w.schedule)}) — right-click the pill to change`)}">Paused until ${esc(whenShort(w.nextChange, w.schedule && w.schedule.tz))}</span>`
       : ivs && w.enabled && w.lastRun ? `<span class="hpill swcd" data-id="${esc(w.id)}" title="${esc(`Next ${w.label} check (every ${ivLabel(w)})${w.scheduled ? ' · schedule ' + schedText(w.schedule) : ''} — right-click the pill to change`)}">⏱ <b></b></span>` : '';
-    return `<span class="swgrp"><button class="hpill swpill ${w.offline ? 'err' : w.enabled ? 'on' : 'off'}" data-id="${esc(w.id)}" data-on="${w.enabled ? '0' : '1'}" ${w.offline ? 'disabled' : ''} title="${esc(tip + (ivs ? ` · checks every ${ivLabel(w)} (right-click to change)` : ''))}">${esc(name)} ${st}</button>${cd}</span>`;
+    const vac = !w.offline && w.vacation && w.vacation.enabled && w.vacationState !== 'over' ? `<span class="hpill swvac${w.vacationActive ? ' on' : ''}" title="${esc(vacText(w))} — right-click the pill to change">${w.vacationActive ? 'Vacation · ' + esc(ivShort(w.vacationInterval)) : 'Vacation ' + esc(w.vacation.from.slice(5).replace('-', '/'))}</span>` : '';
+    return vac + `<span class="swgrp"><button class="hpill swpill ${w.offline ? 'err' : w.enabled ? 'on' : 'off'}" data-id="${esc(w.id)}" data-on="${w.enabled ? '0' : '1'}" ${w.offline ? 'disabled' : ''} title="${esc(tip + (ivs ? ` · checks every ${ivLabel(w)} (right-click to change)` : ''))}">${esc(name)} ${st}</button>${cd}</span>`;
   }).join('');
   swState = new Map((list || []).map(w => [w.id, w]));
   bar.querySelectorAll('.swpill:not([disabled])').forEach(b => {
     b.onclick = () => flipSwitch(b.dataset.id, b.dataset.on === '1');
-    b.oncontextmenu = e => { const w = swState.get(b.dataset.id); if (!w || !((w.intervals && w.intervals.length) || w.hasSchedule)) return; e.preventDefault(); openIntervalMenu(b, w); };   // right-click: how often it checks
+    b.oncontextmenu = e => { const w = swState.get(b.dataset.id); if (!w || !((w.intervals && w.intervals.length) || w.hasSchedule || w.hasVacation)) return; e.preventDefault(); openIntervalMenu(b, w); };   // right-click: how often it checks
   });
   tickCountdowns();
 }
@@ -92,7 +93,7 @@ let swState = new Map();
 function tickCountdowns() {
   document.querySelectorAll('#swBar .swcd').forEach(el => {
     const w = swState.get(el.dataset.id); if (!w) return;
-    const left = Math.round((w.lastRun + w.interval * 1000 - Date.now()) / 1000);
+    const left = Math.round((w.lastRun + (w.vacationActive ? w.vacationInterval || w.interval : w.interval) * 1000 - Date.now()) / 1000);
     el.querySelector('b').textContent = left > 0 ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : 'scanning…';
     el.classList.toggle('due', left <= 0);
   });
@@ -133,6 +134,39 @@ function wireScheduleForm(m, w, shut) {
     shut(); renderSwitchPills(); toast(`${w.label}: ${sc.enabled ? 'runs ' + schedText(r.state.schedule) : 'no schedule (runs whenever ON)'}`);
   };
 }
+// vacation mode (switches.js setVacation): dates, daily hours, who stands in, how often (and faster in a peak window)
+const kstToday = (tz, add = 0) => new Intl.DateTimeFormat('en-CA', { timeZone: tz || 'Asia/Seoul' }).format(new Date(Date.now() + add * 864e5));
+function vacText(w) {
+  const v = w.vacation; if (!v || !v.enabled) return 'Vacation mode is off';
+  const pk = v.peak && v.peak.interval ? `, every ${ivShort(v.peak.interval)} ${v.peak.start}–${v.peak.end}` : '';
+  const st = { on: 'active now', peak: 'active now (peak)', upcoming: 'starts ' + v.from, 'today-off-hours': 'today, outside its hours', over: 'ended' }[w.vacationState] || '';
+  return `Vacation ${v.from === v.to ? v.from : v.from + ' → ' + v.to} · ${v.start}–${v.end} · asks ${(v.admin && v.admin.name) || '?'} · every ${ivShort(v.interval)}${pk} · ${st}`;
+}
+function vacationForm(w) {
+  const v = w.vacation || {}, tz = v.tz || w.scheduleTz || 'Asia/Seoul', tom = kstToday(tz, 1), pk = v.peak === undefined ? { start: '09:00', end: '10:00', interval: 60 } : v.peak;
+  const ivOpts = cur => (w.intervals || []).map(i => `<option value="${i.sec}"${i.sec === cur ? ' selected' : ''}>${esc(i.label)}</option>`).join('');
+  return `<details class="swv"${v.enabled ? ' open' : ''}><summary class="smHead swsHead swvHead"><span>Vacation mode</span> <small>${esc(v.enabled ? (w.vacationActive ? 'active' : w.vacationState === 'over' ? 'ended' : 'set') : 'off')}</small></summary><div class="sws swvBody">
+    <label class="swsOn"><input type="checkbox" class="swvOn" ${v.enabled ? 'checked' : ''}> On: someone else answers for me</label>
+    <div class="swvRow"><span>Dates</span><input type="date" class="swvF" value="${esc(v.from || tom)}"> – <input type="date" class="swvT" value="${esc(v.to || v.from || tom)}"></div>
+    <div class="swvRow"><span>Hours</span><input type="time" class="swvA" value="${esc(v.start || '08:30')}"> – <input type="time" class="swvB" value="${esc(v.end === '24:00' ? '23:59' : v.end || '19:00')}"></div>
+    <div class="swvRow"><span>Admin</span><input type="text" class="swvN" placeholder="who it asks instead of me" value="${esc((v.admin && v.admin.name) || '')}"></div>
+    <div class="swvRow"><span>Every</span><select class="swvI">${ivOpts(v.interval || 180)}</select></div>
+    <label class="swvRow swvPk"><input type="checkbox" class="swvPOn" ${pk && pk.interval ? 'checked' : ''}> Faster <input type="time" class="swvPA" value="${esc((pk && pk.start) || '09:00')}"> – <input type="time" class="swvPB" value="${esc((pk && pk.end) || '10:00')}"> <select class="swvPI">${ivOpts((pk && pk.interval) || 60)}</select></label>
+    <div class="swsNow">${esc(vacText(w))}</div>
+    <div class="swsBtns"><button type="button" class="swsSave swvSave">Save vacation</button></div></div></details>`;
+}
+function wireVacationForm(m, w, shut) {
+  const f = m.querySelector('.swv'); if (!f) return; const q = c => f.querySelector(c);
+  const sync = () => q('.swvBody').classList.toggle('off', !q('.swvOn').checked); sync(); q('.swvOn').onchange = sync;
+  q('.swvSave').onclick = async () => {
+    const v = { enabled: q('.swvOn').checked, from: q('.swvF').value, to: q('.swvT').value, start: q('.swvA').value, end: q('.swvB').value,
+      tz: (w.vacation && w.vacation.tz) || w.scheduleTz, admin: { name: q('.swvN').value.trim() }, interval: +q('.swvI').value,
+      peak: q('.swvPOn').checked ? { start: q('.swvPA').value, end: q('.swvPB').value, interval: +q('.swvPI').value } : null };
+    const r = await window.api.switches.vacation(w.id, v).catch(e => ({ ok: false, err: e.message }));
+    if (!r || !r.ok) return toast(`Couldn't save vacation mode: ${(r && r.err) || 'no answer'}`);
+    shut(); renderSwitchPills(); toast(`${w.label}: ${vacText(r.state)}`);
+  };
+}
 // a switch's run interval (switches.js "intervals"): short form for the pill, the configured label for menus
 const ivShort = sec => !sec ? '?' : sec < 60 ? sec + 's' : sec < 3600 ? Math.round(sec / 60) + 'm' : Math.round(sec / 3600) + 'h';
 const ivLabel = w => ((w.intervals || []).find(i => i.sec === w.interval) || {}).label || ivShort(w.interval);
@@ -140,9 +174,10 @@ function openIntervalMenu(anchor, w) {
   if (!w) return; let m = $('#ivMenu'); if (m) m.remove();
   m = document.createElement('div'); m.id = 'ivMenu';
   m.innerHTML = ((w.intervals || []).length ? `<div class="smHead">${esc(w.label)} · check every</div>` + w.intervals.map(i => `<button data-sec="${i.sec}" class="thRow${i.sec === w.interval ? ' cur' : ''}">${esc(i.label)}</button>`).join('') : '')
-    + (w.hasSchedule ? scheduleForm(w) : '');
+    + (w.hasSchedule ? scheduleForm(w) : '') + (w.hasVacation ? vacationForm(w) : '');
   document.body.appendChild(m);
   if (w.hasSchedule) wireScheduleForm(m, w, () => shut());
+  if (w.hasVacation) wireVacationForm(m, w, () => shut());
   const r = anchor.getBoundingClientRect(); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.left)) + 'px'; m.style.top = (r.bottom + 6) + 'px';
   const shut = () => { m.remove(); removeEventListener('pointerdown', away, true); }, away = e => { if (!m.contains(e.target)) shut(); };
   addEventListener('pointerdown', away, true);

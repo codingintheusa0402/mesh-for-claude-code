@@ -79,7 +79,7 @@ contextBridge.exposeInMainWorld('api', {
   refresh: { get: onPeer => ipcRenderer.invoke('refresh:get', onPeer), set: (p, onPeer) => ipcRenderer.invoke('refresh:set', p, onPeer), now: sid => ipcRenderer.invoke('refresh:now', sid), onOpen: f => ipcRenderer.on('refresh:open', () => f()) },
   hermesNew: o => ipcRenderer.invoke('hermes:new', o),
   orchestrator: { get: (cwd, onPeer) => ipcRenderer.invoke('orch:get', cwd, onPeer), set: (cwd, o, onPeer) => ipcRenderer.invoke('orch:set', cwd, o, onPeer) },
-  switches: { get: () => ipcRenderer.invoke('sw:get'), set: (id, on) => ipcRenderer.invoke('sw:set', id, on) , interval: (id, sec) => ipcRenderer.invoke('sw:interval', id, sec), schedule: (id, sc) => ipcRenderer.invoke('sw:schedule', id, sc) },
+  switches: { get: () => ipcRenderer.invoke('sw:get'), set: (id, on) => ipcRenderer.invoke('sw:set', id, on) , interval: (id, sec) => ipcRenderer.invoke('sw:interval', id, sec), vacation: (id, v) => ipcRenderer.invoke('sw:vacation', id, v), schedule: (id, sc) => ipcRenderer.invoke('sw:schedule', id, sc) },
   usage: { dash: () => ipcRenderer.invoke('usage:dash'), session: l => ipcRenderer.invoke('usage:session', l), manual: p => ipcRenderer.invoke('usage:manual', p), model: (n, m) => ipcRenderer.invoke('usage:model', n, m) },
   cal: { get: () => ipcRenderer.invoke('cal:get'), connect: () => ipcRenderer.invoke('cal:connect'), refresh: () => ipcRenderer.invoke('cal:refresh'), open: u => ipcRenderer.invoke('cal:open', u), onChange: cb => ipcRenderer.on('cal', (_e, s) => cb(s)) },
   ui: { hidden: () => ipcRenderer.invoke('ui:hidden'), onHidden: cb => ipcRenderer.on('ui:hidden', (_e, h) => cb(h)), onResetLayout: cb => ipcRenderer.on('mesh:resetLayout', () => cb()) },
