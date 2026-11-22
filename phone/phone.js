@@ -56,18 +56,17 @@ function paintDisp() {
   const b = dispBtn(); if (!b || !dispSt || dispSt.err === 'no display configured') return;
   const on = dispSt.asleep == null ? null : !dispSt.asleep;
   b.classList.toggle('dispOn', on === true); b.classList.toggle('dispOff', on === false); b.classList.toggle('dispWarn', !!dispSt.warning);
-  if (b._lp) return; b._lp = true;                                   // long-press: once per button element
-  let t = 0, fired = false;
-  b.addEventListener('touchstart', () => { fired = false; t = setTimeout(() => { fired = true; toggleDisp(); }, 550); }, { passive: true });
-  ['touchend', 'touchmove', 'touchcancel'].forEach(ev => b.addEventListener(ev, () => clearTimeout(t), { passive: true }));
-  b.addEventListener('click', e => { if (fired) { e.preventDefault(); fired = false; } });
-  b.addEventListener('contextmenu', e => { e.preventDefault(); });
+  const el = $('#disp'); if (!el) return;
+  const st = dispBusy ? '…' : on === null ? '?' : on ? 'ON' : 'OFF';
+  const html = `<button class="vbtn dbtn${on === false ? ' off' : ''}${dispSt.warning ? ' warn' : ''}"><b>Display ${st}</b></button>`;
+  if (el._h !== html) { el.innerHTML = html; el._h = html; el.querySelector('button').onclick = toggleDisp; }
+  el.classList.remove('hidden');
 }
 async function toggleDisp() {
   if (dispBusy || !dispSt) return; const want = dispSt.asleep !== false;
   if (!want && dispSt.warning) return toast(`${dispSt.label}: ${dispSt.warning}`);
   dispBusy = true; toast(`${dispSt.label}: turning ${want ? 'ON' : 'OFF'}…`);
-  const r = await api('/api/display', { on: want }).catch(e => ({ ok: false, err: e.message }));
+  const r = await api('/api/display', { on: want, from: 'iPhone' }).catch(e => ({ ok: false, err: e.message }));
   dispBusy = false; if (r && r.label && typeof r.asleep === 'boolean') dispSt = r; paintDisp();
   toast(r && r.ok !== false && typeof r.asleep === 'boolean' ? `${dispSt.label} ${r.asleep ? 'OFF' : 'ON'}` : `${(dispSt && dispSt.label) || 'Display'}: ${(r && (r.err || r.warning)) || 'no answer'}`);
 }

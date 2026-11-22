@@ -32,7 +32,10 @@ function createDisplay({ peer, cfg }) {
     return { ok: true, label, host: os.hostname(), asleep, sleepMin, lockSec, warning, wantOff: fs.existsSync(FLAG), at: Date.now() };
   }
 
-  async function localSet(on, force) {
+  const LOG = path.join(path.dirname(FLAG), 'display.log');
+  const note = line => { try { fs.appendFileSync(LOG, `${new Date().toLocaleString('sv-SE')} ${line}\n`); } catch { } };
+  async function localSet(on, force, from) {
+    note(`${on ? 'ON ' : 'OFF'} requested by ${from || '?'}${force ? ' (force)' : ''}`);
     if (on) {
       try { fs.unlinkSync(FLAG); } catch { }
       await run('/usr/bin/caffeinate', ['-u', '-t', '2'], 6000);
@@ -58,12 +61,12 @@ function createDisplay({ peer, cfg }) {
     enabled: () => !!c.host,
     label,
     async get(hop) { if (!c.host) return { ok: false, err: 'no display configured' }; if (isHost()) return localState(); if (hop) return { ok: false, err: 'neither Mac owns the display' }; return viaPeer('GET'); },
-    async set(on, force, hop) {
+    async set(on, force, hop, from) {
       if (!c.host) return { ok: false, err: 'no display configured' };
       if (typeof on !== 'boolean') return { ok: false, err: 'on must be true or false' };
-      if (isHost()) return localSet(on, !!force);
+      if (isHost()) return localSet(on, !!force, from);
       if (hop) return { ok: false, err: 'neither Mac owns the display' };
-      return viaPeer('POST', { on, force: !!force, hop: 1 });
+      return viaPeer('POST', { on, force: !!force, hop: 1, from: from || os.hostname() });
     },
   };
 }

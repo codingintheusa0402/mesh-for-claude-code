@@ -304,3 +304,6 @@ body[data-peer] #split, body[data-peer] #grid { backface-visibility: hidden; con
 #vnc .vbtn.dispOff::after { border: 1.5px solid currentColor; box-sizing: border-box; }
 #topSw .swtop { height: 38px; border-radius: 19px; padding: 0 10px; font-size: 11px; }
 #topSw .swtop.off b { color: #e0b44a; }
+
+#disp .dbtn { height: 38px; border-radius: 19px; padding: 0 10px; font-size: 11px; }
+#disp .dbtn.off b { color: #e0b44a; }
