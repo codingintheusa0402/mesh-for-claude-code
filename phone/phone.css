@@ -295,3 +295,9 @@ body[data-peer] #split, body[data-peer] #grid { backface-visibility: hidden; con
 #pxt .xterm-viewport, #xt .xterm-viewport { overflow-x: hidden !important; }
 .keys { overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-x; }
 #pxt .xterm, #xt .xterm { box-sizing: border-box; max-width: 100%; }
+
+/* server display on/off (display.js) */
+#disp .dbtn { height: 38px; border-radius: 19px; display: inline-flex; align-items: center; gap: 4px; padding: 0 10px; }
+#disp .dbtn b { font-size: 11px; font-weight: 600; }
+#disp .dbtn.off { opacity: .6; }
+#disp .dbtn.warn b { color: #e0b44a; }

@@ -733,3 +733,10 @@ body.simple .bcard.b-waiting { animation: bBlinkWarn 1.6s steps(1, end) infinite
 #ivMenu .swvBody.off .swvRow { opacity: .45; }
 .hpill.swvac { cursor: default; opacity: .75; }
 .hpill.swvac.on { opacity: 1; color: var(--ok, #5be3a4); border-color: currentColor; }
+
+/* server display on/off (display.js) */
+#top .disp-btn .dispDot { fill: var(--ok, #5be3a4); stroke: none; }
+#top .disp-btn.off .dispDot { fill: none; stroke: currentColor; }
+#top .disp-btn.off { opacity: .6; }
+#top .disp-btn.warn span { color: #e0b44a; }
+#top .disp-btn.busy { opacity: .5; pointer-events: none; }

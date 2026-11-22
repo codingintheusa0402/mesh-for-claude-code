@@ -48,6 +48,25 @@ function renderVnc(snap) {
   if (el.innerHTML !== html) el.innerHTML = html;
   el.classList.toggle('hidden', !macs.length);
 }
+// server display on/off (display.js): live state, one tap toggles, no confirm
+let dispSt = null, dispBusy = false;
+function paintDisp() {
+  const el = $('#disp'); if (!el) return;
+  if (!dispSt || dispSt.err === 'no display configured') { el.classList.add('hidden'); return; }
+  const on = dispSt.asleep == null ? null : !dispSt.asleep, warn = dispSt.warning;
+  const st = dispBusy ? '…' : on === null ? '?' : on ? 'ON' : 'OFF';
+  const html = `<button class="vbtn dbtn${on === false ? ' off' : ''}${warn ? ' warn' : ''}" aria-label="${esc((dispSt.label || 'Display') + ' ' + st)}"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="11" rx="1.5"/><path d="M9 19.5h6M12 16v3.5"/><circle cx="12" cy="10.5" r="2" ${on ? 'fill="#5be3a4" stroke="none"' : ''}/></svg><b>${st}${warn ? ' ⚠' : ''}</b></button>`;
+  if (el.innerHTML !== html) el.innerHTML = html;
+  el.classList.remove('hidden');
+  el.querySelector('button').onclick = async () => {
+    if (dispBusy) return; const want = dispSt.asleep !== false; dispBusy = true; paintDisp();
+    const r = await api('/api/display', { on: want }).catch(e => ({ ok: false, err: e.message }));
+    dispBusy = false; if (r && r.label) dispSt = r; paintDisp();
+    toast(r && r.ok !== false ? `${dispSt.label} ${want ? 'ON' : 'OFF'}` : `${(dispSt && dispSt.label) || 'Display'}: ${(r && (r.err || r.warning)) || 'no answer'}`);
+  };
+}
+function loadDisp() { if (document.hidden || dispBusy) return; api('/api/display').then(r => { dispSt = r; paintDisp(); }).catch(() => { }); }
+loadDisp(); setInterval(loadDisp, 15000);
 function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2400); }
 function offline(msg) { const o = $('#offline'); if (msg) { const h = `<div class="offBox">${msg}</div>`; if (o.innerHTML !== h) o.innerHTML = h; o.classList.remove('hidden'); } else o.classList.add('hidden'); }
 

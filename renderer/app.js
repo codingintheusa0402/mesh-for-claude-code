@@ -247,6 +247,28 @@ function renderVncBtn(snap) {
   b.title = `Screen share ${name} (vnc://${p.host})${p.online ? '' : ' — it looks offline right now'}`;
   b.classList.toggle('off', !p.online); b.dataset.host = p.host;
 }
+// server display on/off (display.js): live state from the Mac that owns it, one tap toggles, no confirm
+let dispSt = null, dispBusy = false;
+function paintDisp() {
+  const b = $('#dispBtn'); if (!b || !dispSt) return;
+  const on = dispSt.ok !== false || dispSt.asleep != null ? dispSt.asleep === false : null, warn = dispSt.warning;
+  b.hidden = false; b.classList.toggle('off', on === false); b.classList.toggle('warn', !!warn); b.classList.toggle('busy', dispBusy);
+  b.querySelector('span').textContent = `${dispSt.label || 'Display'} ${dispBusy ? '…' : on === null ? '?' : on ? 'ON' : 'OFF'}${warn ? ' ⚠' : ''}`;
+  b.title = (on === null ? `Can't read the display: ${dispSt.err || 'no answer'}` : `${dispSt.label} is ${on ? 'ON' : 'OFF'} (read live from ${dispSt.host || 'it'}) — click to turn it ${on ? 'OFF' : 'ON'}`) + (warn ? `\n⚠ ${warn}` : '');
+}
+async function renderDisp() {
+  if (document.hidden || dispBusy) return;
+  const has = await window.api.display.has().catch(() => false); if (!has) return;
+  dispSt = await window.api.display.get().catch(e => ({ ok: false, err: e.message, label: has.label })); if (!dispSt.label) dispSt.label = has.label; paintDisp();
+}
+$('#dispBtn').onclick = async () => {
+  if (dispBusy || !dispSt) return; const want = dispSt.asleep !== false;        // asleep/unknown -> ON
+  dispBusy = true; paintDisp();
+  const r = await window.api.display.set(want).catch(e => ({ ok: false, err: e.message }));
+  dispBusy = false; if (r && r.label) dispSt = r; paintDisp();
+  if (!r || r.ok === false) toast(`${dispSt.label}: ${(r && (r.err || r.warning)) || 'no answer'}`);
+};
+renderDisp(); setInterval(renderDisp, 15000);
 $('#vncBtn').onclick = e => { const h = e.currentTarget.dataset.host; if (h) window.api.vncOpen(h); };
 // ---------------- today's calendar (header ribbon) ----------------
 const CAL_HOME = 'https://calendar.google.com/calendar/u/0/r';
