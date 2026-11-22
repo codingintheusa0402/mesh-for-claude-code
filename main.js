@@ -1409,6 +1409,8 @@ ipcMain.handle('sw:interval', async (_e, id, sec) => switches ? switches.setInte
 ipcMain.handle('sw:set', async (_e, id, on) => {
   if (!switches) return { ok: false, err: 'not ready' };
   const sw = (await switches.get()).find(x => x.id === id); if (!sw) return { ok: false, err: 'no such switch' };
+  const ask = sw.confirm === 'none' ? false : sw.confirm === 'off' ? !on : true;          // switches.js "confirm"
+  if (!ask) return switches.set(id, !!on, USAGE_MACHINE);
   const msg = on ? (sw.confirmOn || `Turn ${sw.label} on?`) : (sw.confirmOff || `Turn ${sw.label} off?`);
   const r = await dialog.showMessageBox(win, { type: on ? 'warning' : 'question', message: sw.label, detail: msg, buttons: ['취소', on ? (sw.onLabel || '켜기') : (sw.offLabel || '끄기')], defaultId: 0, cancelId: 0, noLink: true });
   if (r.response !== 1) return { ok: false, cancelled: true };

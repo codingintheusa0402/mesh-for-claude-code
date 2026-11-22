@@ -15,6 +15,10 @@
 // On a machine that isn't the host, get/set go to the peer (peer.js) over /api/switches.
 const fs = require('fs'), path = require('path'), os = require('os');
 
+// Optional "defaultOn": true = a missing file (or no "enabled" key) counts as ON (the tool's default is on; only
+// "enabled": false is OFF). Optional "lastFile": a JSON file { "at": <epoch s or ms, or ISO> } shown next to the state
+// (e.g. the tool's last success). Optional "place": "top" = a button in the top bar instead of a pill in the switch row.
+// Optional "confirm": "both" (default) | "off" (ask only before turning it off) | "none".
 // Optional "vacation": true in a switch's config adds a vacation block to its menu, stored in the file as
 // "vacation": { "enabled", "from": "YYYY-MM-DD", "to": "YYYY-MM-DD" (inclusive), "start": "HH:MM", "end": "HH:MM", "tz",
 //   "admin": { "name", ...ids the tool needs, kept as written }, "interval": <sec>, "peak": { "start", "end", "interval" } | null }.
@@ -59,13 +63,15 @@ function createSwitches({ peer, machine }) {
   const list = () => (fromEnv() || require('./mesh-name').switches || []).filter(s => s && s.id && s.file);
   const isHost = s => !s.host || os.hostname().toLowerCase().includes(String(s.host).toLowerCase());
   const fileOf = s => s.file.replace(/^~(?=\/|$)/, os.homedir());
+  const lastOk = s => { if (!s.lastFile) return null; try { const a = JSON.parse(fs.readFileSync(s.lastFile.replace(/^~(?=\/|$)/, os.homedir()), 'utf8')).at;
+    const t = typeof a === 'number' ? (a < 1e12 ? a * 1000 : a) : Date.parse(a); return t > 0 ? Math.round(t) : null; } catch { return null; } };
   const lastRun = s => { if (!s.tickFile) return null; try { const a = +JSON.parse(fs.readFileSync(s.tickFile.replace(/^~(?=\/|$)/, os.homedir()), 'utf8')).at; return a > 0 ? Math.round(a * 1000) : null; } catch { return null; } };
   const pub = s => ({ id: s.id, label: s.label || s.id, short: s.short || '', confirmOn: s.confirmOn || '', confirmOff: s.confirmOff || '', onLabel: s.onLabel || '', offLabel: s.offLabel || '',
     intervals: Array.isArray(s.intervals) ? s.intervals.filter(i => i && i.sec > 0).map(i => ({ sec: +i.sec, label: String(i.label || i.sec + ' s') })) : [], intervalDefault: s.intervalDefault || null,
-    hasSchedule: !!s.schedule, scheduleTz: s.scheduleTz || 'Asia/Seoul', hasVacation: !!s.vacation });
+    hasSchedule: !!s.schedule, scheduleTz: s.scheduleTz || 'Asia/Seoul', hasVacation: !!s.vacation, place: s.place === 'top' ? 'top' : 'row', confirm: ['off', 'none'].includes(s.confirm) ? s.confirm : 'both', hasLast: !!s.lastFile });
   function readLocal(s) {
-    try { const j = JSON.parse(fs.readFileSync(fileOf(s), 'utf8')); return { ...pub(s), enabled: j.enabled === true, by: j.by || null, at: j.at || null, from: j.from || null, interval: +j.interval || s.intervalDefault || null, lastRun: lastRun(s), schedule: j.schedule || null, ...scheduleNow(j.schedule), vacation: j.vacation || null, ...vacationNow(j.vacation) }; }
-    catch (e) { return { ...pub(s), enabled: false, by: null, at: null, from: null, interval: s.intervalDefault || null, lastRun: lastRun(s), schedule: null, ...scheduleNow(null), vacation: null, ...vacationNow(null), missing: e.code === 'ENOENT' }; }
+    try { const j = JSON.parse(fs.readFileSync(fileOf(s), 'utf8')); return { ...pub(s), enabled: s.defaultOn ? j.enabled !== false : j.enabled === true, lastOk: lastOk(s), by: j.by || null, at: j.at || null, from: j.from || null, interval: +j.interval || s.intervalDefault || null, lastRun: lastRun(s), schedule: j.schedule || null, ...scheduleNow(j.schedule), vacation: j.vacation || null, ...vacationNow(j.vacation) }; }
+    catch (e) { return { ...pub(s), enabled: !!s.defaultOn, lastOk: lastOk(s), by: null, at: null, from: null, interval: s.intervalDefault || null, lastRun: lastRun(s), schedule: null, ...scheduleNow(null), vacation: null, ...vacationNow(null), missing: e.code === 'ENOENT' }; }
   }
   function writeLocal(s, patch, from) {
     const f = fileOf(s), tmp = f + '.tmp-' + process.pid;

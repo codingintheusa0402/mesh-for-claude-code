@@ -734,9 +734,14 @@ body.simple .bcard.b-waiting { animation: bBlinkWarn 1.6s steps(1, end) infinite
 .hpill.swvac { cursor: default; opacity: .75; }
 .hpill.swvac.on { opacity: 1; color: var(--ok, #5be3a4); border-color: currentColor; }
 
-/* server display on/off (display.js) */
-#top .disp-btn .dispDot { fill: var(--ok, #5be3a4); stroke: none; }
-#top .disp-btn.off .dispDot { fill: none; stroke: currentColor; }
-#top .disp-btn.off { opacity: .6; }
-#top .disp-btn.warn span { color: #e0b44a; }
-#top .disp-btn.busy { opacity: .5; pointer-events: none; }
+/* server display state (display.js): a dot on the other Mac's screen-share button */
+#top .vnc-btn .dispDot { display: none; }
+#top .vnc-btn.dispOn .dispDot { display: inline; fill: var(--ok, #5be3a4); stroke: none; }
+#top .vnc-btn.dispOff .dispDot { display: inline; fill: none; stroke: currentColor; }
+#top .vnc-btn.dispWarn.dispOn .dispDot { fill: #e0b44a; }
+
+/* top-bar switches (switches.js "place": "top") */
+#topSw { display: inline-flex; gap: 6px; }
+#top .swtop.off { opacity: .6; }
+#top .swtop.off span { color: #e0b44a; }
+#top .swtop.err { opacity: .4; }

@@ -69,7 +69,9 @@ function openStarMenu() {
 // mode switches as top-bar pills: state read from the file on the machine that holds it (through the other Mac if needed)
 async function renderSwitchPills() {
   const bar = $('#swBar'); if (!bar) return;
-  const list = await window.api.switches.get().catch(e => [{ id: '', label: 'Switches', offline: true, err: e.message }]);
+  const all = await window.api.switches.get().catch(e => [{ id: '', label: 'Switches', offline: true, err: e.message }]);
+  const list = (all || []).filter(w => w.place !== 'top');
+  renderTopSwitches((all || []).filter(w => w.place === 'top'));
   bar.innerHTML = (list || []).map(w => {
     const name = w.short || w.label, st = w.offline ? '?' : w.enabled ? 'ON' : 'OFF';
     const tip = w.offline ? `${w.label}: can't read the switch (${w.err || 'no answer'})` : `${w.label} is ${st}` + (w.at ? ` since ${new Date(w.at).toLocaleString()} (by ${w.from || w.by || '?'})` : ' (never switched on)') + ` — click to turn it ${w.enabled ? 'OFF' : 'ON'}`;
@@ -246,28 +248,52 @@ function renderVncBtn(snap) {
   b.querySelector('span').textContent = name;
   b.title = `Screen share ${name} (vnc://${p.host})${p.online ? '' : ' — it looks offline right now'}`;
   b.classList.toggle('off', !p.online); b.dataset.host = p.host;
+  if (b.dataset.disp) b.title += `\n${b.dataset.disp}`;
+}
+// switches with "place": "top" (switches.js): a button next to the display button, "<short> ON · <last success HH:MM>"
+function renderTopSwitches(list) {
+  const el = $('#topSw'); if (!el) return;
+  const hm = t => t ? new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) : '';
+  const html = list.map(w => { const st = w.offline ? '?' : w.enabled ? 'ON' : 'OFF', last = w.hasLast && w.lastOk ? ' · ' + hm(w.lastOk) : '';
+    const tip = w.offline ? `${w.label}: can't read the switch (${w.err || 'no answer'})` : `${w.label} is ${st}${w.lastOk ? ` · last success ${new Date(w.lastOk).toLocaleString()}` : ''} — click to turn it ${w.enabled ? 'OFF' : 'ON'}`;
+    return `<button class="icon-btn vnc-btn swtop ${w.offline ? 'err' : w.enabled ? 'on' : 'off'}" data-id="${esc(w.id)}" data-on="${w.enabled ? '0' : '1'}" ${w.offline ? 'disabled' : ''} title="${esc(tip)}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></svg><span>${esc((w.short || w.label) + ' ' + st + last)}</span></button>`; }).join('');
+  if (el.innerHTML !== html) el.innerHTML = html;
+  el.querySelectorAll('.swtop:not([disabled])').forEach(b => b.onclick = () => flipSwitch(b.dataset.id, b.dataset.on === '1'));
 }
 // server display on/off (display.js): live state from the Mac that owns it, one tap toggles, no confirm
 let dispSt = null, dispBusy = false;
+// state as a dot on the other Mac's screen-share button; right-click it for the display menu
 function paintDisp() {
-  const b = $('#dispBtn'); if (!b || !dispSt) return;
-  const on = dispSt.ok !== false || dispSt.asleep != null ? dispSt.asleep === false : null, warn = dispSt.warning;
-  b.hidden = false; b.classList.toggle('off', on === false); b.classList.toggle('warn', !!warn); b.classList.toggle('busy', dispBusy);
-  b.querySelector('span').textContent = `${dispSt.label || 'Display'} ${dispBusy ? '…' : on === null ? '?' : on ? 'ON' : 'OFF'}${warn ? ' ⚠' : ''}`;
-  b.title = (on === null ? `Can't read the display: ${dispSt.err || 'no answer'}` : `${dispSt.label} is ${on ? 'ON' : 'OFF'} (read live from ${dispSt.host || 'it'}) — click to turn it ${on ? 'OFF' : 'ON'}`) + (warn ? `\n⚠ ${warn}` : '');
+  const b = $('#vncBtn'); if (!b) return;
+  const on = !dispSt || dispSt.asleep == null ? null : !dispSt.asleep;
+  b.classList.toggle('dispOn', on === true); b.classList.toggle('dispOff', on === false); b.classList.toggle('dispWarn', !!(dispSt && dispSt.warning));
+  b.dataset.disp = dispSt ? `${dispSt.label || 'Display'} ${dispBusy ? '…' : on === null ? '?' : on ? 'ON' : 'OFF'} · right-click to change` : '';
 }
 async function renderDisp() {
   if (document.hidden || dispBusy) return;
   const has = await window.api.display.has().catch(() => false); if (!has) return;
   dispSt = await window.api.display.get().catch(e => ({ ok: false, err: e.message, label: has.label })); if (!dispSt.label) dispSt.label = has.label; paintDisp();
 }
-$('#dispBtn').onclick = async () => {
-  if (dispBusy || !dispSt) return; const want = dispSt.asleep !== false;        // asleep/unknown -> ON
+async function setDisp(want) {
   dispBusy = true; paintDisp();
   const r = await window.api.display.set(want).catch(e => ({ ok: false, err: e.message }));
   dispBusy = false; if (r && r.label) dispSt = r; paintDisp();
-  if (!r || r.ok === false) toast(`${dispSt.label}: ${(r && (r.err || r.warning)) || 'no answer'}`);
-};
+  toast(r && r.ok !== false ? `${dispSt.label}: ${dispSt.asleep ? 'OFF' : 'ON'}` : `${(dispSt && dispSt.label) || 'Display'}: ${(r && (r.err || r.warning)) || 'no answer'}`);
+}
+function openDispMenu(anchor) {
+  let m = $('#ivMenu'); if (m) m.remove(); if (!dispSt) return;
+  const on = dispSt.asleep == null ? null : !dispSt.asleep;
+  m = document.createElement('div'); m.id = 'ivMenu';
+  m.innerHTML = `<div class="smHead">${esc(dispSt.label || 'Display')} · ${on === null ? 'unknown' : on ? 'ON' : 'OFF'}</div>`
+    + `<button class="thRow" data-on="1"${on === true ? ' disabled' : ''}>Turn display ON</button><button class="thRow" data-on="0"${on === false || dispSt.warning ? ' disabled' : ''}>Turn display OFF</button>`
+    + (dispSt.warning ? `<div class="swsNow" style="max-width:300px;white-space:normal">⚠ ${esc(dispSt.warning)}</div>` : '');
+  document.body.appendChild(m);
+  const r = anchor.getBoundingClientRect(); m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.left)) + 'px'; m.style.top = (r.bottom + 6) + 'px';
+  const shut = () => { m.remove(); removeEventListener('pointerdown', away, true); }, away = e => { if (!m.contains(e.target)) shut(); };
+  addEventListener('pointerdown', away, true);
+  m.onclick = e => { const b = e.target.closest('button[data-on]'); if (!b || b.disabled) return; shut(); setDisp(b.dataset.on === '1'); };
+}
+$('#vncBtn').oncontextmenu = e => { if (!dispSt) return; e.preventDefault(); openDispMenu(e.currentTarget); };
 renderDisp(); setInterval(renderDisp, 15000);
 $('#vncBtn').onclick = e => { const h = e.currentTarget.dataset.host; if (h) window.api.vncOpen(h); };
 // ---------------- today's calendar (header ribbon) ----------------

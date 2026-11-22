@@ -296,8 +296,11 @@ body[data-peer] #split, body[data-peer] #grid { backface-visibility: hidden; con
 .keys { overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-x; }
 #pxt .xterm, #xt .xterm { box-sizing: border-box; max-width: 100%; }
 
-/* server display on/off (display.js) */
-#disp .dbtn { height: 38px; border-radius: 19px; display: inline-flex; align-items: center; gap: 4px; padding: 0 10px; }
-#disp .dbtn b { font-size: 11px; font-weight: 600; }
-#disp .dbtn.off { opacity: .6; }
-#disp .dbtn.warn b { color: #e0b44a; }
+/* server display state (display.js): dot on the Mac mini button; long-press toggles */
+#vnc .vbtn { position: relative; -webkit-touch-callout: none; user-select: none; }
+#vnc .vbtn.dispOn::after, #vnc .vbtn.dispOff::after { content: ''; position: absolute; right: 5px; top: 5px; width: 8px; height: 8px; border-radius: 50%; }
+#vnc .vbtn.dispOn::after { background: #5be3a4; }
+#vnc .vbtn.dispWarn.dispOn::after { background: #e0b44a; }
+#vnc .vbtn.dispOff::after { border: 1.5px solid currentColor; box-sizing: border-box; }
+#topSw .swtop { height: 38px; border-radius: 19px; padding: 0 10px; font-size: 11px; }
+#topSw .swtop.off b { color: #e0b44a; }

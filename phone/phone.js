@@ -45,28 +45,50 @@ function renderVnc(snap) {
   if (/^[\w.-]+$/.test(location.hostname)) macs.push({ name: macName(p && p.selfLabel) || 'This Mac', host: location.hostname, on: true });
   if (p && p.host) macs.push({ name: macName(p.label), host: p.host, on: p.online });
   const html = macs.map(m => `<a class="vbtn${m.on ? '' : ' off'}" href="vnc://${m.host}" title="Screen share ${esc(m.name)} in RVNC Viewer" aria-label="Screen share ${esc(m.name)}">${/book/i.test(m.name) ? ICON.laptop : ICON.monitor}<span class="vl">${esc(m.name)}</span></a>`).join('');
-  if (el.innerHTML !== html) el.innerHTML = html;
+  if (el._h !== html) { el.innerHTML = html; el._h = html; }      // compare with what we rendered: the display dot adds classes
   el.classList.toggle('hidden', !macs.length);
+  if (typeof paintDisp === 'function') paintDisp();
 }
-// server display on/off (display.js): live state, one tap toggles, no confirm
+// server display (display.js): a state dot on the Mac mini's screen-share button; long-press it to turn the display on/off
 let dispSt = null, dispBusy = false;
+function dispBtn() { return [...document.querySelectorAll('#vnc .vbtn')].find(b => !/book/i.test(b.getAttribute('aria-label') || '')); }
 function paintDisp() {
-  const el = $('#disp'); if (!el) return;
-  if (!dispSt || dispSt.err === 'no display configured') { el.classList.add('hidden'); return; }
-  const on = dispSt.asleep == null ? null : !dispSt.asleep, warn = dispSt.warning;
-  const st = dispBusy ? '…' : on === null ? '?' : on ? 'ON' : 'OFF';
-  const html = `<button class="vbtn dbtn${on === false ? ' off' : ''}${warn ? ' warn' : ''}" aria-label="${esc((dispSt.label || 'Display') + ' ' + st)}"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="11" rx="1.5"/><path d="M9 19.5h6M12 16v3.5"/><circle cx="12" cy="10.5" r="2" ${on ? 'fill="#5be3a4" stroke="none"' : ''}/></svg><b>${st}${warn ? ' ⚠' : ''}</b></button>`;
-  if (el.innerHTML !== html) el.innerHTML = html;
-  el.classList.remove('hidden');
-  el.querySelector('button').onclick = async () => {
-    if (dispBusy) return; const want = dispSt.asleep !== false; dispBusy = true; paintDisp();
-    const r = await api('/api/display', { on: want }).catch(e => ({ ok: false, err: e.message }));
-    dispBusy = false; if (r && r.label) dispSt = r; paintDisp();
-    toast(r && r.ok !== false ? `${dispSt.label} ${want ? 'ON' : 'OFF'}` : `${(dispSt && dispSt.label) || 'Display'}: ${(r && (r.err || r.warning)) || 'no answer'}`);
-  };
+  const b = dispBtn(); if (!b || !dispSt || dispSt.err === 'no display configured') return;
+  const on = dispSt.asleep == null ? null : !dispSt.asleep;
+  b.classList.toggle('dispOn', on === true); b.classList.toggle('dispOff', on === false); b.classList.toggle('dispWarn', !!dispSt.warning);
+  if (b._lp) return; b._lp = true;                                   // long-press: once per button element
+  let t = 0, fired = false;
+  b.addEventListener('touchstart', () => { fired = false; t = setTimeout(() => { fired = true; toggleDisp(); }, 550); }, { passive: true });
+  ['touchend', 'touchmove', 'touchcancel'].forEach(ev => b.addEventListener(ev, () => clearTimeout(t), { passive: true }));
+  b.addEventListener('click', e => { if (fired) { e.preventDefault(); fired = false; } });
+  b.addEventListener('contextmenu', e => { e.preventDefault(); });
+}
+async function toggleDisp() {
+  if (dispBusy || !dispSt) return; const want = dispSt.asleep !== false;
+  if (!want && dispSt.warning) return toast(`${dispSt.label}: ${dispSt.warning}`);
+  dispBusy = true; toast(`${dispSt.label}: turning ${want ? 'ON' : 'OFF'}…`);
+  const r = await api('/api/display', { on: want }).catch(e => ({ ok: false, err: e.message }));
+  dispBusy = false; if (r && r.label) dispSt = r; paintDisp();
+  toast(r && r.ok !== false ? `${dispSt.label} ${dispSt.asleep ? 'OFF' : 'ON'}` : `${(dispSt && dispSt.label) || 'Display'}: ${(r && (r.err || r.warning)) || 'no answer'}`);
 }
 function loadDisp() { if (document.hidden || dispBusy) return; api('/api/display').then(r => { dispSt = r; paintDisp(); }).catch(() => { }); }
 loadDisp(); setInterval(loadDisp, 15000);
+// switches with "place": "top" (switches.js): a button in the top row, "<short> ON · <last success HH:MM>"
+function renderTopSw(list) {
+  const el = $('#topSw'); if (!el) return; list = (list || []).filter(w => w.place === 'top');
+  const hm = t => t ? new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) : '';
+  const html = list.map(w => `<button class="vbtn swtop${w.enabled ? '' : ' off'}" data-id="${esc(w.id)}"><b>${esc((w.short || w.label) + ' ' + (w.offline ? '?' : w.enabled ? 'ON' : 'OFF') + (w.lastOk ? ' · ' + hm(w.lastOk) : ''))}</b></button>`).join('');
+  if (el.innerHTML !== html) el.innerHTML = html;
+  el.classList.toggle('hidden', !list.length);
+  el.querySelectorAll('.swtop').forEach(b => b.onclick = async () => {
+    const w = list.find(x => x.id === b.dataset.id); if (!w || w.offline) return; const on = !w.enabled;
+    if ((w.confirm === 'both' || (w.confirm === 'off' && !on)) && !confirm(on ? (w.confirmOn || `Turn ${w.label} on?`) : (w.confirmOff || `Turn ${w.label} off?`))) return;
+    const r = await api('/api/switches', { id: w.id, enabled: on, from: 'iPhone' }).catch(e => ({ ok: false, err: e.message }));
+    toast(r && r.ok ? `${w.label}: ${on ? 'ON' : 'OFF'}` : `Couldn't switch: ${(r && r.err) || 'no answer'}`); loadTopSw();
+  });
+}
+function loadTopSw() { if (document.hidden) return; fetch(`/api/switches?t=${encodeURIComponent(TOKEN)}`).then(r => r.json()).then(renderTopSw).catch(() => { }); }
+loadTopSw(); setInterval(loadTopSw, 20000);
 function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2400); }
 function offline(msg) { const o = $('#offline'); if (msg) { const h = `<div class="offBox">${msg}</div>`; if (o.innerHTML !== h) o.innerHTML = h; o.classList.remove('hidden'); } else o.classList.add('hidden'); }
 
