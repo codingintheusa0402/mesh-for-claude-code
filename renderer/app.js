@@ -277,14 +277,15 @@ async function renderDisp() {
 async function setDisp(want) {
   dispBusy = true; paintDisp();
   const r = await window.api.display.set(want).catch(e => ({ ok: false, err: e.message }));
-  dispBusy = false; if (r && r.label) dispSt = r; paintDisp();
-  toast(r && r.ok !== false ? `${dispSt.label}: ${dispSt.asleep ? 'OFF' : 'ON'}` : `${(dispSt && dispSt.label) || 'Display'}: ${(r && (r.err || r.warning)) || 'no answer'}`);
+  dispBusy = false; if (r && r.label && typeof r.asleep === 'boolean') dispSt = r; paintDisp();
+  toast(r && r.ok !== false && typeof r.asleep === 'boolean' ? `${dispSt.label}: ${r.asleep ? 'OFF' : 'ON'}` : `${(dispSt && dispSt.label) || 'Display'}: ${(r && (r.err || r.warning)) || 'no answer'}`);
 }
 function openDispMenu(anchor) {
   let m = $('#ivMenu'); if (m) m.remove(); if (!dispSt) return;
   const on = dispSt.asleep == null ? null : !dispSt.asleep;
   m = document.createElement('div'); m.id = 'ivMenu';
-  m.innerHTML = `<div class="smHead">${esc(dispSt.label || 'Display')} · ${on === null ? 'unknown' : on ? 'ON' : 'OFF'}</div>`
+  if (on === null) { toast(`${dispSt.label || 'Display'}: ${dispSt.err || "can't read it"}`); return; }
+  m.innerHTML = `<div class="smHead">${esc(dispSt.label || 'Display')} · ${on ? 'ON' : 'OFF'}</div>`
     + `<button class="thRow" data-on="1"${on === true ? ' disabled' : ''}>Turn display ON</button><button class="thRow" data-on="0"${on === false || dispSt.warning ? ' disabled' : ''}>Turn display OFF</button>`
     + (dispSt.warning ? `<div class="swsNow" style="max-width:300px;white-space:normal">⚠ ${esc(dispSt.warning)}</div>` : '');
   document.body.appendChild(m);

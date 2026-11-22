@@ -68,8 +68,8 @@ async function toggleDisp() {
   if (!want && dispSt.warning) return toast(`${dispSt.label}: ${dispSt.warning}`);
   dispBusy = true; toast(`${dispSt.label}: turning ${want ? 'ON' : 'OFF'}…`);
   const r = await api('/api/display', { on: want }).catch(e => ({ ok: false, err: e.message }));
-  dispBusy = false; if (r && r.label) dispSt = r; paintDisp();
-  toast(r && r.ok !== false ? `${dispSt.label} ${dispSt.asleep ? 'OFF' : 'ON'}` : `${(dispSt && dispSt.label) || 'Display'}: ${(r && (r.err || r.warning)) || 'no answer'}`);
+  dispBusy = false; if (r && r.label && typeof r.asleep === 'boolean') dispSt = r; paintDisp();
+  toast(r && r.ok !== false && typeof r.asleep === 'boolean' ? `${dispSt.label} ${r.asleep ? 'OFF' : 'ON'}` : `${(dispSt && dispSt.label) || 'Display'}: ${(r && (r.err || r.warning)) || 'no answer'}`);
 }
 function loadDisp() { if (document.hidden || dispBusy) return; api('/api/display').then(r => { dispSt = r; paintDisp(); }).catch(() => { }); }
 loadDisp(); setInterval(loadDisp, 15000);

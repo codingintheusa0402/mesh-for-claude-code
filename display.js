@@ -50,7 +50,9 @@ function createDisplay({ peer, cfg }) {
 
   const viaPeer = (method, body) => {
     if (!peer || !peer()) return Promise.resolve({ ok: false, err: 'the other Mac is not linked' });
-    return peer().forward(method, '/api/display', body, method === 'GET' ? { hop: '1' } : undefined, 20000).catch(e => ({ ok: false, err: e.message }));
+    return peer().forward(method, '/api/display', body, method === 'GET' ? { hop: '1' } : undefined, 20000)
+      .then(r => r && typeof r === 'object' && 'label' in r || (r && r.ok === false && r.err) ? r : { ok: false, err: 'the other Mac runs an older Mesh build without this; it works once Mesh on that Mac restarts into the new build' })
+      .catch(e => ({ ok: false, err: /404|not found/i.test(e.message) ? 'the other Mac runs an older Mesh build without this; it works once Mesh on that Mac restarts into the new build' : e.message }));
   };
   return {
     enabled: () => !!c.host,

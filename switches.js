@@ -98,6 +98,7 @@ function createSwitches({ peer, machine }) {
       return all.map(s => {
         if (isHost(s)) return readLocal(s);
         const r = Array.isArray(theirs) && theirs.find(x => x.id === s.id);
+        if (Array.isArray(theirs) && !r) return { ...pub(s), enabled: null, offline: true, err: 'the other Mac runs an older Mesh build without this; it works once Mesh on that Mac restarts into the new build' };
         return r && !r.offline ? r : { ...pub(s), enabled: null, offline: true, err: (theirs && theirs.err) || 'not answered by the other machine' };
       });
     },
