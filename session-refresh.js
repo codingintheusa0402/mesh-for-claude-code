@@ -663,6 +663,16 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
     if (s.ctx && s.kind !== 'hermes') {                 // a set token count (every call re-reads the whole context), at most 60 % of the window
       const lim = (c => Math.min(c, s.ctxMax ? 0.6 * s.ctxMax : c))(cfg.ctxCapFor[s.name] || cfg.ctxCap);
       const loopLim = Math.min(lim, cfg.ctxCapFor[s.name] || cfg.loopCap);
+      // a fresh session starts at whatever its rulebook costs: remember that (first look after a refresh); when it is within
+      // half a cap of where it is now, another refresh can't bring it down and would only repeat every few hours: alert instead
+      if (last && last.to === s.sid && !last.startCtx) { last.startCtx = s.ctx; save(); }
+      const cap = s.ctx > lim ? lim : (s.ctx > loopLim && loopInfo(s)) ? loopLim : 0;
+      if (cap && last && last.to === s.sid && last.startCtx && s.ctx - last.startCtx < cap / 2) {
+        if ((cfg.floorWarned || (cfg.floorWarned = {}))[s.name] !== dayKey()) { cfg.floorWarned[s.name] = dayKey(); save();
+          ctx.alert(`Session refresh can't shrink ${s.name}`, `it started at ${Math.round(last.startCtx / 1e3)}K right after its last refresh (its rulebook in the handoff's section 0), so a refresh at the ${Math.round(cap / 1e3)}K cap would loop. Trim section 0 or raise its cap; nightly refreshes continue.`);
+          log(`FLOOR ${s.name}: started ${Math.round(last.startCtx / 1e3)}K, now ${Math.round(s.ctx / 1e3)}K, cap ${Math.round(cap / 1e3)}K: no cap refresh`); }
+        return null;
+      }
       if (s.ctx > lim || (s.ctx > loopLim && loopInfo(s))) return `context ${Math.round(s.ctx / 1e3)}K${s.ctxMax ? ` (${Math.round(100 * s.ctx / s.ctxMax)}%)` : ''} past the ${Math.round((s.ctx > lim ? lim : loopLim) / 1e3)}K cap`;
     } else if (s.ctxMax && s.ctx / s.ctxMax > 0.6) return `context ${Math.round(100 * s.ctx / s.ctxMax)}% full`;
     const days = Object.entries(cfg.tok[s.name] || {}).filter(([d, v]) => d !== dayKey() && v > 0).map(([, v]) => v).sort((a, b) => a - b);

@@ -2,6 +2,10 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-22
+
+- **No refresh loop when a session's rulebook alone fills its context.** Session refresh now remembers how big each refreshed session starts. When a session passes its context cap but is still within half a cap of that start, another refresh can't bring it down (the new session would read the same files and land in the same place), so it alerts once a day to trim the handoff's rulebook list or raise that session's cap, instead of refreshing every few hours. A session that started at 296K hit the 300K cap again three hours after its refresh.
+
 ## 2026-11-21
 
 - **The idle pause now really stops the green "working" glow.** The pulse is synced from script, which stopped the CSS pause from reaching it, so the window kept recalculating styles about 145 times a second while nobody was there. Now the pulse pauses too, and the renderer does about 98% less work while paused. A page reloaded while nobody is there (a hot update, crash recovery) now starts paused too; before, it ran at full work until the next touch.
