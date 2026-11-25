@@ -616,8 +616,10 @@ function buildMenu() {
   const docked = dockPanels.length > 0;
   const dockCmd = c => win && win.webContents.send('dock:cmd', c);
   const panelItems = docked ? [{ label: 'Panels', enabled: false },
-    ...dockPanels.filter(p => !p.group || p.id === 'live').map(p => ({ label: p.title, type: 'checkbox', checked: !!p.shown, click: () => dockCmd({ op: 'toggle', id: p.id }) })),
-    ...(dockPanels.some(p => p.group === 'live') ? [{ label: 'Live panels', submenu: dockPanels.filter(p => p.group === 'live').map(p => ({ label: p.title, type: 'checkbox', checked: !!p.shown, click: () => dockCmd({ op: 'toggle', id: p.id }) })) }] : []),
+    ...dockPanels.filter(p => !p.group).map(p => ({ label: p.title, type: 'checkbox', checked: !!p.shown, click: () => dockCmd({ op: 'toggle', id: p.id }) })),
+    // ONE Live entry: a single panel is a plain item; with pinned panels it becomes a submenu whose items name their session
+    ...(lv => lv.length === 1 ? [{ label: 'Live', type: 'checkbox', checked: !!lv[0].shown, click: () => dockCmd({ op: 'toggle', id: lv[0].id }) }]
+      : lv.length ? [{ label: 'Live', submenu: lv.map(p => ({ label: p.title, type: 'checkbox', checked: !!p.shown, click: () => dockCmd({ op: 'toggle', id: p.id }) })) }] : [])(dockPanels.filter(p => p.group === 'live')),
     { label: 'Reset Panel Layout', click: () => dockCmd({ op: 'reset' }) }, { type: 'separator' }] : [];
   const show = UI_ITEMS.filter(it => !(docked && it && (it[0] === 'side' || it[0] === 'panel'))).map(it => it ? { label: it[1], type: 'checkbox', checked: !uiHidden[it[0]], click: m => {
     uiHidden[it[0]] = !m.checked; try { fs.writeFileSync(UI_FILE, JSON.stringify(uiHidden)); } catch { }
@@ -671,17 +673,40 @@ ipcMain.handle('mcp:image', (_e, id) => mcpAct.image(String(id || '')));
 // ---------------- Live panel (renderer/live-panels.js): what a session's job is doing right now ----------------
 const { createLiveJobs } = require('./live-job');
 const liveJobs = createLiveJobs({ findTranscript: sid => core.findTranscript(sid), home: HOME });
-const { createLiveCdp } = require('./live-cdp');
-const liveCdp = createLiveCdp((key, msg) => { if (win && !win.isDestroyed()) win.webContents.send('live:msg', key, msg); });
-ipcMain.handle('live:job', (_e, sid, opts) => { const s = ((lastSnap && lastSnap.sessions) || []).find(x => x.sid === sid && !x.onPeer); return s ? liveJobs.job(s, opts || {}) : null; });
-ipcMain.handle('live:watch', (_e, key, port, hosts, targetId) => { port = +port; if (!(port > 1024 && port < 65536)) return; return liveCdp.watch(String(key), port, Array.isArray(hosts) ? hosts.slice(0, 8) : [], targetId || null); });
-ipcMain.handle('live:unwatch', (_e, key) => liveCdp.unwatch(String(key)));
+// Chrome status / tabs / screenshots (live-chrome.js): file reads + DevTools; screenshots only when a Live panel asks
+const liveChrome = require('./live-chrome').createLiveChrome({ home: HOME, cfg: require('./mesh-name').liveChrome || {}, ports: require('./mesh-name').chromePorts || [] });
+// the context cap the session refresh uses for a session (local/session-refresh.json), shown in the Live header
+function ctxCapOf(s) {
+  let L = {}; try { L = JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 'session-refresh.json'), 'utf8')); } catch { }
+  const c = ((L.ctxCapFor || {})[s.name]) || L.ctxCap || 300e3; return Math.round(Math.min(c, s.ctxMax ? 0.6 * s.ctxMax : c));
+}
+async function liveJob(sid, opts) {
+  const s = ((lastSnap && lastSnap.sessions) || []).find(x => x.sid === sid && !x.onPeer); if (!s) return null;
+  const j = await liveJobs.job(s, opts || {});
+  j.head = { name: s.name, health: s.health, model: s.model || '', ctx: s.ctx || 0, cap: ctxCapOf(s), sinceUse: s.sinceUse, cwd: (s.cwd || '').replace(HOME, '~'),
+    expect: liveChrome.expectFor(s.name, s.cwd), uses: j.browser ? liveChrome.kindOfPort(j.browser.port) : null };
+  return j;
+}
+const okPort = p => { p = +p; return p > 1024 && p < 65536 ? p : 0; };
+// the logged-in Chromes run on one Mac (liveChrome.host); the other Mac and the phone ask that one
+const chromeHost = ((require('./mesh-name').liveChrome || {}).host || '').toLowerCase();
+const chromeHere = () => !chromeHost || os.hostname().split('.')[0].toLowerCase() === chromeHost;
+const liveChromeApi = {
+  status: () => chromeHere() || !peerLink ? liveChrome.status() : peerLink.forward('GET', '/api/live/chrome', undefined, { hop: '0' }).catch(() => null),
+  tabs: () => chromeHere() || !peerLink ? liveChrome.tabs() : peerLink.forward('GET', '/api/live/tabs', undefined, { hop: '0' }).catch(() => []),
+  shot: (port, id) => !okPort(port) ? null : chromeHere() || !peerLink ? liveChrome.shot(okPort(port), id ? String(id) : null)
+    : peerLink.forward('GET', '/api/live/shot', undefined, { hop: '0', port: String(okPort(port)), target: String(id || '') }).catch(e => ({ err: e.message })),
+};
+ipcMain.handle('live:job', (_e, sid, opts) => liveJob(sid, opts));
+ipcMain.handle('live:chrome', () => liveChromeApi.status());
+ipcMain.handle('live:tabs', () => liveChromeApi.tabs());
+ipcMain.handle('live:shot', (_e, port, targetId) => liveChromeApi.shot(port, targetId));
 ipcMain.handle('live:doc', async (_e, d) => {
   if (!d || !d.id) return null;
   if (!localAddon || !localAddon.docPreview) return { kind: 'link', url: d.url };      // public build: just the link
   try { return await localAddon.docPreview(d); } catch (e) { return { kind: 'link', url: d.url, err: String(e.message || e) }; }
 });
-app.on('before-quit', () => liveCdp.stopAll());
+
 // ---------------- a session's project folder (Sessions button + the cargo pod on its bubble) ----------------
 const { createFolders } = require('./project-folders');
 const projFolders = createFolders({ findTranscript: sid => core.findTranscript(sid), home: HOME });
@@ -1194,6 +1219,8 @@ function initPhone() {
     progress: p => win && win.webContents.send('handoff:progress', p),
   });
   phone = createPhoneServer({
+    live: { job: (sid, o) => liveJob(sid, o), status: () => liveChromeApi.status(), tabs: () => liveChromeApi.tabs(), shot: (p, id) => liveChromeApi.shot(p, id),
+      local: { status: () => liveChrome.status(), tabs: () => liveChrome.tabs(), shot: (p, id) => okPort(p) ? liveChrome.shot(okPort(p), id || null) : null } },
     root: __dirname, userData: app.getPath('userData'), ptys: { get: id => ptys.get(id) || panes.proc(id) }, ptyBus, peer: peerLink, viewPeers, termSnapshot, termResize,
     termOpen: id => panes.has(id) ? panes.open(id) : null, termClose: id => { if (panes.has(id)) panes.close(id); },
     getSnap: () => lastSnap && markSun(lastSnap),

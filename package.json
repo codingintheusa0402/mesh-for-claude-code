@@ -77,7 +77,7 @@
       "build-info.json",
       "ollama-engine.js",
       "project-cards.js",
-      "live-cdp.js",
+      "live-chrome.js",
       "live-job.js",
       "phone-server.js",
       "peer.js",

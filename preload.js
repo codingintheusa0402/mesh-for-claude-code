@@ -16,10 +16,10 @@ contextBridge.exposeInMainWorld('api', {
   },
   live: {
     job: (sid, opts) => ipcRenderer.invoke('live:job', sid, opts),
-    watch: (key, port, hosts, targetId) => ipcRenderer.invoke('live:watch', key, port, hosts, targetId),
-    unwatch: key => ipcRenderer.invoke('live:unwatch', key),
+    chrome: () => ipcRenderer.invoke('live:chrome'),
+    tabs: () => ipcRenderer.invoke('live:tabs'),
+    shot: (port, targetId) => ipcRenderer.invoke('live:shot', port, targetId),
     doc: d => ipcRenderer.invoke('live:doc', d),
-    onMsg: cb => ipcRenderer.on('live:msg', (_e, key, msg) => cb(key, msg)),
   },
   openFolder: p => ipcRenderer.invoke('folder:open', p),
   mcp: {

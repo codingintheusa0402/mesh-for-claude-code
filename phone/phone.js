@@ -293,10 +293,11 @@ function renderSession(first) {
     ${can ? `<textarea id="sText" rows="3" placeholder="Message ${esc(s.name)}…"></textarea>
     <div class="row"><button class="primary" id="sSend">Send</button><button id="sAtt">${ICON.plus} Attach</button><button id="sInt">Interrupt</button>${s.owner ? '<button id="sTerm">Open terminal</button>' : ''}</div>
     <div class="chips">${QUICK.map(c => `<button data-c="${c}">${c}</button>`).join('')}<button id="sMore">More…</button></div>` : '<div class="meta">Background session — view only.</div>'}
-    <div class="row"><button id="sRen">${ICON.pencil} Rename</button><button id="sAg">${ICON.gear} Convert to agent</button></div>
+    <div class="row"><button id="sLive">◉ Live</button><button id="sRen">${ICON.pencil} Rename</button><button id="sAg">${ICON.gear} Convert to agent</button></div>
     ${snap.peer && snap.peer.online && s.kind !== 'bg' && !s.offline ? `<div class="row"><button id="sMove">⇄ Move to ${esc(s.onPeer ? 'this Mac' : snap.peer.label)}</button></div>` : ''}
     <div id="sLog">${log}</div>`);
   pcWire();
+  { const b = $('#sLive'); if (b) b.onclick = () => openLive(s.sid); }
   if (can) {
     $('#sSend').onclick = async () => { const v = $('#sText').value.trim(); if (!v) return; const r = await api('/api/send', { sid: s.sid, text: v }); if (r.ok === false || r.out === 'notfound') return toast('Send failed' + (r.err ? ': ' + r.err : '')); $('#sText').value = ''; toast('Sent'); };
     $('#sInt').onclick = async () => { await api('/api/interrupt', { sid: s.sid }); toast('Interrupt sent'); };
@@ -892,3 +893,32 @@ async function openCard(sid, tab = 'what') {
   draw(tab);
   for (let i = 0; i < 30 && c && c.generating && sheetKind === 'card'; i++) { await new Promise(r => setTimeout(r, 3000)); c = await api('/api/card?sid=' + encodeURIComponent(sid)); const on = document.querySelector('.pctabs button.on'); draw(on ? on.dataset.t : tab); }
 }
+
+// ---------- Live (renderer/live-view.js, the same view as the Mac's Live panel) ----------
+// Full screen over everything; polls only while it is open and the page is in view (screenshots ≤ 1 per 3 s, never stored).
+let liveCtl = null, liveSid = null;
+function openLive(sid) {
+  if (!window.LiveView) return toast('Live view is not available');
+  liveSid = sid;
+  let box = document.getElementById('liveSheet');
+  if (!box) {
+    box = document.createElement('section'); box.id = 'liveSheet';
+    box.innerHTML = '<div class="lvs-bar"><button class="lvs-back">‹ Back</button><b>Live</b></div><div class="lvs-body"></div>';
+    document.body.appendChild(box);
+    for (const ev of ['touchstart', 'touchmove', 'touchend', 'pointerdown', 'wheel']) box.addEventListener(ev, e => e.stopPropagation(), { passive: true });   // no page swipes underneath
+    box.querySelector('.lvs-back').onclick = closeLive;
+    const q = (p, o) => api(p + (p.includes('?') ? '&' : '?') + Object.entries(o || {}).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&'));
+    liveCtl = window.LiveView.create(box.querySelector('.lvs-body'), {
+      job: (sid, o) => q('/api/live/job', { sid, procs: o && o.procs ? 1 : 0 }),
+      chrome: () => q('/api/live/chrome'), tabs: () => q('/api/live/tabs'),
+      shot: (port, target) => q('/api/live/shot', { port, target: target || '' }),
+    }, {
+      sid: () => liveSid,
+      session: sid => (snap.sessions || []).find(x => x.sid === sid),
+      visible: () => !!liveSid && document.visibilityState === 'visible',
+    });
+    document.addEventListener('visibilitychange', () => { if (liveSid) liveCtl.tick(); });
+  }
+  box.classList.add('on'); liveCtl.tick();
+}
+function closeLive() { liveSid = null; const b = document.getElementById('liveSheet'); if (b) b.classList.remove('on'); if (liveCtl) liveCtl.stop(); }

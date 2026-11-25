@@ -20,9 +20,37 @@ const CHROME = ((() => { try { return require('./mesh-name').chromePorts; } catc
   .map(r => { try { return { port: +r.port, re: new RegExp(r.match, 'i') }; } catch { return null; } }).filter(r => r && r.port);
 const RANGE = /['"]((?:'[^']+'|[A-Za-z0-9_ ]+)![A-Z]{1,3}\d*(?::[A-Z]{1,3}\d*)?)['"]/;
 
+// Claude Code runs every Bash command inside a shell-snapshot wrapper ("source …/shell-snapshots/… && eval '<cmd>'
+// < /dev/null && pwd -P >| …"): show only the real command
+function unwrap(c) {
+  c = String(c || '');
+  if (!/shell-snapshots\/snapshot/.test(c)) return c;
+  const m = /\beval '((?:[^']|'\\'')*)'\s*\\?<\s*\/dev\/null/.exec(c) || /\beval '((?:[^']|'\\'')*)'/.exec(c);
+  return (m ? m[1].replace(/'\\''/g, "'") : c.replace(/^.*?&&\s*eval\s+/, '')).replace(/\s*\\?<\s*\/dev\/null(\s*&&\s*pwd -P\s*>\|.*)?$/, '');
+}
+// ~ for the home folder, $SCRATCH for a session's scratchpad, $TMP for macOS temp folders
+function shorten(s, home) {
+  return String(s || '').replace(/\/(?:private\/)?tmp\/claude-\d+\/[^/\s'"]+\/[0-9a-f-]{36}\/scratchpad/g, '$SCRATCH')
+    .replace(/\/(?:private\/)?var\/folders\/[^/\s]+\/[^/\s]+\/T\//g, '$TMP/')
+    .split(home).join('~');
+}
+// one line that says what a tool call did
+function summaryOf(name, inp, home) {
+  const sh = x => shorten(x, home);
+  if (typeof inp.command === 'string') return sh(inp.description ? inp.description : inp.command.split('\n')[0]);
+  if (inp.file_path || inp.notebook_path) return sh(inp.file_path || inp.notebook_path);
+  if (inp.pattern) return sh(`${inp.pattern}${inp.path ? '  in ' + inp.path : ''}`);
+  if (inp.description) return sh(inp.description);
+  if (inp.url) return sh(inp.url);
+  if (inp.query) return sh(inp.query);
+  if (inp.skill) return '/' + inp.skill;
+  const v = Object.values(inp).find(x => typeof x === 'string' && x.trim()); return v ? sh(v.split('\n')[0]) : '';
+}
+
 function createLiveJobs({ findTranscript, home, tmpRoot }) {
   const cache = new Map(), scripts = new Map();
   const short = (s, n) => { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+  const sh = s => shorten(s, home);
   const textOf = c => typeof c === 'string' ? c : Array.isArray(c) ? c.map(b => b && (b.type === 'text' ? b.text : '')).join('\n') : '';
   function parse(file) {
     let st; try { st = fs.statSync(file); } catch { return null; }
@@ -39,6 +67,7 @@ function createLiveJobs({ findTranscript, home, tmpRoot }) {
         if (b.type === 'tool_use') {
           const inp = b.input || {}, call = { id: b.id, name: b.name, t, state: 'running',
             cmd: typeof inp.command === 'string' ? inp.command : '', file: inp.file_path || inp.notebook_path || '', bg: !!inp.run_in_background,
+            sum: summaryOf(b.name, inp, home).slice(0, 200),
             text: JSON.stringify(inp).slice(0, 4000) };
           calls.push(call); byId.set(b.id, call);
         } else if (b.type === 'tool_result' && byId.has(b.tool_use_id)) {
@@ -48,7 +77,7 @@ function createLiveJobs({ findTranscript, home, tmpRoot }) {
         }
       }
     }
-    const v = calls.slice(-60);
+    const v = calls.slice(-80);
     cache.set(file, { size: st.size, v }); return v;
   }
   const ps = () => new Promise(res => execFile('/bin/ps', ['-axo', 'pid=,ppid=,pcpu=,etime=,command='], { maxBuffer: 4e6 }, (e, out) => res(e ? '' : out)));
@@ -56,7 +85,7 @@ function createLiveJobs({ findTranscript, home, tmpRoot }) {
     if (!pid) return [];
     const rows = (await ps()).split('\n').map(l => { const m = /^\s*(\d+)\s+(\d+)\s+([\d.]+)\s+(\S+)\s+(.*)$/.exec(l); return m && { pid: +m[1], ppid: +m[2], cpu: +m[3], etime: m[4], cmd: m[5] }; }).filter(Boolean);
     const kids = new Map(); for (const r of rows) { if (!kids.has(r.ppid)) kids.set(r.ppid, []); kids.get(r.ppid).push(r); }
-    const out = [], walk = (p, d) => { for (const r of kids.get(p) || []) { if (MCP_PROC.test(r.cmd)) continue; out.push({ ...r, depth: d, cmd: short(r.cmd.replace(home, '~'), 300) }); if (out.length < 40) walk(r.pid, d + 1); } };
+    const out = [], walk = (p, d) => { for (const r of kids.get(p) || []) { if (MCP_PROC.test(r.cmd)) continue; out.push({ ...r, depth: d, raw: unwrap(r.cmd), cmd: short(sh(unwrap(r.cmd)), 300) }); if (out.length < 40) walk(r.pid, d + 1); } };
     walk(+pid, 0); return out;
   }
   function tail(file, n = 6000) {
@@ -73,7 +102,7 @@ function createLiveJobs({ findTranscript, home, tmpRoot }) {
       try {
         const st = fs.statSync(p); if (!st.isFile() || st.size > 2e6) continue;
         const k = scripts.get(p); if (k && k.mtime === st.mtimeMs) return k.v;
-        const v = { path: p.replace(home, '~'), text: fs.readFileSync(p, 'utf8').split('\n').slice(0, 400).join('\n'), lang: path.extname(p).slice(1) };
+        const v = { path: sh(p), text: fs.readFileSync(p, 'utf8').split('\n').slice(0, 400).join('\n'), lang: path.extname(p).slice(1) };
         scripts.set(p, { mtime: st.mtimeMs, v }); return v;
       } catch { }
     }
@@ -120,17 +149,18 @@ function createLiveJobs({ findTranscript, home, tmpRoot }) {
     const running = calls.filter(c => c.state === 'running' && c.t > Date.now() - 6 * 3600e3);
     // background commands: their output files (also ones started earlier that are still being written)
     const outs = [];
-    for (const c of calls.slice().reverse()) if (c.outFile && outs.length < 3) { const tl = tail(c.outFile); if (tl && Date.now() - tl.mtime < 20 * 60e3) outs.push({ label: short(c.cmd || c.name, 140), ...tl, file: c.outFile.replace(home, '~') }); }
+    for (const c of calls.slice().reverse()) if (c.outFile && outs.length < 3) { const tl = tail(c.outFile); if (tl && Date.now() - tl.mtime < 20 * 60e3) outs.push({ label: short(sh(c.cmd) || c.name, 140), ...tl, file: sh(c.outFile) }); }
     const procs = opts.procs ? await procsUnder(s.pid) : [];
-    const cmds = [...running.map(c => c.cmd), ...procs.map(p => p.cmd.replace(/^~/, home)), ...recent.slice(-6).map(c => c.cmd)].filter(Boolean);
+    const cmds = [...running.map(c => c.cmd), ...procs.map(p => p.raw), ...recent.slice(-6).map(c => c.cmd)].filter(Boolean);
     const lastEdit = calls.slice().reverse().find(c => /^(Write|Edit|MultiEdit|NotebookEdit)$/.test(c.name) && c.file);
     return {
       sid: s.sid, name: s.name, health: s.health,
-      running: running.slice(-6).map(c => ({ name: c.name, cmd: short(c.cmd, 600), file: c.file, t: c.t, bg: c.bg })),
-      recent: calls.slice(-14).reverse().map(c => ({ id: c.id, name: c.name, cmd: short(c.cmd, 300), file: c.file, t: c.t, state: c.state, result: short(c.result, 400) })),
-      outputs: outs, procs,
+      running: running.slice(-6).map(c => ({ name: c.name, cmd: short(sh(c.cmd), 600), file: sh(c.file), t: c.t, bg: c.bg, sum: c.sum })),
+      recent: calls.slice(-40).reverse().map(c => ({ id: c.id, name: c.name, sum: c.sum || '', cmd: short(sh(c.cmd), 1200), file: sh(c.file), t: c.t, done: c.done || 0, state: c.state,
+        input: c.cmd || c.file ? '' : short(sh(c.text), 1500), result: short(sh(c.result), 1500) })),
+      outputs: outs, procs: procs.map(({ raw, ...p }) => p),
       script: opts.procs ? scriptOf(cmds, s.cwd) : null,
-      edit: lastEdit ? { file: lastEdit.file.replace(home, '~'), t: lastEdit.t, text: short(lastEdit.text, 3000) } : null,
+      edit: lastEdit ? { file: sh(lastEdit.file), t: lastEdit.t, text: short(lastEdit.text, 3000) } : null,
       browser: browserOf(recent),
       doc: docOf(recent.length ? recent : calls.slice(-12)),
       focus: focusOf(calls),
@@ -138,4 +168,4 @@ function createLiveJobs({ findTranscript, home, tmpRoot }) {
   }
   return { job };
 }
-module.exports = { createLiveJobs };
+module.exports = { createLiveJobs, unwrap, shorten };

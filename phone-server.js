@@ -33,7 +33,7 @@ function createPhoneServer(ctx) {
 
   // static files: phone/ app + the shared renderer engine + xterm
   const STATIC = {
-    '/': 'phone/index.html', '/app-name.js': 'renderer/app-name.js', '/phone.js': 'phone/phone.js', '/phone-viz.js': 'phone/phone-viz.js', '/phone.css': 'phone/phone.css', '/usage-view.js': 'renderer/usage-view.js', '/usage-view.css': 'renderer/usage-view.css', '/icon.png': 'renderer/icon.png',
+    '/': 'phone/index.html', '/app-name.js': 'renderer/app-name.js', '/phone.js': 'phone/phone.js', '/phone-viz.js': 'phone/phone-viz.js', '/phone.css': 'phone/phone.css', '/usage-view.js': 'renderer/usage-view.js', '/live-view.js': 'renderer/live-view.js', '/live-view.css': 'renderer/live-view.css', '/usage-view.css': 'renderer/usage-view.css', '/icon.png': 'renderer/icon.png',
     '/apple-touch-icon.png': 'build/icon-ios.png',
     '/mesh.js': 'renderer/mesh.js', '/mother.js': 'renderer/mother.js', '/bubbles.js': 'renderer/bubbles.js', '/sun.js': 'renderer/sun.js', '/organism.js': 'renderer/organism.js', '/portal.js': 'renderer/portal.js', '/probe.js': 'renderer/probe.js', '/probe/probe_sheet.png': 'renderer/probe/probe_sheet.png', '/blackhole.js': 'renderer/blackhole.js', '/endurance.js': 'renderer/endurance.js', '/handles.js': 'renderer/handles.js', '/probe-life.js': 'renderer/probe-life.js', '/probe-tidy.js': 'renderer/probe-tidy.js', '/probe/probe.glb': 'renderer/probe/probe.glb', '/endurance/endurance_sheet.webp': 'renderer/endurance/endurance_sheet.webp', '/endurance/endurance.json': 'renderer/endurance/endurance.json', '/endurance/endurance.glb': 'renderer/endurance/endurance.glb', '/three3d.js': 'renderer/three3d.js',
     // three.js (the 3-D Endurance + black hole): every file by name, no folder serving
@@ -119,6 +119,12 @@ function createPhoneServer(ctx) {
     if (p === '/api/switches' && req.method === 'GET' && ctx.switches) return json(res, 200, await ctx.switches.get(u.searchParams.get('hop') === '1'));   // mode switches (switches.js)
     if (p === '/api/refresh' && req.method === 'GET' && ctx.refresh) return json(res, 200, ctx.refresh.get());   // session refresh (session-refresh.js)
     if (p === '/api/procs' && req.method === 'GET' && ctx.procs) return json(res, 200, ctx.procs());   // app processes + web contents (diagnostics)
+    // Live panel (live-job.js / live-chrome.js): a session's job, the Chrome strip + tabs, one screenshot per call (never stored)
+    if (p === '/api/live/job' && ctx.live) { const sid = u.searchParams.get('sid') || ''; if (remote(sid)) return json(res, 200, await peer.forward('GET', '/api/live/job', undefined, { sid, procs: u.searchParams.get('procs') || '' }).catch(() => null));
+      return json(res, 200, await ctx.live.job(sid, { procs: u.searchParams.get('procs') === '1' })); }
+    if (p === '/api/live/chrome' && ctx.live) return json(res, 200, await (u.searchParams.get('hop') === '0' ? ctx.live.local.status() : ctx.live.status()));
+    if (p === '/api/live/tabs' && ctx.live) return json(res, 200, await (u.searchParams.get('hop') === '0' ? ctx.live.local.tabs() : ctx.live.tabs()));
+    if (p === '/api/live/shot' && ctx.live) return json(res, 200, await (u.searchParams.get('hop') === '0' ? ctx.live.local.shot(+u.searchParams.get('port'), u.searchParams.get('target') || '') : ctx.live.shot(+u.searchParams.get('port'), u.searchParams.get('target') || '')));
     if (p === '/api/commands') return json(res, 200, await ctx.commandsFor(u.searchParams.get('cwd') || ''));
     if (p.startsWith('/api/term/') && req.method === 'GET') {           // live terminal of an in-app session
       const id = termId(p);
