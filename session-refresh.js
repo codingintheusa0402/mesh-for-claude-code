@@ -737,6 +737,9 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
       if (why === 'nightly') {
         const since = Math.max((cfg.last[s.name] || {}).at || 0, now - 864e5);
         const lu = s.lastUseAt || (s.sinceUse != null ? now - s.sinceUse * 1000 : null);      // unknown (no transcript data): refresh as before
+        // the context hasn't grown since the last refresh (only relays/broadcasts arrived): nothing to hand over (2026-11-25)
+        const lr = cfg.last[s.name];
+        if (lr && lr.to === s.sid && lr.startCtx && s.ctx && s.ctx - lr.startCtx < 15e3) { (cfg.idleSkip || (cfg.idleSkip = {}))[s.name] = today; save(); log(`SKIP  ${s.name}: context grew only ${Math.round((s.ctx - lr.startCtx) / 1e3)}K since its last refresh, nightly refresh skipped today`); continue; }
         if (lu != null && !(lu > since)) { (cfg.idleSkip || (cfg.idleSkip = {}))[s.name] = today; save(); log(`SKIP  ${s.name}: no work since ${new Date(since).toLocaleString('sv-SE').slice(0, 16)}, nightly refresh skipped today`); continue; }
       }
       const k = s.name + '|' + why, tried = cfg.tried[k] || 0;
