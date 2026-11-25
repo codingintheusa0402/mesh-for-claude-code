@@ -68,10 +68,11 @@ const TEMPLATE = `# HANDOFF: <session name>  (updated <date time>)
 // its handoff: save what isn't in its files yet and confirm; no confirmation in time → no refresh today, the owner is alerted),
 // "cwd" (the new generation starts in this folder, so its project CLAUDE.md loads), "verifyFiles" (3 verification questions are
 // written from these files; on a miss the session is told to re-read them, then the refresh fails and the owner is alerted).
-const EXTRA = (LOCAL.extra || []).map(x => [new RegExp(x.match, 'i'), { handoff: x.handoff || '', verify: x.verify || '', first: x.first || '', after: x.after || '', flush: x.flush || null, cwd: x.cwd || '', verifyFiles: x.verifyFiles || [] }]);
+// re-read on every use (2026-11-25), so prompt edits apply without a restart
+const LOCAL_NOW = () => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 'session-refresh.json'), 'utf8')); } catch { return LOCAL; } };
+const EXTRA_OF = L => (L.extra || []).map(x => [new RegExp(x.match, 'i'), { handoff: x.handoff || '', verify: x.verify || '', first: x.first || '', after: x.after || '', flush: x.flush || null, cwd: x.cwd || '', verifyFiles: x.verifyFiles || [] }]);
 // and for every session: local/session-refresh.json "always": { "handoff": "...", "verify": "..." } (standing rules every generation inherits)
-const ALWAYS = LOCAL.always || {};
-const extraFor = name => { const x = (EXTRA.find(([re]) => re.test(name)) || [, {}])[1];
+const extraFor = name => { const L = LOCAL_NOW(), ALWAYS = L.always || {}, x = (EXTRA_OF(L).find(([re]) => re.test(name)) || [, {}])[1];
   return { handoff: [ALWAYS.handoff, x.handoff].filter(Boolean).join('\n'), verify: [ALWAYS.verify, x.verify].filter(Boolean).join(' '),
     first: x.first || '', after: x.after || '', flush: x.flush || null, cwd: x.cwd || '', verifyFiles: x.verifyFiles || [] }; };
 
