@@ -665,8 +665,9 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
     if (modeOf(s.name) !== 'nightly') return null;
     const last = cfg.last[s.name]; if (last && Date.now() - last.at < 3 * 3600e3) return null;
     if (s.ctx && s.kind !== 'hermes') {                 // a set token count (every call re-reads the whole context), at most 60 % of the window
-      const lim = (c => Math.min(c, s.ctxMax ? 0.6 * s.ctxMax : c))(cfg.ctxCapFor[s.name] || cfg.ctxCap);
-      const loopLim = Math.min(lim, cfg.ctxCapFor[s.name] || cfg.loopCap);
+      const capFor = (LOCAL_NOW().ctxCapFor || {})[s.name] || cfg.ctxCapFor[s.name];   // live from the local file, so a new cap needs no restart
+      const lim = (c => Math.min(c, s.ctxMax ? 0.6 * s.ctxMax : c))(capFor || cfg.ctxCap);
+      const loopLim = Math.min(lim, capFor || cfg.loopCap);
       // a fresh session starts at whatever its rulebook costs: remember that (first look after a refresh); when it is within
       // half a cap of where it is now, another refresh can't bring it down and would only repeat every few hours: alert instead
       if (last && last.to === s.sid && !last.startCtx) { last.startCtx = s.ctx; save(); }
