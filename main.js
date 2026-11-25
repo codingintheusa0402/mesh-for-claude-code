@@ -239,6 +239,13 @@ ipcMain.handle('pty:spawn', async (_e, opts) => {
       if (ollamaModel) flags = flags.replace(/(^|\s)(--remote-control|--rc|--model\s+\S+)(?=\s|$)/g, ' ');     // Remote Control needs a claude.ai login
       else if (!/--remote-control\b|(^|\s)--rc\b/.test(flags)) flags = '--remote-control ' + flags;
       flags = flags.trim();
+      // per-session extra flags (local/session-refresh.json launchArgs, same list the refresh uses), e.g. no MCP servers
+      if (!ollamaModel) try {
+        const la = JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 'session-refresh.json'), 'utf8')).launchArgs || {};
+        const nm = (/(?:^|\s)(?:-n|--name|--remote-control)\s+'([^']+)'/.exec(flags) || [])[1] || opts.name || opts.title;
+        const xa = String(la[nm] || '').trim();
+        if (xa && /^[\w\s.:/~=,@+-]+$/.test(xa) && !flags.includes(xa)) flags += ' ' + xa;
+      } catch { }
     }
     // exec so the claude pid == pty pid; -i loads the user's PATH (~/.local/bin) like Terminal does
     args = IS_WIN ? ['-NoLogo', '-Command', `& '${(winClaudeBin() || 'claude').replace(/'/g, "''")}' ${flags}`]   // PowerShell: run claude, the tab closes with it
