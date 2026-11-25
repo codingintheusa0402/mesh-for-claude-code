@@ -142,10 +142,13 @@ function createRefresh(ctx) {
   rcState.find = ctx.findTranscript;
   let cfg = { enabled: false, time: '04:00', sessions: { ...(LOCAL.sessions || {}) }, notBefore: { ...(LOCAL.notBefore || {}) },
     reportOn: LOCAL.reportOn || [], last: {}, alias: {}, prev: {}, tok: {}, tried: {},
-    ctxCap: LOCAL.ctxCap || 300e3, loopCap: LOCAL.loopCap || 200e3, ctxCapFor: { ...(LOCAL.ctxCapFor || {}) }, model: { ...(LOCAL.model || {}) },
+    ctxCap: LOCAL.ctxCap || 300e3, loopCap: LOCAL.loopCap || 200e3, ctxCapFor: { ...(LOCAL.ctxCapFor || {}) }, model: { ...(LOCAL.model || {}) }, launchArgs: { ...(LOCAL.launchArgs || {}) },
     idleHours: LOCAL.idleHours || 48, noPark: LOCAL.noPark || [], parked: {} };
   try { const j = JSON.parse(fs.readFileSync(FILE, 'utf8')); cfg = { ...cfg, ...j, sessions: { ...cfg.sessions, ...(j.sessions || {}) }, notBefore: { ...cfg.notBefore, ...(j.notBefore || {}) }, reportOn: cfg.reportOn,
-    model: { ...cfg.model, ...(j.model || {}) }, ctxCapFor: { ...cfg.ctxCapFor, ...(j.ctxCapFor || {}) }, noPark: cfg.noPark }; } catch { }
+    model: { ...cfg.model, ...(j.model || {}) }, ctxCapFor: { ...cfg.ctxCapFor, ...(j.ctxCapFor || {}) }, launchArgs: { ...cfg.launchArgs, ...(j.launchArgs || {}) }, noPark: cfg.noPark }; } catch { }
+  // launchArgs[name] (2026-11-25): extra claude flags for one session on every refresh/unpark, e.g. "--strict-mcp-config --mcp-config ~/x.json"
+  // (no MCP servers, claude.ai connectors included). Only plain flags and paths: anything with quotes or shell characters is ignored.
+  const xargs = name => { const a = String((cfg.launchArgs || {})[name] || '').trim(); return a && /^[\w\s.:/~=,@+-]+$/.test(a) ? ' ' + a : ''; };
   const MACHINE = os.hostname().split('.')[0];
   let linIdx = new Map(), linAt = 0;
   const lineageOf = sid => { if (Date.now() - linAt > 60e3) { linIdx = LINEAGE.index(FALLBACK); linAt = Date.now(); } return linIdx.get(sid) || null; };
@@ -507,7 +510,7 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
         newSid = crypto.randomUUID();
         const base = `--dangerously-skip-permissions --session-id ${newSid} -n ${q1(name)}`;
         const cmd = eng.ollama ? `exec ollama launch claude --model ${eng.ollama} -- ${base}`
-          : `exec claude ${base} --remote-control ${q1(name)}${eng.model ? ' --model ' + eng.model : ''}`;
+          : `exec claude ${base} --remote-control ${q1(name)}${eng.model ? ' --model ' + eng.model : ''}${xargs(name)}`;
         const p = await ctx.panes.spawnPane({ session: tmuxSess, cwd: newCwd, title: oldWin, shell: ctx.loginShell(), args: ['-l', '-i', '-c', cmd], env: { COLORTERM: 'truecolor', TERM_PROGRAM: 'ClaudeMesh' } });
         if (!p) return fail('tmux could not open a pane');
         newPane = p.id;
@@ -762,7 +765,7 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
     if (local().some(x => x.name === name)) { delete cfg.parked[name]; save(); return { ok: false, err: 'a session with this name is already running' }; }
     const newSid = crypto.randomUUID(), model = cfg.model[name] || p.model;
     const base = `--dangerously-skip-permissions --session-id ${newSid} -n ${q1(name)}`;
-    const cmd = p.ollama ? `exec ollama launch claude --model ${p.ollama} -- ${base}` : `exec claude ${base} --remote-control ${q1(name)}${model ? ' --model ' + model : ''}`;
+    const cmd = p.ollama ? `exec ollama launch claude --model ${p.ollama} -- ${base}` : `exec claude ${base} --remote-control ${q1(name)}${model ? ' --model ' + model : ''}${xargs(name)}`;
     const pane = await ctx.panes.spawnPane({ session: p.session || 'mesh', cwd: p.cwd || HOME, title: p.title || name, shell: ctx.loginShell(), args: ['-l', '-i', '-c', cmd], env: { COLORTERM: 'truecolor', TERM_PROGRAM: 'ClaudeMesh' } });
     if (!pane) return { ok: false, err: 'tmux could not open a pane' };
     let ns = null; for (let i = 0; i < 45; i++) { await sleep(2000); ns = live(newSid); if (ns && ns.health === 'idle') break; }
