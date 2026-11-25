@@ -149,7 +149,7 @@ function createRefresh(ctx) {
     model: { ...cfg.model, ...(j.model || {}) }, ctxCapFor: { ...cfg.ctxCapFor, ...(j.ctxCapFor || {}) }, launchArgs: { ...cfg.launchArgs, ...(j.launchArgs || {}) }, timeFor: { ...cfg.timeFor, ...(j.timeFor || {}) }, noPark: cfg.noPark }; } catch { }
   // launchArgs[name] (2026-11-25): extra claude flags for one session on every refresh/unpark, e.g. "--strict-mcp-config --mcp-config ~/x.json"
   // (no MCP servers, claude.ai connectors included). Only plain flags and paths: anything with quotes or shell characters is ignored.
-  const xargs = name => { const a = String((cfg.launchArgs || {})[name] || '').trim(); return a && /^[\w\s.:/~=,@+-]+$/.test(a) ? ' ' + a : ''; };
+  const xargs = name => { const a = String({ ...(cfg.launchArgs || {}), ...(LOCAL_NOW().launchArgs || {}) }[name] || '').trim();   // live from the local file return a && /^[\w\s.:/~=,@+-]+$/.test(a) ? ' ' + a : ''; };
   const MACHINE = os.hostname().split('.')[0];
   let linIdx = new Map(), linAt = 0;
   const lineageOf = sid => { if (Date.now() - linAt > 60e3) { linIdx = LINEAGE.index(FALLBACK); linAt = Date.now(); } return linIdx.get(sid) || null; };
