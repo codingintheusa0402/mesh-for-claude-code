@@ -143,10 +143,10 @@ function createRefresh(ctx) {
   rcState.find = ctx.findTranscript;
   let cfg = { enabled: false, time: '04:00', sessions: { ...(LOCAL.sessions || {}) }, notBefore: { ...(LOCAL.notBefore || {}) },
     reportOn: LOCAL.reportOn || [], last: {}, alias: {}, prev: {}, tok: {}, tried: {},
-    ctxCap: LOCAL.ctxCap || 300e3, loopCap: LOCAL.loopCap || 200e3, ctxCapFor: { ...(LOCAL.ctxCapFor || {}) }, model: { ...(LOCAL.model || {}) }, launchArgs: { ...(LOCAL.launchArgs || {}) },
+    ctxCap: LOCAL.ctxCap || 300e3, loopCap: LOCAL.loopCap || 200e3, ctxCapFor: { ...(LOCAL.ctxCapFor || {}) }, model: { ...(LOCAL.model || {}) }, launchArgs: { ...(LOCAL.launchArgs || {}) }, timeFor: { ...(LOCAL.timeFor || {}) },
     idleHours: LOCAL.idleHours || 48, noPark: LOCAL.noPark || [], parked: {} };
   try { const j = JSON.parse(fs.readFileSync(FILE, 'utf8')); cfg = { ...cfg, ...j, sessions: { ...cfg.sessions, ...(j.sessions || {}) }, notBefore: { ...cfg.notBefore, ...(j.notBefore || {}) }, reportOn: cfg.reportOn,
-    model: { ...cfg.model, ...(j.model || {}) }, ctxCapFor: { ...cfg.ctxCapFor, ...(j.ctxCapFor || {}) }, launchArgs: { ...cfg.launchArgs, ...(j.launchArgs || {}) }, noPark: cfg.noPark }; } catch { }
+    model: { ...cfg.model, ...(j.model || {}) }, ctxCapFor: { ...cfg.ctxCapFor, ...(j.ctxCapFor || {}) }, launchArgs: { ...cfg.launchArgs, ...(j.launchArgs || {}) }, timeFor: { ...cfg.timeFor, ...(j.timeFor || {}) }, noPark: cfg.noPark }; } catch { }
   // launchArgs[name] (2026-11-25): extra claude flags for one session on every refresh/unpark, e.g. "--strict-mcp-config --mcp-config ~/x.json"
   // (no MCP servers, claude.ai connectors included). Only plain flags and paths: anything with quotes or shell characters is ignored.
   const xargs = name => { const a = String((cfg.launchArgs || {})[name] || '').trim(); return a && /^[\w\s.:/~=,@+-]+$/.test(a) ? ' ' + a : ''; };
@@ -379,7 +379,7 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
     if (bad.length) {
       retried = true; const since2 = Date.now();
       await ctx.sendToSession(newSid, `[Mesh session refresh] These answers don't match the handoff: ${bad.map(x => `Q${x.n} (${x.why})`).join('; ')}. `
-        + `Read the handoff${vfl.length ? ' and these files IN FULL (' + vfl.join(', ') + ')' : ''} again and answer ALL the questions again, numbered. End with the line VERIFY-DONE-${nonce}-2.`);
+        + `Look up only what these questions need (the handoff${vfl.length ? ' or ' + vfl.join(', ') : ''}: just the lines that hold the answers; don't re-read your whole rulebook) and answer ALL the questions again, numbered. End with the line VERIFY-DONE-${nonce}-2.`);
       const r2 = await waitFor(kind, newSid, since2, new RegExp('VERIFY-DONE-' + nonce + '-2'), 15 * 60e3); if (!r2) return { ok: false, why: 'no second answers within 15 minutes', bad };
       g = await grade(r2.txt); if (!g || !Array.isArray(g.results)) return { ok: false, why: 'could not grade the second answers' };
       bad = g.results.filter(x => !x.correct);
@@ -653,7 +653,7 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
 
   // ---------------- triggers ----------------
   function dueNightly(s, now) {
-    const [h, m] = (cfg.time || '04:00').split(':').map(Number), at = new Date(now); at.setHours(h || 0, m || 0, 0, 0);
+    const [h, m] = ((cfg.timeFor || {})[s.name] || cfg.time || '04:00').split(':').map(Number), at = new Date(now);   // timeFor[name]: its own nightly time at.setHours(h || 0, m || 0, 0, 0);
     const until = new Date(at); until.setHours(7, 0, 0, 0); if (until <= at) until.setTime(+at + 3 * 3600e3);   // tries until 07:00, then the next night
     if (now < at || now >= until) return false;
     const mode = modeOf(s.name), wd = new Date(now).getDay();
