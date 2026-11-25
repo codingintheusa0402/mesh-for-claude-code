@@ -2,6 +2,10 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-25
+
+- **Fix: nightly session refresh ran all day.** Since the per-session nightly time (`timeFor`) was added, the line that sets the refresh time had ended up inside a code comment, so every session counted as due for its nightly refresh at any hour. Rounds ran about every 30 minutes and refreshed sessions that had just been refreshed. Refreshes again run only from each session's own time (default 04:00) until 07:00, once per night.
+
 ## 2026-11-22
 
 - **Top-bar switches with a last-success time.** New mode-switch options: `"place": "top"` shows the switch as a button next to the screen-share button (and in the phone's top row) instead of a pill in the switch row; `"defaultOn": true` makes a missing file count as ON (only `"enabled": false` is OFF); `"lastFile"` (a JSON `{ "at" }`) adds the tool's last success, e.g. "Autologin ON · 23:03"; `"confirm": "off"` asks only before turning it off (`"none"` never asks).

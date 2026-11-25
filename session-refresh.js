@@ -653,7 +653,7 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
 
   // ---------------- triggers ----------------
   function dueNightly(s, now) {
-    const [h, m] = ((cfg.timeFor || {})[s.name] || cfg.time || '04:00').split(':').map(Number), at = new Date(now);   // timeFor[name]: its own nightly time at.setHours(h || 0, m || 0, 0, 0);
+    const [h, m] = ((cfg.timeFor || {})[s.name] || cfg.time || '04:00').split(':').map(Number), at = new Date(now); at.setHours(h || 0, m || 0, 0, 0);   // timeFor[name]: its own nightly time
     const until = new Date(at); until.setHours(7, 0, 0, 0); if (until <= at) until.setTime(+at + 3 * 3600e3);   // tries until 07:00, then the next night
     if (now < at || now >= until) return false;
     const mode = modeOf(s.name), wd = new Date(now).getDay();
