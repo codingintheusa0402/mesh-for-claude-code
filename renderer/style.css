@@ -747,3 +747,13 @@ body.simple .bcard.b-waiting { animation: bBlinkWarn 1.6s steps(1, end) infinite
 #top .swtop.off { opacity: .6; }
 #top .swtop.off span { color: #e0b44a; }
 #top .swtop.err { opacity: .4; }
+
+/* orbit view: a session's picture pops up above its bubble while the pointer rests on it (orbit-avatar.js) */
+.orbit-av { position: fixed; left: 0; top: 0; z-index: 60; width: 132px; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  opacity: 0; scale: .82; transform-origin: 50% 100%; transition: opacity .28s ease, scale .32s cubic-bezier(.2,.9,.3,1.25); }
+.orbit-av.on { opacity: 1; scale: 1; }
+.orbit-av:not(.on) { transition: opacity .35s ease, scale .35s ease; }
+.orbit-av img, .orbit-av .orbit-av-letter { width: 112px; height: 112px; border-radius: 50%; object-fit: cover; display: grid; place-items: center; font-size: 44px; font-weight: 700; color: #fff;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.85), 0 10px 30px rgba(0,0,0,.55), 0 0 28px rgba(140,170,255,.35); background: var(--av, #222); }
+.orbit-av .orbit-av-letter b { font: inherit; color: inherit; }
+.orbit-av .orbit-av-name { font: 600 12px/1.2 -apple-system, system-ui, sans-serif; color: #fff; padding: 3px 9px; border-radius: 10px; background: rgba(10,12,24,.78); max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
