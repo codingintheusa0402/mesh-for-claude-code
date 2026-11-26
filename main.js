@@ -507,12 +507,23 @@ function paneAgent(pane) {
   for (const l of out.split('\n').reverse()) { const m = /^\s*\u276f[\u00a0 ]+Message @([^\s\u2026]+)/.exec(l); if (m) return m[1]; }
   return '';
 }
+// Leftovers of the 11-26 chat-room paste bug: ⌘V in a room went into the hidden terminal, leaving only picture tokens
+// ("[Image #13]"), "Image pasted as <file>" and paths of Mesh's own paste folder in the session's input box. Such a box holds
+// nothing a person typed, so a send clears it (Ctrl+U, which only deletes typed text) instead of refusing.
+const PASTE_JUNK = /^(?:\s|\[Image #\d+\]|Image pasted as\s*\S*?\.(?:png|jpe?g|gif|webp|tiff)|\S*claude-mesh-paste\S*)+$/;
+function clearPasteJunk(pane) {
+  const d = claudeDraft(pane); if (!d || !PASTE_JUNK.test(d)) return false;
+  for (let i = 0; i < 8 && claudeDraft(pane); i++) tmuxKeys(pane, 'C-u');
+  console.log('cleared paste leftovers in ' + pane);
+  return !claudeDraft(pane);
+}
 async function sendToSession(sid, text, opts = {}) {
   const s = liveSession(sid); if (!s) return { ok: false, err: 'session is not running' };
   if (s.watchOnly) return { ok: false, err: 'a watched script — view only' };
   if (s.kind === 'hermes' && s.hermesPane) return hermesSend(s.hermesPane, text);
   // a Claude session in tmux: never mix into a half-typed message of yours (waits up to 2 minutes for the box to be empty)
   if (s.pane && !s.owner) { const ag = paneAgent(s.pane); if (ag) return { ok: false, err: `its input box is on sub-agent @${ag}: switch it back to the main conversation first` }; }
+  if (s.pane && !s.owner) clearPasteJunk(s.pane);
   if (s.pane && !s.owner) for (let i = 0; claudeDraft(s.pane); i++) { if (i >= (opts.now ? 0 : 119)) return { ok: false, err: opts.now ? 'its input box already has unsent text (open its terminal view and clear it)' : 'unsent text in its input box: not mixing into it' }; await new Promise(r => setTimeout(r, 1000)); }
   if (s.owner) return ctlSend(s.owner, text, true);
   if (s.tty && s.kind !== 'bg') return extSend(s.tty, text);
