@@ -8,11 +8,15 @@
 // panels back to their original places there (mount / unmount on data-size changes).
 //   meshDock.register(id, { title, el, closable, spot })   spot: { edge: 'right'|'left'|'bottom'|'top', size, group }
 //   meshDock.show(id) / hide(id) / toggle(id) / maximize(id|null) / reset() / list() / onChange(fn)
+//   meshDock.setTearOff(fn, can): while can() is true, fn(id, pointerEvent) is asked when a tab is let go outside the window; true = it took the
+//   panel (the chat theme opens the Sessions list in a window of its own), nothing changes in the layout then
 (function () {
   const KEY = 'mesh.dock.v1', MIN = 110, GUT = 5;
   const panels = new Map();                 // id → { id, title, el, closable, spot, home: {parent, next} }
   let tree = null, hidden = new Set(), last = {}, max = null, mounted = false, root = null, listeners = [], drag = null, autoHidden = new Set();
   let uid = 0; const nid = () => 'n' + (++uid);
+  let tearOff = null, tearCan = () => false;
+  const outside = ev => ev.clientX < 0 || ev.clientY < 0 || ev.clientX > innerWidth || ev.clientY > innerHeight;
 
   // ---------- tree helpers ----------
   const stack = (ids, active) => ({ t: 'stack', id: nid(), panels: ids.slice(), active: active || ids[0] });
@@ -139,6 +143,7 @@
   function startDrag(e, id, tab) {
     if (e.button !== 0) return;
     const x0 = e.clientX, y0 = e.clientY; let started = false;
+    try { tab.setPointerCapture(e.pointerId); } catch { }   // the pointer keeps coming when it leaves the window (tear-off)
     const mv = ev => {
       if (!started) { if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return; started = true; beginDrag(id); }
       moveDrag(ev);
@@ -171,6 +176,8 @@
   }
   function moveDrag(ev) {
     drag.ghost.style.transform = `translate(${ev.clientX + 12}px, ${ev.clientY + 10}px)`;
+    const away = !!tearOff && tearCan(drag.id) && outside(ev); drag.ghost.classList.toggle('dk-away', away); drag.away = away;
+    if (away) { drag.target = null; drag.hint.style.display = 'none'; return; }
     const z = zoneFor(ev);
     // dropping a panel onto its own lone stack changes nothing
     const self = z && z.node && z.node.t === 'stack' && z.node.panels.length === 1 && z.node.panels[0] === drag.id;
@@ -178,8 +185,9 @@
     if (!drag.target) { drag.hint.style.display = 'none'; return; }
     const R = drag.target.rect; Object.assign(drag.hint.style, { display: 'block', left: R.l + 'px', top: R.t + 'px', width: R.w + 'px', height: R.h + 'px' });
   }
-  function endDrag() {
-    const z = drag && drag.target, id = drag && drag.id; cancelDrag();
+  function endDrag(ev) {
+    const z = drag && drag.target, id = drag && drag.id, away = drag && drag.away; cancelDrag();
+    if (away && ev && tearOff) { try { if (tearOff(id, ev)) return; } catch { } }
     if (!z) return;
     if (z.node && z.node.t === 'stack' && z.zone === 'center' && z.node.panels.includes(id)) return;
     const targetId = z.node ? z.node.id : null;
@@ -249,5 +257,5 @@
     const hov = document.querySelector('.dk-stack:hover'); const n = hov && findNode(hov.dataset.id)[0]; if (n) { e.preventDefault(); maximize(max ? null : n.active); } } });
 
   window.meshDock = { register, unregister, setTitle, mount, unmount, show, hide, toggle, autoHide, maximize, reset, list, isMounted: () => mounted,
-    isShown: id => !!findStackOf(id), onChange: f => listeners.push(f), _state: () => ({ tree, hidden: [...hidden], max }) };
+    isShown: id => !!findStackOf(id), onChange: f => listeners.push(f), setTearOff: (f, can) => { tearOff = f; tearCan = can || (() => true); }, _state: () => ({ tree, hidden: [...hidden], max }) };
 })();

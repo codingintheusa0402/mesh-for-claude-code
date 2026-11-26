@@ -10,14 +10,26 @@
 // full-size viewer, Esc closes), attached files as a file card (type icon, name, size; missing = "파일 없음"); pictures
 // come through main as scaled-down data URLs (chat:media). The input bar shows what you attach (+, drop, paste) as
 // chips you can remove; sending puts their paths into the message as before. The View menu's Theme radio follows set().
+// Light and dark (2026-11-26): the theme has three appearances, Light, Dark and Match System (localStorage 'uiTheme':
+// 'chat' = light, 'chat-dark', 'chat-system'); body.ct-dark switches the palette. The whole main window follows it
+// (header, the session board, the Terminals tabs, the dock), and the Sessions panel gets the messenger's left icon rail.
+// Detached windows (2026-11-26): a room or the Sessions list can open in a window of its own (renderer/chatwin.html,
+// which loads this file with window.CT_DETACHED = 'room' | 'sessions'); while one is out, its tab / panel leaves the
+// main window and comes back when that window closes. See main.js "detached chat windows".
 // Uses app.js globals: snap, selected, terms, termOf, select, sessSend, esc, toast, store, openCmdMenu, FAMILY_COLOR, ORB_PAL.
 (function () {
   const NAME = (window.api && window.api.chatThemeName) || 'Chat';
+  const DETACHED = window.CT_DETACHED || null;     // null = the main window
   const LS = { get: (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { } } };
-  let on = LS.get('uiTheme', 'default') === 'chat';
+  const MODES = { chat: 'light', 'chat-dark': 'dark', 'chat-system': 'system' };
+  let mode = MODES[LS.get('uiTheme', 'default')] || null;   // null = Default theme
+  let on = !!mode;
+  const sysDark = matchMedia('(prefers-color-scheme: dark)');
+  const isDark = () => mode === 'dark' || (mode === 'system' && sysDark.matches);
   const seenAt = LS.get('chat.seen', {});          // sid → epoch ms of the newest reply you have seen
+  const detached = new Set();                      // main window: the keys of the windows that are out ('sessions', 'room:<sid>')
   const xtermOn = LS.get('chat.xterm', {});        // sid → 1: this session's panel shows the real terminal
-  let filter = 'all', query = '', searchOpen = false, lastListHtml = '';
+  let filter = 'all', query = '', searchOpen = false, lastListHtml = '', lastClick = {};
   const rooms = new Map();                         // ptyId → room state
 
   // ---------- small helpers ----------
@@ -32,6 +44,15 @@
     chat: '<svg viewBox="0 0 24 24"><path d="M12 4.5c-5 0-8.5 3-8.5 6.8 0 2.4 1.4 4.4 3.6 5.6l-.8 3.1 3.5-2.1c.7.1 1.4.2 2.2.2 5 0 8.5-3 8.5-6.8S17 4.5 12 4.5z"/></svg>',
     down: '<svg viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></svg>',
     x: '<svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>',
+    pop: '<svg viewBox="0 0 24 24"><rect x="3.5" y="7" width="13.5" height="13.5" rx="2.5"/><path d="M11 3.5h9.5V13M20.5 3.5L11.5 12.5"/></svg>',
+    dock: '<svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2.5"/><path d="M3.5 9h17M12.5 13.5l-3 2.5 3 2.5M9.5 16h6"/></svg>',
+    chats: '<svg viewBox="0 0 24 24" class="fill"><path d="M12 3.8c-5.2 0-9 3.2-9 7.2 0 2.5 1.5 4.7 3.8 6l-.9 3.4 3.8-2.3c.7.1 1.5.2 2.3.2 5.2 0 9-3.2 9-7.3S17.2 3.8 12 3.8z"/></svg>',
+    people: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 19.5c0-3.6 2.9-5.8 6.5-5.8s6.5 2.2 6.5 5.8"/><path d="M15.5 5.3a3.4 3.4 0 0 1 0 6.4M18 14.2c2.2.6 3.5 2.5 3.5 5.3"/></svg>',
+    usage: '<svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+    more: '<svg viewBox="0 0 24 24" class="fill"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
+    moon: '<svg viewBox="0 0 24 24"><path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/></svg>',
+    sun: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>',
+    bell: '<svg viewBox="0 0 24 24"><path d="M18 16.25V11a6 6 0 0 0-12 0v5.25L4.75 18h14.5z"/><path d="M10 20.75a2.1 2.1 0 0 0 4 0"/></svg>',
     doc: '<svg viewBox="0 0 24 24" class="fill"><path d="M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" opacity=".95"/><path d="M14 3v5h5" fill="rgba(0,0,0,.18)"/></svg>',
   };
   // file-type colours for the file card's round icon
@@ -62,6 +83,10 @@
   const initial = s => { const m = String(s.name || '?').trim().match(/[\p{L}\p{N}]/u); return m ? m[0].toUpperCase() : '?'; };
   const avatar = (s, cls = '') => `<span class="ct-av${cls}" style="--av:${esc(colorOf(s))}"><b>${esc(initial(s))}</b></span>`;
   const lastT = s => { const l = s.log || [], t = l.length ? l[l.length - 1].t : 0; const u = s.sinceUse ?? s.sinceWrite; return Math.max(t || 0, u != null ? Date.now() - u * 1000 : 0); };
+  // another window (a detached room or list) marked something seen: take it over so badges match everywhere
+  addEventListener('storage', e => {
+    if (e.key === 'chat.seen') { try { Object.assign(seenAt, JSON.parse(e.newValue || '{}')); lastListHtml = ''; if (on) { renderList(); repaintApp(); } } catch { } }
+  });
   function unread(s) {
     if (!(s.sid in seenAt)) { seenAt[s.sid] = lastT(s); LS.set('chat.seen', seenAt); }
     return (s.log || []).filter(e => e.kind === 'claude' && e.t > seenAt[s.sid]).length;
@@ -109,18 +134,24 @@
       if (!on) return;
       const c = e.target.closest('[data-chip]'); if (c) { filter = c.dataset.chip; lastListHtml = ''; return renderList(); }
       if (e.target.closest('[data-search]')) { searchOpen = !searchOpen; if (!searchOpen) query = ''; lastListHtml = ''; renderList(); const i = document.getElementById('ctQ'); if (i) i.focus(); return; }
-      const r = e.target.closest('.ct-row'); if (r) select(r.dataset.sid);
+      // a second click within 450 ms at the same spot = double-click: that chat's room opens in a window of its own (like
+      // the messenger). Timed here, and kept on the first click's chat, because the first click redraws the list (and
+      // can move it), so the browser's dblclick often never fires or lands on another row.
+      const r = e.target.closest('.ct-row'); if (!r) return;
+      const now = Date.now();
+      if (lastClick.sid && now - lastClick.t < 450 && Math.hypot(e.clientX - lastClick.x, e.clientY - lastClick.y) < 8) { const sid = lastClick.sid; lastClick = {}; popRoom(sid); return; }
+      lastClick = { sid: r.dataset.sid, t: now, x: e.clientX, y: e.clientY }; select(r.dataset.sid);
     });
     list.addEventListener('input', e => { if (on && e.target.id === 'ctQ') { query = e.target.value; renderList(); } });
     list.addEventListener('keydown', e => { if (on && e.target.id === 'ctQ' && e.key === 'Escape') { searchOpen = false; query = ''; lastListHtml = ''; renderList(); } });
-    list.addEventListener('contextmenu', e => { if (!on) return; const r = e.target.closest('.ct-row'); if (r) { e.preventDefault(); openCmdMenu(r.dataset.sid, e.clientX, e.clientY); } });
+    list.addEventListener('contextmenu', e => { if (!on) return; const r = e.target.closest('.ct-row'); if (r && typeof openCmdMenu === 'function') { e.preventDefault(); openCmdMenu(r.dataset.sid, e.clientX, e.clientY); } });
   }
 
   // ---------- chat rooms (terminal panels) ----------
   function makeRoom(id, t) {
     const el = document.createElement('div'); el.className = 'chatroom';
     el.innerHTML = `<div class="cr-head"><span class="cr-av"></span><div class="cr-who"><div class="cr-name"></div><div class="cr-sub"></div></div>
-        <span class="cr-hb" data-a="term" title="Show the terminal">${SVG.term}</span><span class="cr-hb" data-a="menu" title="Commands">${SVG.menu}</span></div>
+        <span class="cr-hb ct-main" data-a="pop" title="Open in its own window (or drag its tab out of the window)">${SVG.pop}</span><span class="cr-hb ct-main" data-a="term" title="Show the terminal">${SVG.term}</span><span class="cr-hb ct-main" data-a="menu" title="Commands">${SVG.menu}</span><span class="cr-hb ct-det" data-a="dock" title="Back into the main window">${SVG.dock}</span></div>
       <div class="cr-scroll"><div class="cr-msgs"></div><div class="cr-typing" hidden></div></div>
       <button class="cr-jump" hidden title="Newest messages">${SVG.down}</button>
       <div class="cr-input"><div class="cr-atts" hidden></div><div class="cr-tarow"><textarea rows="1" placeholder="메시지 입력" spellcheck="false"></textarea><button class="cr-send" disabled>전송</button></div>
@@ -175,7 +206,9 @@
     el.querySelector('.cr-head').addEventListener('click', e => {
       const b = e.target.closest('[data-a]'); if (!b || !R.sid) return;
       if (b.dataset.a === 'term') setXterm(R, true);
-      else { const r = b.getBoundingClientRect(); openCmdMenu(R.sid, r.left, r.bottom + 4); }
+      else if (b.dataset.a === 'pop') popRoom(R.sid);
+      else if (b.dataset.a === 'dock') window.api.chatWin.dock();
+      else if (typeof openCmdMenu === 'function') { const r = b.getBoundingClientRect(); openCmdMenu(R.sid, r.left, r.bottom + 4); }
     });
     back.onclick = () => setXterm(R, false);
     // files dropped into the room: their paths go into the message
@@ -184,7 +217,7 @@
     // the hidden terminal never takes the keyboard while the room covers it: typing would go to the session unseen
     const ta = t.term && t.term.textarea;
     if (ta) ta.addEventListener('focus', () => { if (roomShown(R)) setTimeout(() => R.ta.focus(), 0); });
-    el.addEventListener('mousedown', () => { activeTerm = id; });
+    el.addEventListener('mousedown', () => { try { activeTerm = id; } catch { } });
     return R;
   }
   function insert(R, s) { const a = R.ta.selectionStart ?? R.ta.value.length, b = R.ta.selectionEnd ?? a; R.ta.value = R.ta.value.slice(0, a) + s + R.ta.value.slice(b); R.ta.focus(); R.ta.selectionStart = R.ta.selectionEnd = a + s.length; R.grow(); }
@@ -283,7 +316,9 @@
       }
       const sameMin = (a, b) => a && b && a.k === b.k && Math.floor(a.t / 6e4) === Math.floor(b.t / 6e4);
       const firstOfRun = !(pv && pv.k === m.k && new Date(pv.t).toDateString() === day), lastOfMin = !sameMin(m, nx);
-      const time = lastOfMin && m.t ? `<span class="cr-t">${m.failed ? 'Not sent' : m.pending ? '' : esc(fmtTime(m.t))}</span>` : '';
+      // the messenger's read count: a "1" beside your message until the session has it in its transcript
+      const time = m.pending && !m.failed && m.k === 'u' ? `<span class="cr-t"><b class="cr-rc" title="Not read by the session yet">1</b></span>`
+        : lastOfMin && m.t ? `<span class="cr-t">${m.failed ? 'Not sent' : m.pending ? '' : esc(fmtTime(m.t))}</span>` : '';
       let inner, kind = '';
       if (m.part === 'img') { inner = imgGrid(R, s, m); kind = ' pic'; }
       else if (m.part === 'file') { inner = fileCard(m.f); kind = ' att'; }
@@ -383,8 +418,8 @@
       if (!R || !R.el.isConnected) { R = makeRoom(id, t); rooms.set(id, R); }
       if (R.sid !== s.sid) { R.sid = s.sid; R.stick = true; R.keys = ''; R.items = []; R.pending = []; R.first = true; R.headKey = ''; R.msgs.innerHTML = ''; }
       apply(R); head(R, s);
-      const visible = roomShown(R) && (document.body.dataset.view === 'grid' || t.el.classList.contains('on'));
-      if (visible) { refresh(R); draw(R, false); if (R.stick && !R.atBottom()) R.scroll.scrollTop = R.scroll.scrollHeight; if (id === activeTerm && document.hasFocus()) markSeen(s); }
+      const visible = roomShown(R) && !t.tabHidden && !document.hidden && (document.body.dataset.view === 'grid' || t.el.classList.contains('on'));
+      if (visible) { refresh(R); draw(R, false); if (R.stick && !R.atBottom()) R.scroll.scrollTop = R.scroll.scrollHeight; if ((DETACHED || id === activeTerm) && document.hasFocus()) markSeen(s); }
     }
     for (const [id, R] of rooms) if (!terms.has(id)) { R.el.remove(); R.back.remove(); rooms.delete(id); }
   }
@@ -401,31 +436,136 @@
     R.open.add(o.dataset.open); draw(R, true);
   });
 
+  // ---------- detached windows ----------
+  // main window: open a session's room in its own window (double-click in the list, the room's pop-out button, or a tab
+  // dragged out of the window); `at` = where the pointer let go, in screen pixels
+  function popRoom(sid, at) {
+    if (!on || !sid) return false;
+    if (DETACHED === 'room') return false;
+    window.api.chatWin.open('room:' + sid, at || null).then(ok => { if (!ok) toast("Couldn't open the window"); }).catch(() => { });
+    return true;
+  }
+  function popSessions(at) { if (!on || DETACHED) return false; window.api.chatWin.open('sessions', at || null).catch(() => { }); return true; }
+  const roomKeyOfTerm = id => { const s = sessByTerm(id); return s ? 'room:' + s.sid : null; };
+  // the main window lets go of what is out: the room's tab leaves the Terminals row, the Sessions panel leaves the dock;
+  // both come back when their window closes
+  function applyDetached() {
+    if (DETACHED || typeof terms === 'undefined') return;
+    let changed = false;
+    for (const [id, t] of terms) {
+      const k = roomKeyOfTerm(id), out = !!(on && k && detached.has(k));
+      if (out && !t._ctOut) {
+        t._ctOut = true; t.tabHidden = true; t.el.classList.add('tab-hidden'); t.el.classList.remove('on'); changed = true;
+        if (activeTerm === id) { try { activeTerm = visibleTerms().pop() || null; } catch { } }
+      } else if (!out && t._ctOut) { t._ctOut = false; t.tabHidden = false; t.el.classList.remove('tab-hidden'); changed = true; }
+    }
+    if (changed) { try { if (activeTerm && terms.get(activeTerm) && !terms.get(activeTerm).tabHidden) activate(activeTerm); else renderTabs(); document.getElementById('noTerms').style.display = visibleTerms().length ? 'none' : ''; layoutGrid(); } catch { } }
+    const D = window.meshDock;
+    if (D && D.isMounted && D.isMounted()) D.autoHide('sessions', on && detached.has('sessions'));
+  }
+  function onDetachedState(keys) {
+    detached.clear(); for (const k of keys || []) detached.add(k);
+    applyDetached(); lastListHtml = ''; if (on) renderList();
+  }
+  // a tab dragged out of the window (app.js Terminals tabs, dock.js panel tabs): true = it became a window
+  function tearOff(kind, id, ev) {
+    if (!on || DETACHED) return false;
+    const at = ev && isFinite(ev.screenX) ? { x: ev.screenX, y: ev.screenY } : null;
+    if (kind === 'panel') return id === 'sessions' ? popSessions(at) : false;
+    const k = roomKeyOfTerm(id); return k ? popRoom(k.slice(5), at) : false;
+  }
+  const outside = ev => ev.clientX < 0 || ev.clientY < 0 || ev.clientX > innerWidth || ev.clientY > innerHeight;
+
+  // ---------- the left icon rail (main window's Sessions panel and the detached list) ----------
+  let railEl = null, railBox = null;
+  function railHtml() {
+    const dk = isDark(), b = (a, ic, title, cls = '') => `<span class="ct-ri${cls}" data-r="${a}" title="${esc(title)}">${ic}</span>`;
+    return b('chats', SVG.chats, 'Chats', ' on')
+      + (DETACHED ? '' : b('new', SVG.plus, 'New session (⌘T)') + b('usage', SVG.usage, 'Token usage'))
+      + '<span class="ct-rsp"></span>'
+      + (DETACHED ? b('dock', SVG.dock, 'Back into the main window') : b('pop', SVG.pop, 'Open the chat list in its own window (or drag the Sessions tab out of the window)'))
+      + b('mode', dk ? SVG.sun : SVG.moon, dk ? 'Light' : 'Dark')
+      + (DETACHED ? '' : b('bell', SVG.bell, 'Notify when a session finishes or errors') + b('more', SVG.more, 'More (the star menu: theme, broadcast, usage, switches)'));
+  }
+  function mountRail() {
+    const side = document.getElementById('side'); if (!side) return;
+    if (!on) { if (railEl) { const kids = [...railBox.childNodes]; for (const k of kids) side.insertBefore(k, railEl); railEl.remove(); railBox.remove(); railEl = railBox = null; } return; }
+    if (!railEl) {
+      railEl = document.createElement('nav'); railEl.className = 'ct-rail';
+      railBox = document.createElement('div'); railBox.className = 'ct-sidebox';
+      while (side.firstChild) railBox.appendChild(side.firstChild);
+      side.append(railEl, railBox);
+      railEl.addEventListener('click', e => {
+        const r = e.target.closest('[data-r]'); if (!r) return; const a = r.dataset.r;
+        if (a === 'chats') railBox.scrollTop = 0;
+        else if (a === 'new') { try { openNew(); } catch { } }
+        else if (a === 'usage') { try { openUsage(); } catch { } }
+        else if (a === 'pop') popSessions(null);
+        else if (a === 'dock') window.api.chatWin.dock();
+        else if (a === 'mode') set(isDark() ? 'light' : 'dark');
+        else if (a === 'bell') { const x = document.getElementById('bell'); if (x) x.click(); paintRail(); }
+        else if (a === 'more') { try { const q = r.getBoundingClientRect(); lastPointer = { x: q.right, y: Math.max(8, q.top - 260) }; openStarMenu(); } catch { } }
+      });
+    }
+    paintRail();
+  }
+  function paintRail() {
+    if (!railEl) return; const h = railHtml(); if (railEl._h !== h) { railEl._h = h; railEl.innerHTML = h; }
+    const bell = document.getElementById('bell'), rb = railEl.querySelector('[data-r="bell"]');
+    if (rb && bell) rb.classList.toggle('off', !bell.classList.contains('on'));
+  }
+  // the board and the tabs (app.js) ask for these while the theme is on
+  const repaintApp = () => { try { typeof renderBoard === 'function' && (lastBoard = '', renderBoard()); } catch { } try { typeof renderTabs === 'function' && renderTabs(); } catch { } };
+  const badgeOf = s => { const n = unread(s); return n ? `<span class="ct-badge">${n > 300 ? '300+' : n}</span>` : ''; };
+
   // ---------- switching ----------
-  function set(v) {
-    on = !!v; LS.set('uiTheme', on ? 'chat' : 'default');
+  // v: 'default' | 'light' | 'dark' | 'system' (true / false from older callers = light / default)
+  function set(v, quiet) {
+    const m = v === true ? (mode || 'light') : v === false ? null : ['light', 'dark', 'system'].includes(v) ? v : null;
+    const was = mode, wasOn = on; mode = m; on = !!m;
+    LS.set('uiTheme', !m ? 'default' : m === 'light' ? 'chat' : 'chat-' + m);
     document.body.classList.toggle('chat-theme', on);
+    paintMode();
     lastListHtml = '';
-    syncRooms();
+    if (DETACHED !== 'room') mountRail();
+    syncRooms(); applyDetached();
     renderListApp();   // the list redraws in whichever look is on now (app.js renderList hands over to us while the theme is on)
+    if (!DETACHED && wasOn !== on) repaintApp();
     if (!on) closeViewer();
-    try { window.api.themeState(on); } catch { }
-    if (typeof toast === 'function') toast(on ? `Theme: ${NAME}` : 'Theme: Default');
+    if (!quiet) { try { window.api.themeState(m || 'default'); } catch { } }
+    if (!quiet && typeof toast === 'function' && was !== m) toast(on ? `Theme: ${NAME} ${{ light: 'Light', dark: 'Dark', system: '(Match System)' }[m]}` : 'Theme: Default');
     requestAnimationFrame(() => { try { typeof fitAll === 'function' && fitAll(); } catch { } });
   }
+  function paintMode() { document.body.classList.toggle('ct-dark', on && isDark()); paintRail(); }
+  sysDark.addEventListener('change', () => { if (mode === 'system') paintMode(); });
   const renderListApp = () => { try { window.renderList && window.renderList(); } catch { } };   // app.js's renderList (ours shadows the name here)
 
   window.chatTheme = {
     name: NAME,
     get on() { return on; },
+    get mode() { return on ? mode : 'default'; },
+    get dark() { return on && isDark(); },
     set,
     renderList,
-    update() { if (on) { renderList(); } syncRooms(); },
+    update() { if (on && DETACHED !== 'room') { renderList(); paintRail(); } syncRooms(); applyDetached(); },
     seen(sid) { const s = sessions().find(x => x.sid === sid); if (s && on) { markSeen(s); lastListHtml = ''; } },
     // add files (paths) to a session's input bar as attachments
     attach(sid, paths) { const R = [...rooms.values()].find(r => r.sid === sid); if (R && Array.isArray(paths)) attach(R, paths.map(p => ({ p: String(p) }))); return !!R; },
+    avatar: (s, cls) => avatar(s, cls ? ' ' + cls : ''), badge: badgeOf,
+    // detached windows
+    popRoom, popSessions, tearOff, outside,
+    isOut: id => !!(terms.get(id) && terms.get(id)._ctOut),
+    focusOut: id => { const k = roomKeyOfTerm(id); if (k) window.api.chatWin.open(k); },
   };
   wireList();
-  try { window.api.themeState(on); window.api.onThemeSet(v => { if (v !== on) set(v); else window.api.themeState(on); }); } catch { }
-  if (on) { document.body.classList.add('chat-theme'); setTimeout(() => { renderListApp(); syncRooms(); }, 0); }
+  if (!DETACHED) {
+    try { window.api.themeState(on ? mode : 'default'); } catch { }
+    try { window.api.chatWin.onState(onDetachedState); window.api.chatWin.list().then(onDetachedState).catch(() => { }); } catch { }
+    try { window.api.chatWin.onSelect(sid => { const s = sessions().find(x => x.sid === sid); if (s) select(sid); }); } catch { }
+  }
+  try { window.api.onThemeSet(v => { const m = v === true ? 'light' : v === false ? 'default' : v; if (m !== (on ? mode : 'default')) set(m, true); }); } catch { }
+  if (on) { document.body.classList.add('chat-theme'); paintMode(); if (DETACHED !== 'room') mountRail();
+    // the first draw waits for the page's other scripts (md.js draws the replies' markdown)
+    const boot = () => { renderListApp(); syncRooms(); if (!DETACHED) repaintApp(); };
+    if (document.readyState === 'loading') addEventListener('DOMContentLoaded', boot, { once: true }); else setTimeout(boot, 0); }
 })();

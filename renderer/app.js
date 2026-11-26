@@ -47,15 +47,15 @@ function openStarMenu() {
   m = document.createElement('div'); m.id = 'starMenu'; m.innerHTML = '<button data-a="bc">Broadcast…</button><button data-a="usage">Token usage</button>'; document.body.appendChild(m);
   m.style.left = Math.min(innerWidth - 180, lastPointer.x + 6) + 'px'; m.style.top = Math.min(innerHeight - 90, lastPointer.y + 6) + 'px';
   const shut = () => { m.remove(); removeEventListener('pointerdown', away, true); }, away = e => { if (!m.contains(e.target)) shut(); };
-  m.onclick = e => { const b = e.target.closest('button'), a = b && b.dataset.a; if (!a) return; shut(); a === 'bc' ? openBroadcast() : a === 'usage' ? openUsage() : a === 'theme' ? setTermTheme(b.dataset.id) : a === 'uitheme' ? window.chatTheme && window.chatTheme.set(b.dataset.id === 'chat') : flipSwitch(b.dataset.id, b.dataset.on === '1'); };
+  m.onclick = e => { const b = e.target.closest('button'), a = b && b.dataset.a; if (!a) return; shut(); a === 'bc' ? openBroadcast() : a === 'usage' ? openUsage() : a === 'theme' ? setTermTheme(b.dataset.id) : a === 'uitheme' ? window.chatTheme && window.chatTheme.set(b.dataset.id) : flipSwitch(b.dataset.id, b.dataset.on === '1'); };
   addEventListener('pointerdown', away, true);
   // terminal colour theme: one row per theme, the current one ticked
   m.insertAdjacentHTML('beforeend', '<div class="smHead">Terminal theme</div>' + Object.entries(TERM_THEMES).map(([id, th]) =>
     `<button data-a="theme" data-id="${id}" class="thRow${id === termThemeId ? ' cur' : ''}" title="${esc(th.src ? 'github.com/' + th.src : 'the original Mesh colours')}"><i style="background:${th.t.magenta};border-color:${th.t.blue}"></i>${esc(th.name)}</button>`).join(''));
   m.style.top = Math.min(innerHeight - m.offsetHeight - 8, lastPointer.y + 6) + 'px';
   // app theme (2026-11-15): Default, or the chat theme (chat-theme.js) that draws Sessions as a chat list and each session as a chat room
-  if (window.chatTheme) { m.insertAdjacentHTML('beforeend', '<div class="smHead">Theme</div>' + [['default', 'Default'], ['chat', window.chatTheme.name]].map(([id, n]) =>
-    `<button data-a="uitheme" data-id="${id}" class="thRow${(id === 'chat') === window.chatTheme.on ? ' cur' : ''}">${esc(n)}</button>`).join(''));
+  if (window.chatTheme) { const N = window.chatTheme.name; m.insertAdjacentHTML('beforeend', '<div class="smHead">Theme</div>' + [['default', 'Default'], ['light', N + ' Light'], ['dark', N + ' Dark'], ['system', N + ' (Match System)']].map(([id, n]) =>
+    `<button data-a="uitheme" data-id="${id}" class="thRow${id === window.chatTheme.mode ? ' cur' : ''}">${esc(n)}</button>`).join(''));
     m.style.top = Math.min(innerHeight - m.offsetHeight - 8, lastPointer.y + 6) + 'px'; }
   // mode switches (switches.js, set in mesh.local.json): one row each with its state and who flipped it last
   window.api.switches.get().then(list => { if (!document.body.contains(m) || !list || !list.length) return;
@@ -534,8 +534,9 @@ const lastUsedAgo = s => Math.min(...[s.sinceUse, s.sinceWrite].filter(x => type
 const boardOrder = ss => [...ss].sort((a, b) => ((b.health === 'working' || b.health === 'waiting') - (a.health === 'working' || a.health === 'waiting')) || lastUsedAgo(a) - lastUsedAgo(b));
 function renderBoard() {
   if (!isSimple()) return;
+  const CT = window.chatTheme && window.chatTheme.on;   // the chat theme: a squircle avatar and the unread badge on each card
   const html = (window.cleanupBar ? window.cleanupBar() : '') + (boardOrder(snap.sessions).map(s => `<div class="bcard b-${s.health}${s.sid === selected ? ' sel' : ''}" data-sid="${s.sid}">
-    <div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${sunTag(s)}${peerTag(s)}${usageRing(s)}</div>
+    ${CT ? window.chatTheme.avatar(s) + window.chatTheme.badge(s) : ''}<div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${sunTag(s)}${peerTag(s)}${usageRing(s)}</div>
     <div class="m"><span style="color:${FAMILY_COLOR[s.family]}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${fmtTok(s.todayTok)}</span><span>${s.health === 'working' ? 'working' : ago(s.sinceUse ?? s.sinceWrite)}</span>${relayChip(s)}</div>
   </div>`).join('') || '<div class="bempty">No live sessions.</div>');
   if (html === lastBoard) return;
@@ -1290,6 +1291,7 @@ function activate(id) {
   // reliable: a hidden terminal has no size, so xterm loses track of following the output while it is hidden and came
   // back mid-scroll (2026-11-11, a Hermes session showed an old part of its run instead of the end)
   { const prev = terms.get(activeTerm); if (prev && activeTerm !== id && prev.el.classList.contains('on') && prev.el.offsetHeight) { const b = prev.term.buffer.active; prev.pinned = b.viewportY >= b.baseY; } }
+  { const t = terms.get(id); if (t && t._ctOut && window.chatTheme) { window.chatTheme.focusOut(id); return; } }   // its room is in a window of its own: bring that window up
   { const t = terms.get(id); if (t && t.tabHidden) { t.tabHidden = false; t.el.classList.remove('tab-hidden'); $('#noTerms').style.display = 'none'; layoutGrid(); } }
   activeTerm = id;
   { const s = snap.sessions.find(x => termOf(x) === id); if (s) seen(s.sid); }
@@ -1321,8 +1323,9 @@ function termTag(id, t) {
 function renderTabs() {
   if (tabDrag) { tabDrag.dirty = true; return; }   // never rebuild the row under a tab being dragged
   applyTabOrder();
+  const CT = window.chatTheme && window.chatTheme.on, ctS = id => CT && snap.sessions.find(x => termOf(x) === id);   // chat theme: avatar + unread badge
   $('#tabs').innerHTML = [...terms].filter(([, t]) => !t.tabHidden).map(([id, t]) => `<div class="tab ${id === activeTerm ? 'on' : ''}" data-id="${id}">
-    <span class="hdot h-${t.health || (t.exited ? 'error' : 'idle')}"></span><span class="t">${esc(t.title)}</span>${termTag(id, t)}<span class="x" data-x="${id}">×</span></div>`).join('') +
+    ${(s => s ? window.chatTheme.avatar(s, 'xs') : '')(ctS(id))}<span class="hdot h-${t.health || (t.exited ? 'error' : 'idle')}"></span><span class="t">${esc(t.title)}</span>${termTag(id, t)}${(s => s ? window.chatTheme.badge(s) : '')(ctS(id))}<span class="x" data-x="${id}">×</span></div>`).join('') +
     `<div class="tab" id="tabNew" title="New session (⌘T)">＋</div>`;
   for (const el of document.querySelectorAll('.tab[data-id]')) { el.onclick = e => { if (tabDrag || el._dragged) { el._dragged = false; return; } if (e.target.dataset.x) closeTerm(e.target.dataset.x); else activate(el.dataset.id); };
     el.addEventListener('pointerdown', e => tabDragStart(e, el)); }
@@ -1343,20 +1346,25 @@ function applyTabOrder() {
 }
 function tabDragStart(e, el) {
   if (e.button !== 0 || e.target.dataset.x) return;
-  const x0 = e.clientX, id = el.dataset.id; let on = false, slot = null;
+  const x0 = e.clientX, y0 = e.clientY, id = el.dataset.id; let on = false, slot = null, out = false;
+  try { el.setPointerCapture(e.pointerId); } catch { }   // keep getting the pointer when it leaves the window (a tab dragged out = its own window)
+  const CT = () => window.chatTheme && window.chatTheme.on;
   const tabsEl = $('#tabs'), others = () => [...tabsEl.querySelectorAll('.tab[data-id]')].filter(t => t !== el);
   const mv = ev => {
-    if (!on) { if (Math.abs(ev.clientX - x0) < 6) return; on = true; tabDrag = { id }; el.classList.add('dragging'); document.body.classList.add('tab-dragging'); }
-    el.style.transform = `translateX(${ev.clientX - x0}px)`;
+    if (!on) { if (Math.abs(ev.clientX - x0) < 6 && !(CT() && Math.abs(ev.clientY - y0) > 14)) return; on = true; tabDrag = { id }; el.classList.add('dragging'); document.body.classList.add('tab-dragging'); }
+    // chat theme: outside the window, letting go opens the room in a window of its own
+    out = CT() && window.chatTheme.outside(ev); document.body.classList.toggle('ct-tearing', out);
+    el.style.transform = CT() ? `translate(${ev.clientX - x0}px, ${Math.max(-40, Math.min(60, ev.clientY - y0))}px)` : `translateX(${ev.clientX - x0}px)`;
     const list = others(); slot = list.length;
     for (let i = 0; i < list.length; i++) { const r = list[i].getBoundingClientRect(); if (ev.clientX < r.left + r.width / 2) { slot = i; break; } }
     list.forEach((t, i) => t.classList.toggle('drop-before', i === slot)); tabsEl.classList.toggle('drop-end', slot === list.length);
     const r = tabsEl.getBoundingClientRect(); if (ev.clientX > r.right - 30) tabsEl.scrollLeft += 12; else if (ev.clientX < r.left + 30) tabsEl.scrollLeft -= 12;
   };
-  const up = () => {
+  const up = ev => {
     removeEventListener('pointermove', mv); removeEventListener('pointerup', up);
     if (!on) return;
-    el._dragged = true; el.style.transform = ''; el.classList.remove('dragging'); document.body.classList.remove('tab-dragging'); tabsEl.classList.remove('drop-end');
+    el._dragged = true; el.style.transform = ''; el.classList.remove('dragging'); document.body.classList.remove('tab-dragging', 'ct-tearing'); tabsEl.classList.remove('drop-end');
+    if (out && window.chatTheme.tearOff('term', id, ev)) { others().forEach(t => t.classList.remove('drop-before')); tabDrag = null; renderTabs(); return; }
     const list = others().map(t => t.dataset.id); list.splice(slot == null ? list.length : slot, 0, id);
     const hiddenIds = [...terms.keys()].filter(k => !list.includes(k));
     const m = new Map([...list, ...hiddenIds].map(k => [k, terms.get(k)])); terms.clear(); for (const [k, v] of m) terms.set(k, v);

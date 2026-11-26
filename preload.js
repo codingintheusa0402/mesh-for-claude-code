@@ -8,8 +8,18 @@ contextBridge.exposeInMainWorld('api', {
   chatThumb: p => ipcRenderer.invoke('chat:thumb', p),
   chatStat: ps => ipcRenderer.invoke('chat:stat', ps),
   chatReveal: p => ipcRenderer.invoke('chat:reveal', p),
-  themeState: on => ipcRenderer.send('theme:state', !!on),
-  onThemeSet: cb => ipcRenderer.on('theme:set', (_e, v) => cb(!!v)),
+  themeState: mode => ipcRenderer.send('theme:state', mode),          // 'default' | 'light' | 'dark' | 'system'
+  onThemeSet: cb => ipcRenderer.on('theme:set', (_e, v) => cb(v)),
+  // detached chat windows (chat theme): 'sessions' or 'room:<sid>'
+  chatWin: {
+    open: (key, at) => ipcRenderer.invoke('chatwin:open', key, at),
+    list: () => ipcRenderer.invoke('chatwin:list'),
+    close: key => ipcRenderer.send('chatwin:close', key),
+    dock: () => ipcRenderer.send('chatwin:dock'),
+    select: sid => ipcRenderer.send('chatwin:select', sid),
+    onState: cb => ipcRenderer.on('chatwin:state', (_e, keys) => cb(keys)),
+    onSelect: cb => ipcRenderer.on('chatwin:select', (_e, sid) => cb(sid)),
+  },
   onTelemetry: cb => ipcRenderer.on('telemetry', (_e, s) => cb(s)),
   stamps: sid => ipcRenderer.invoke('stamps', sid),
   dockState: list => ipcRenderer.send('dock:state', list),

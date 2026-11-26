@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Notification, shell, clipboard, screen, Menu, powerMonitor, desktopCapturer, systemPreferences, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Notification, shell, clipboard, screen, Menu, powerMonitor, desktopCapturer, systemPreferences, session, nativeTheme } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -48,9 +48,19 @@ app.setName(APP_NAME);
 app.setPath('userData', process.env.MESH_USERDATA || path.join(app.getPath('appData'), MESH.dataDir));
 ipcMain.on('app:name', e => { e.returnValue = APP_NAME; });
 ipcMain.on('app:chatThemeName', e => { e.returnValue = String(MESH.chatThemeName || 'Chat'); });   // the chat theme's label (renderer/chat-theme.js), from mesh.local.json
-// View ▸ Mesh ▸ Theme: the renderer reports which theme is on (it can also change from the mother star's menu)
-let chatThemeOn = false;
-ipcMain.on('theme:state', (_e, v) => { v = !!v; if (v === chatThemeOn) return; chatThemeOn = v; try { buildMenu(); } catch { } });
+// View ▸ Mesh ▸ Theme: the renderer reports which theme is on (it can also change from the mother star's menu or a
+// detached chat window). Modes: 'default' | 'light' | 'dark' | 'system' (the chat theme's three appearances; system
+// follows macOS). Every other window gets the change too; going back to Default docks every detached chat window.
+const THEME_MODES = ['default', 'light', 'dark', 'system'];
+const themeMode = v => v === true ? 'light' : THEME_MODES.includes(v) ? v : 'default';
+let chatThemeMode = 'default';
+function setThemeMode(v, from) {
+  v = themeMode(v); if (v === chatThemeMode) return; chatThemeMode = v;
+  for (const w of [win, ...chatWins.values()]) if (w && !w.isDestroyed() && w.webContents !== from) w.webContents.send('theme:set', v);
+  if (v === 'default') for (const w of [...chatWins.values()]) try { w.close(); } catch { }
+  try { buildMenu(); } catch { }
+}
+ipcMain.on('theme:state', (e, v) => setThemeMode(v, e.sender));
 const collector = new Collector();
 // Hermes Agent sessions (hermes-sessions.js): they live in tmux panes like Claude's and show up as full sessions
 const hermes = require('./hermes-sessions')({ userData: app.getPath('userData') });
@@ -90,7 +100,7 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   // links in the page (the probe's speech bubble, markdown in panels) open in the default browser, never in a new app window
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//.test(url)) shell.openExternal(url); return { action: 'deny' }; });
-  win.on('closed', () => { win = null; });
+  win.on('closed', () => { win = null; for (const w of [...chatWins.values()]) try { w.close(); } catch { } });
   // tell the renderer when nobody can see the window so it stops drawing (telemetry keeps flowing)
   const vis = v => () => win && win.webContents.send('win:visible', v);
   win.on('hide', vis(false)); win.on('minimize', vis(false)); win.on('show', vis(true)); win.on('restore', vis(true));
@@ -633,8 +643,9 @@ function buildMenu() {
     win && win.webContents.send('ui:hidden', uiHidden); buildMenu();     // (Link strands also sits in the Window menu)
   } } : { type: 'separator' });
   meshShow.push({ type: 'separator' }, { label: 'Show all mesh features', click: () => { for (const it of MESH_ITEMS) if (it) delete uiHidden[it[0]]; try { fs.writeFileSync(UI_FILE, JSON.stringify(uiHidden)); } catch { } win && win.webContents.send('ui:hidden', uiHidden); buildMenu(); } });
-  meshShow.push({ label: 'Theme', submenu: [[false, 'Default'], [true, String(MESH.chatThemeName || 'Chat')]].map(([v, label]) => ({ label, type: 'radio', checked: chatThemeOn === v,
-    click: () => { chatThemeOn = v; win && win.webContents.send('theme:set', v); } })) });
+  { const N = String(MESH.chatThemeName || 'Chat');
+    meshShow.push({ label: 'Theme', submenu: [['default', 'Default'], ['light', N + ' Light'], ['dark', N + ' Dark'], ['system', N + ' (Match System)']].map(([v, label]) => ({ label, type: 'radio', checked: chatThemeMode === v,
+      click: () => { setThemeMode(v, null); } })) }); }
   show.push({ type: 'separator' }, { label: 'Show everything', click: () => { uiHidden = {}; try { fs.writeFileSync(UI_FILE, '{}'); } catch { } win && win.webContents.send('ui:hidden', uiHidden); buildMenu(); } });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: app.name, submenu: [{ role: 'about' }, { type: 'separator' }, { label: 'Set Team Name…', click: () => win && win.webContents.send('team:edit') }, { label: 'Session Refresh…', click: () => win && win.webContents.send('refresh:open') }, { type: 'separator' },
@@ -1363,6 +1374,67 @@ function readTop() {
 }
 readTop(); setInterval(readTop, 120000);
 
+// ---------------- detached chat windows (chat theme, 2026-11-26) ----------------
+// In the chat theme a session's chat room or the Sessions list can live in a window of its own, like a messenger
+// opening each chat in its own window: drag its tab out of the main window, double-click a session in the list, or
+// the room's pop-out button. Each loads renderer/chatwin.html (?room=<sid> or ?panel=sessions), which reuses
+// chat-theme.js for the list and the room (same transcript, send, attach and paste paths, the other Mac included).
+// Closing one (or its dock-back button) puts it back in the main window. Bounds are kept per window in
+// chat-windows.json. Cost: a detached window gets the snapshot the main window already gets, and only while it is
+// visible and not minimised; a room fetches its transcript only then, as a shown docked room does.
+const chatWins = new Map();            // 'sessions' | 'room:<sid>' → BrowserWindow
+const CW_F = () => path.join(app.getPath('userData'), 'chat-windows.json');
+let cwBounds = null, cwSaveT = null;
+const cwLoad = () => { if (!cwBounds) { try { cwBounds = JSON.parse(fs.readFileSync(CW_F(), 'utf8')) || {}; } catch { cwBounds = {}; } } return cwBounds; };
+const cwSave = () => { clearTimeout(cwSaveT); cwSaveT = setTimeout(() => { try { fs.writeFileSync(CW_F(), JSON.stringify(cwBounds || {})); } catch { } }, 400); };
+const cwKeys = () => [...chatWins.keys()];
+const cwTell = () => { if (win && !win.isDestroyed()) win.webContents.send('chatwin:state', cwKeys()); };
+function cwFit(b) {   // a saved or dropped spot, kept on a screen
+  const wa = screen.getDisplayMatching({ x: Math.round(b.x), y: Math.round(b.y), width: b.width, height: b.height }).workArea;
+  const width = Math.min(b.width, wa.width), height = Math.min(b.height, wa.height);
+  return { x: Math.round(Math.min(Math.max(b.x, wa.x), wa.x + wa.width - width)), y: Math.round(Math.min(Math.max(b.y, wa.y), wa.y + wa.height - height)), width, height };
+}
+function openChatWin(key, at) {
+  key = String(key || '');
+  const room = key.startsWith('room:'), sid = room ? key.slice(5) : '';
+  if (!(room ? sid : key === 'sessions') || chatThemeMode === 'default') return false;
+  const had = chatWins.get(key); if (had && !had.isDestroyed()) { if (had.isMinimized()) had.restore(); had.show(); had.focus(); return true; }
+  const saved = cwLoad()[key], size = room ? { width: 440, height: 680 } : { width: 380, height: 680 };
+  const b = cwFit(saved || (at && isFinite(at.x) && isFinite(at.y) ? { x: at.x - 60, y: at.y - 16, ...size } : { x: 120 + chatWins.size * 28, y: 90 + chatWins.size * 28, ...size }));
+  const dark = chatThemeMode === 'dark' || (chatThemeMode === 'system' && nativeTheme.shouldUseDarkColors);
+  const w = new BrowserWindow({ ...b, minWidth: 300, minHeight: 380, title: room ? APP_NAME : 'Chats', show: false,
+    backgroundColor: dark ? (room ? '#1c1c1c' : '#1e1e1e') : (room ? '#bacee0' : '#ffffff'),
+    ...(IS_WIN ? { autoHideMenuBar: true } : { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 12, y: 12 } }),
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: true } });
+  chatWins.set(key, w);
+  w.loadFile(path.join(__dirname, 'renderer', 'chatwin.html'), { query: room ? { room: sid } : { panel: 'sessions' } });
+  w.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+  w.once('ready-to-show', () => { if (!w.isDestroyed()) w.show(); });
+  const keep = () => { if (!w.isDestroyed() && !w.isMinimized() && !w.isFullScreen()) { cwLoad()[key] = w.getBounds(); cwSave(); } };
+  w.on('moved', keep); w.on('resized', keep); w.on('close', keep);
+  // shown again (un-minimised): the latest snapshot at once instead of on the next tick
+  const wake = () => { if (lastShown && !w.isDestroyed()) sendChatWin(key, w, lastShown); };
+  w.on('restore', wake); w.on('show', wake);
+  w.webContents.on('did-finish-load', wake);
+  w.on('closed', () => { if (chatWins.get(key) === w) chatWins.delete(key); cwTell(); });
+  cwTell();
+  return true;
+}
+let lastShown = null;
+function sendChatWin(key, w, snap) {
+  if (w.isDestroyed() || !w.isVisible() || w.isMinimized()) return;
+  if (key === 'sessions') return w.webContents.send('telemetry', snap);
+  const sid = key.slice(5);
+  w.webContents.send('telemetry', { ready: snap.ready, machine: snap.machine, peer: snap.peer, sessions: (snap.sessions || []).filter(s => s.sid === sid) });
+}
+function sendChatWins(snap) { lastShown = snap; for (const [k, w] of chatWins) sendChatWin(k, w, snap); }
+ipcMain.handle('chatwin:open', (_e, key, at) => openChatWin(key, at));
+ipcMain.handle('chatwin:list', () => cwKeys());
+ipcMain.on('chatwin:close', (_e, key) => { const w = chatWins.get(String(key || '')); if (w && !w.isDestroyed()) w.close(); });
+ipcMain.on('chatwin:dock', e => { const w = BrowserWindow.fromWebContents(e.sender); if (w && w !== win) { w.close(); if (win && !win.isDestroyed()) win.focus(); } });
+// a click in the detached Sessions list selects that session in the main window (its room comes to the front there)
+ipcMain.on('chatwin:select', (_e, sid) => { if (win && !win.isDestroyed()) win.webContents.send('chatwin:select', String(sid || '')); });
+
 // ---------------- telemetry loop ----------------
 async function loop() {
   try {
@@ -1392,7 +1464,9 @@ async function loop() {
       // view-only machines (view-peers.js) are added for this window and the phone, never for the paired Mac
       const shown = viewPeers ? viewPeers.merge(peerLink ? peerLink.merge(snap) : snap) : peerLink ? peerLink.merge(snap) : snap;
       if (shown !== snap) { paintSessions(shown.sessions); groupSessions(shown); }   // includes the peer's terminals (peer:… ids, onPeer)
-      win.webContents.send('telemetry', markSun(shown));
+      const marked = markSun(shown);
+      win.webContents.send('telemetry', marked);
+      lastShown = marked; if (chatWins.size) sendChatWins(marked);
       if (Date.now() - dupAt > 60e3) { dupAt = Date.now(); watchDuplicates(shown); }
       lastSnap = snap; watchEngines(snap); if (phone) phone.broadcast(markSun(snap)); recordSessions(snap);
       const sig = snap.sessions.map(s => s.sid + s.health).join();

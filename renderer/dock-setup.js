@@ -25,6 +25,9 @@
   new MutationObserver(apply).observe(document.body, { attributes: true, attributeFilter: ['data-size', 'data-view'] });
   apply();
 
+  // chat theme: the Sessions tab dragged out of the window becomes its own chat-list window (chat-theme.js)
+  D.setTearOff((id, ev) => !!window.chatTheme.tearOff('panel', id, ev), id => id === 'sessions' && !!(window.chatTheme && window.chatTheme.on));
+
   // ⌘0 / the sidebar button: show or hide the Sessions panel while docked
   const db = $('#drawerBtn'), orig = db.onclick;
   db.onclick = e => D.isMounted() ? D.toggle('sessions') : orig && orig.call(db, e);

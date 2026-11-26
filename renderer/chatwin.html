@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' blob:">
+<title>Chat</title>
+<link rel="stylesheet" href="chat-theme.css">
+</head>
+<!-- A detached chat window (chat theme): one session's room (?room=<sid>) or the Sessions list (?panel=sessions).
+     main.js "detached chat windows" opens it; chatwin.js stands in for the app.js globals chat-theme.js uses. -->
+<body class="chat-theme ct-win">
+<div id="cwDrag"></div>
+<aside id="side"><div id="list"></div></aside>
+<div id="roomHost" class="term on"></div>
+<div id="cwGone" hidden><b></b><span>This session is not running here any more.</span><button id="cwDockBtn">Back to the main window</button></div>
+<div id="toast"></div>
+<script src="md.js"></script>
+<script src="chatwin.js"></script>
+<script src="chat-theme.js"></script>
+</body>
+</html>
