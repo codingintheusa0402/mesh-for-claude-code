@@ -82,7 +82,10 @@ kill -9 $PID 2>/dev/null; sleep 1
 back() { [[ -d "$PREV" ]] || return 1; rsync -a --delete "$PREV/" "$APP/"; xattr -cr "$APP"; print -r -- "{\\"commit\\":\\"$WANT\\"}" > "$DATA/update-hold.json"; }
 if [[ $MODE == rollback ]]; then back; open "$APP"; exit 0; fi
 rm -f "$DATA/running.json"; open "$APP"
-for i in {1..60}; do grep -q "\\"commit\\":\\"$WANT\\"" "$DATA/running.json" 2>/dev/null && exit 0; sleep 1; done
+# up = any version answered (running.json is rewritten at start). Not "the version we expected": an install that lands
+# during the restart (the MacBook's 5-min auto-update, 2026-11-26) starts a newer one, which once counted as failed and
+# was rolled back to the older copy.
+for i in {1..60}; do grep -q '"pid":' "$DATA/running.json" 2>/dev/null && exit 0; sleep 1; done
 pkill -f "$APP/Contents/MacOS/" ; sleep 2; back && open "$APP"
 osascript -e 'display notification "The new version did not start, so the previous one was put back." with title "Mesh update"'
 `);
