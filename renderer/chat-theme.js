@@ -6,6 +6,10 @@
 // under body.chat-theme, so the default look is untouched.
 // Data: the room reads the session's transcript tail (main.js chat:get → transcript-chat.js; a session on the other Mac
 // through its /api/chat); a session without a Claude transcript (Hermes) shows its snapshot log instead.
+// Pictures and files (2026-11-26): a prompt's pictures show without a bubble (several = a 2-column grid; click = a
+// full-size viewer, Esc closes), attached files as a file card (type icon, name, size; missing = "파일 없음"); pictures
+// come through main as scaled-down data URLs (chat:media). The input bar shows what you attach (+, drop, paste) as
+// chips you can remove; sending puts their paths into the message as before. The View menu's Theme radio follows set().
 // Uses app.js globals: snap, selected, terms, termOf, select, sessSend, esc, toast, store, openCmdMenu, FAMILY_COLOR, ORB_PAL.
 (function () {
   const NAME = (window.api && window.api.chatThemeName) || 'Chat';
@@ -27,19 +31,30 @@
     file: '<svg viewBox="0 0 24 24"><path d="M6 3.5h8.5L19 8v12.5H6z"/><path d="M14.5 3.5V8H19"/></svg>',
     chat: '<svg viewBox="0 0 24 24"><path d="M12 4.5c-5 0-8.5 3-8.5 6.8 0 2.4 1.4 4.4 3.6 5.6l-.8 3.1 3.5-2.1c.7.1 1.4.2 2.2.2 5 0 8.5-3 8.5-6.8S17 4.5 12 4.5z"/></svg>',
     down: '<svg viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></svg>',
+    x: '<svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>',
+    doc: '<svg viewBox="0 0 24 24" class="fill"><path d="M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" opacity=".95"/><path d="M14 3v5h5" fill="rgba(0,0,0,.18)"/></svg>',
   };
+  // file-type colours for the file card's round icon
+  const FTYPE = [[/^(pdf)$/, '#ef5350', 'PDF'], [/^(xlsx?|csv|numbers|tsv)$/, '#21a366', 'XLS'], [/^(docx?|pages|rtf|odt)$/, '#3b7ddd', 'DOC'],
+    [/^(pptx?|key)$/, '#f0782d', 'PPT'], [/^(zip|gz|tgz|rar|7z|tar|dmg|pkg)$/, '#8e6ad8', 'ZIP'], [/^(mp4|mov|m4v|avi|mkv|webm)$/, '#e2457a', 'VID'],
+    [/^(mp3|wav|m4a|aac|flac|ogg)$/, '#ff9f1a', 'AUD'], [/^(txt|md|log|json|ya?ml|xml|html?|css|js|ts|py|sh|gs|swift|java|c|cpp|go|rs|rb|sql)$/, '#6b7c93', 'TXT']];
+  const ftype = name => { const e = (/\.([A-Za-z0-9]+)$/.exec(name) || [])[1] || ''; const f = FTYPE.find(([re]) => re.test(e.toLowerCase())); return f ? { c: f[1], t: e.slice(0, 4).toUpperCase() } : { c: '#8a99ad', t: (e || 'FILE').slice(0, 4).toUpperCase() }; };
+  const fmtSize = n => n < 0 ? '파일 없음' : '용량 ' + (n < 1024 ? n + 'B' : n < 1048576 ? (n / 1024).toFixed(n < 10240 ? 1 : 0) + 'KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + 'MB' : (n / 1073741824).toFixed(2) + 'GB');
+  const IMG_RE = /\.(png|jpe?g|gif|webp|heic|bmp|tiff?)$/i;
+  const media = new Map();                         // sid|key → { url, w, h } (thumbnails, this window's life)
   const EMO = ['👍', '🙏', '😊', '😂', '🤔', '👀', '✅', '❌', '🔥', '💡', '⏳', '❤️'];
   const sessions = () => (typeof snap !== 'undefined' && snap.sessions) || [];
   const sessByTerm = id => sessions().find(x => termOf(x) === id);
-  const fmtTime = t => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  // times as the messenger writes them: 오후 3:12 · 어제 · 11월 24일 · 2026년 11월 26일 목요일
+  const fmtTime = t => new Date(t).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' });
   function fmtWhen(t) {
     if (!t) return '';
     const d = new Date(t), now = new Date(), day = x => new Date(x).setHours(0, 0, 0, 0), dd = (day(now) - day(d)) / 864e5;
     if (dd <= 0) return fmtTime(t);
-    if (dd === 1) return 'Yesterday';
-    return d.toLocaleDateString('en-US', d.getFullYear() === now.getFullYear() ? { month: 'short', day: 'numeric' } : { year: 'numeric', month: 'short', day: 'numeric' });
+    if (dd === 1) return '어제';
+    return d.toLocaleDateString('ko-KR', d.getFullYear() === now.getFullYear() ? { month: 'long', day: 'numeric' } : { year: 'numeric', month: 'numeric', day: 'numeric' });
   }
-  const fmtDay = t => new Date(t).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const fmtDay = t => new Date(t).toLocaleDateString('ko-KR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   function colorOf(s) {
     try { if (s.color && typeof ORB_PAL !== 'undefined' && ORB_PAL[s.color]) return ORB_PAL[s.color].rim; } catch { }
     return (window.FAMILY_COLOR || {})[s.family] || '#9fb4d8';
@@ -108,22 +123,30 @@
         <span class="cr-hb" data-a="term" title="Show the terminal">${SVG.term}</span><span class="cr-hb" data-a="menu" title="Commands">${SVG.menu}</span></div>
       <div class="cr-scroll"><div class="cr-msgs"></div><div class="cr-typing" hidden></div></div>
       <button class="cr-jump" hidden title="Newest messages">${SVG.down}</button>
-      <div class="cr-input"><textarea rows="1" placeholder="Enter a message" spellcheck="false"></textarea>
+      <div class="cr-input"><div class="cr-atts" hidden></div><div class="cr-tarow"><textarea rows="1" placeholder="메시지 입력" spellcheck="false"></textarea><button class="cr-send" disabled>전송</button></div>
         <div class="cr-bar"><span class="cr-ib" data-a="plus" title="Attach files (their paths go into the message)">${SVG.plus}</span><span class="cr-ib" data-a="emo" title="Emoji">${SVG.smile}</span><span class="cr-ib" data-a="file" title="Attach files">${SVG.file}</span>
-        <span class="cr-sp"></span><button class="cr-send" disabled>Send</button></div>
+        <span class="cr-sp"></span></div>
         <div class="cr-emo" hidden>${EMO.map(x => `<span>${x}</span>`).join('')}</div><input type="file" multiple hidden></div>`;
     const back = document.createElement('button'); back.className = 'cr-back'; back.title = 'Back to the chat room'; back.innerHTML = SVG.chat + '<span>Chat</span>';
     t.el.appendChild(el); t.el.appendChild(back);
-    const R = { id, el, back, t, sid: null, keys: '', items: [], pending: [], open: new Set(), fetchAt: 0, busy: false, first: true,
+    const R = { id, el, back, t, sid: null, keys: '', items: [], pending: [], att: [], open: new Set(), fetchAt: 0, busy: false, first: true,
       scroll: el.querySelector('.cr-scroll'), msgs: el.querySelector('.cr-msgs'), ta: el.querySelector('textarea'), send: el.querySelector('.cr-send') };
     const atBottom = () => R.scroll.scrollHeight - R.scroll.scrollTop - R.scroll.clientHeight < 40;
     R.atBottom = atBottom;
     R.stick = true;   // follow the newest message until you scroll up (only judged while the room is on screen)
-    R.scroll.addEventListener('scroll', () => { if (!R.scroll.clientHeight) return; R.stick = atBottom(); el.querySelector('.cr-jump').hidden = R.stick; });
+    // only your own scrolling (wheel, keys, the scrollbar) lets go of the newest message; layout changes and pictures
+    // arriving keep the room following it
+    let userAt = 0; const touched = () => { userAt = performance.now(); };
+    for (const ev of ['wheel', 'pointerdown', 'keydown', 'touchmove']) R.scroll.addEventListener(ev, touched, { passive: true });
+    R.scroll.addEventListener('scroll', () => {
+      if (!R.scroll.clientHeight) return;
+      if (atBottom()) R.stick = true; else if (performance.now() - userAt < 800) R.stick = false; else if (R.stick) R.scroll.scrollTop = R.scroll.scrollHeight;
+      el.querySelector('.cr-jump').hidden = R.stick || atBottom();
+    });
     new ResizeObserver(() => { if (R.stick && R.scroll.clientHeight) R.scroll.scrollTop = R.scroll.scrollHeight; }).observe(R.msgs);
     new ResizeObserver(() => { if (R.stick && R.scroll.clientHeight) R.scroll.scrollTop = R.scroll.scrollHeight; }).observe(R.scroll);
     el.querySelector('.cr-jump').onclick = () => { R.scroll.scrollTop = R.scroll.scrollHeight; };
-    const grow = () => { R.ta.style.height = 'auto'; R.ta.style.height = Math.min(140, R.ta.scrollHeight) + 'px'; R.send.disabled = !R.ta.value.trim(); };
+    const grow = () => { R.ta.style.height = 'auto'; R.ta.style.height = Math.min(140, R.ta.scrollHeight) + 'px'; R.send.disabled = !R.ta.value.trim() && !R.att.length; };
     R.grow = grow;
     R.ta.addEventListener('input', grow);
     R.ta.addEventListener('keydown', e => {
@@ -131,6 +154,17 @@
       e.stopPropagation();
     });
     R.send.onclick = () => doSend(R);
+    // a pasted file or picture becomes an attachment chip (text pastes as text)
+    R.ta.addEventListener('paste', async e => {
+      const dt = e.clipboardData, fs0 = dt ? [...dt.files] : [];
+      if (fs0.length) { const ps = fs0.map(f => { try { return window.api.pathForFile(f); } catch { return ''; } }).filter(Boolean); if (ps.length) { e.preventDefault(); return attach(R, ps.map(p => ({ p }))); } }
+      if (dt && dt.getData('text/plain')) return;
+      e.preventDefault();
+      let c = null; try { c = await window.api.clipRead(); } catch { }
+      if (c && c.kind === 'files' && c.paths && c.paths.length) attach(R, c.paths.map(p => ({ p })));
+      else if (c && c.kind === 'text' && c.text) insert(R, c.text);
+    });
+    el.querySelector('.cr-atts').addEventListener('click', e => { const x = e.target.closest('[data-rm]'); if (!x) return; R.att.splice(+x.dataset.rm, 1); drawAtts(R); R.ta.focus(); });
     const fileIn = el.querySelector('input[type=file]'), emo = el.querySelector('.cr-emo');
     fileIn.onchange = () => { addPaths(R, [...fileIn.files]); fileIn.value = ''; };
     el.querySelector('.cr-bar').addEventListener('click', e => {
@@ -154,9 +188,27 @@
     return R;
   }
   function insert(R, s) { const a = R.ta.selectionStart ?? R.ta.value.length, b = R.ta.selectionEnd ?? a; R.ta.value = R.ta.value.slice(0, a) + s + R.ta.value.slice(b); R.ta.focus(); R.ta.selectionStart = R.ta.selectionEnd = a + s.length; R.grow(); }
+  // attachments wait as chips above the text until you send
   function addPaths(R, files) {
-    const ps = files.map(f => { try { return window.api.pathForFile(f); } catch { return ''; } }).filter(Boolean).map(p => /\s/.test(p) ? `"${p}"` : p);
-    if (ps.length) insert(R, (R.ta.value && !/\s$/.test(R.ta.value) ? ' ' : '') + ps.join(' ') + ' ');
+    attach(R, files.map(f => { let p = ''; try { p = window.api.pathForFile(f); } catch { } return p && { p, size: f.size }; }).filter(Boolean));
+  }
+  async function attach(R, list) {
+    for (const a of list) if (a.p && !R.att.some(x => x.p === a.p) && R.att.length < 30) R.att.push({ p: a.p, name: a.p.split('/').pop(), size: a.size, img: IMG_RE.test(a.p) });
+    const need = R.att.filter(a => a.size == null);
+    if (need.length) { try { const sz = await window.api.chatStat(need.map(a => a.p)); need.forEach((a, i) => { a.size = sz[i]; }); } catch { } }
+    drawAtts(R); R.ta.focus();
+  }
+  function drawAtts(R) {
+    const box = R.el.querySelector('.cr-atts');
+    box.hidden = !R.att.length;
+    box.innerHTML = R.att.map((a, i) => {
+      const th = a.img && media.get('local|' + a.p), ft = ftype(a.name);
+      return `<span class="cr-att${a.img ? ' img' : ''}" title="${esc(a.p)}">${a.img ? `<img alt=""${th ? ` src="${th.url}"` : ''} data-lp="${esc(a.p)}">`
+        : `<i class="cr-ficon sm" style="--fc:${ft.c}">${SVG.doc}</i><span class="cr-attn"><b>${esc(a.name)}</b><small>${esc(fmtSize(a.size ?? -1))}</small></span>`}<button data-rm="${i}" title="Remove">${SVG.x}</button></span>`;
+    }).join('');
+    for (const img of box.querySelectorAll('img[data-lp]:not([src])')) { const p = img.dataset.lp;
+      window.api.chatThumb(p).then(r => { if (r) { media.set('local|' + p, r); img.src = r.url; } }).catch(() => { }); }
+    R.grow();
   }
   function setXterm(R, v) {
     if (!R.sid) return;
@@ -171,10 +223,14 @@
     R.t.el.classList.toggle('chat-xterm', !!(on && R.sid && xtermOn[R.sid]));
   }
   async function doSend(R) {
-    const text = R.ta.value.replace(/\s+$/, ''); if (!text.trim()) return;
+    const typed = R.ta.value.replace(/\s+$/, ''), att = R.att.slice(); if (!typed.trim() && !att.length) return;
     const s = sessions().find(x => x.sid === R.sid); if (!s) return toast('This session is not running');
-    R.ta.value = ''; R.grow();
-    const p = { id: 'p' + Date.now(), t: Date.now(), k: 'u', x: text, pending: true }; R.pending.push(p); draw(R, true);
+    const q = p => /\s/.test(p) ? `"${p}"` : p, text = [typed, ...att.map(a => q(a.p))].filter(Boolean).join(' ');
+    R.ta.value = ''; R.att = []; drawAtts(R);
+    const p = { id: 'p' + Date.now(), t: Date.now(), k: 'u', x: typed.trim(), pending: true,
+      imgs: att.filter(a => a.img).map(a => ({ key: 'local:' + a.p })), files: att.filter(a => !a.img).map(a => ({ p: a.p, name: a.name, size: a.size ?? -1 })) };
+    if (!p.imgs.length) delete p.imgs; if (!p.files.length) delete p.files;
+    R.pending.push(p); draw(R, true);
     R.scroll.scrollTop = R.scroll.scrollHeight;
     let r; try { r = await sessSend(s, text); } catch (e) { r = { ok: false, err: e.message }; }
     if (r && r.ok === false) { p.failed = r.err || 'not sent'; draw(R, false); toast('Not sent: ' + (r.err || 'unknown')); }
@@ -194,18 +250,18 @@
     if (R.sid !== s.sid) return;
     R.items = items;
     // a sent message stays as a pending bubble until the transcript has it (or for a minute)
-    R.pending = R.pending.filter(p => !p.failed ? Date.now() - p.t < 60000 && !items.some(m => m.k === 'u' && m.t >= p.t - 5000 && m.x.trim() === p.x.trim()) : Date.now() - p.t < 30000);
+    R.pending = R.pending.filter(p => !p.failed ? Date.now() - p.t < 60000 && !items.some(m => m.k === 'u' && m.t >= p.t - 5000 && m.x.trim() === p.x.trim() && !!(m.imgs || m.files) === !!(p.imgs || p.files)) : Date.now() - p.t < 30000);
     draw(R, false);
   }
   function draw(R, force) {
     const s = sessions().find(x => x.sid === R.sid); if (!s) return;
-    const all = R.items.concat(R.pending), keys = all.map(m => m.id + (m.failed ? '!' : '')).join('|') + '#' + [...R.open].join(',');
+    const all = parts(R.items.concat(R.pending)), keys = all.map(m => m.id + (m.failed ? '!' : '')).join('|') + '#' + [...R.open].join(',');
     const typing = s.health === 'working';
     const ty = R.el.querySelector('.cr-typing');
     if (ty.hidden === typing) { ty.hidden = !typing; ty.innerHTML = typing ? `${avatar(s, ' sm')}<span class="cr-dots"><i></i><i></i><i></i></span>` : ''; if (typing && R.stick) R.scroll.scrollTop = R.scroll.scrollHeight; }
     if (!force && keys === R.keys) return;
     const prev = new Set(R.keys ? R.keys.split('#')[0].split('|').map(k => k.replace(/!$/, '')) : []), animate = !R.first;
-    const wasBottom = R.first || R.stick, st = R.scroll.scrollTop;
+    const wasBottom = R.first || R.stick || !R.msgs.querySelector('.cr-msg'), st = R.scroll.scrollTop;   // an empty room opens at its newest
     R.keys = keys; R.first = false;
     const out = []; let lastDay = '';
     for (let i = 0; i < all.length; i++) {
@@ -223,18 +279,89 @@
       }
       const sameMin = (a, b) => a && b && a.k === b.k && Math.floor(a.t / 6e4) === Math.floor(b.t / 6e4);
       const firstOfRun = !(pv && pv.k === m.k && new Date(pv.t).toDateString() === day), lastOfMin = !sameMin(m, nx);
-      const long = m.x.length > 900 && !R.open.has(m.id), cut = long ? m.x.slice(0, 700).replace(/\s+\S*$/, '') + '…' : m.x;
-      const body = m.k === 'a' && typeof mdToHtml === 'function' ? mdToHtml(cut) : esc(cut);
-      const more = long ? `<div class="cr-more" data-open="${esc(m.id)}">See more</div>` : '';
       const time = lastOfMin && m.t ? `<span class="cr-t">${m.failed ? 'Not sent' : m.pending ? '' : esc(fmtTime(m.t))}</span>` : '';
-      if (m.k === 'u') out.push(`<div class="cr-msg me${firstOfRun ? ' first' : ''}${m.pending ? ' pending' : ''}${m.failed ? ' failed' : ''}${neu}">${time}<div class="cr-bub">${body}${more}</div></div>`);
-      else out.push(`<div class="cr-msg them${firstOfRun ? ' first' : ''}${neu}">${firstOfRun ? avatar(s) : '<span class="ct-av ghost"></span>'}<div class="cr-col">${firstOfRun ? `<div class="cr-from">${esc(s.name)}</div>` : ''}<div class="cr-line"><div class="cr-bub md">${body}${more}</div>${time}</div></div></div>`);
+      let inner, kind = '';
+      if (m.part === 'img') { inner = imgGrid(R, s, m); kind = ' pic'; }
+      else if (m.part === 'file') { inner = fileCard(m.f); kind = ' att'; }
+      else {
+        const long = m.x.length > 900 && !R.open.has(m.id), cut = long ? m.x.slice(0, 700).replace(/\s+\S*$/, '') + '…' : m.x;
+        const body = m.k === 'a' && typeof mdToHtml === 'function' ? mdToHtml(cut) : esc(cut);
+        const more = long ? `<div class="cr-more" data-open="${esc(m.id)}">See more</div>` : '';
+        inner = `<div class="cr-bub${m.k === 'a' ? ' md' : ''}">${body}${more}</div>`;
+      }
+      const cls = `${firstOfRun ? ' first' : ''}${m.pending ? ' pending' : ''}${m.failed ? ' failed' : ''}${kind}${neu}`;
+      if (m.k === 'u') out.push(`<div class="cr-msg me${cls}">${time}${inner}</div>`);
+      else out.push(`<div class="cr-msg them${cls}">${firstOfRun ? avatar(s) : '<span class="ct-av ghost"></span>'}<div class="cr-col">${firstOfRun ? `<div class="cr-from">${esc(s.name)}</div>` : ''}<div class="cr-line">${inner}${time}</div></div></div>`);
     }
     if (!all.length) out.push(`<div class="cr-empty">No messages yet. Say hello below.</div>`);
     R.msgs.innerHTML = out.join('');
+    loadPics(R, s);
     R.scroll.scrollTop = wasBottom ? R.scroll.scrollHeight : st;
     R.el.querySelector('.cr-jump').hidden = !R.scroll.clientHeight || R.atBottom();
   }
+  // one chat item → its parts, each drawn as its own row like the messenger does: the text, the pictures (one grid), each file
+  function parts(list) {
+    const out = [];
+    for (const m of list) {
+      if (m.k === 'tool' || (!m.imgs && !m.files)) { out.push(m); continue; }
+      if (m.x && m.x.trim()) out.push({ ...m, imgs: null, files: null });
+      if (m.imgs && m.imgs.length) out.push({ ...m, id: m.id + '#i', part: 'img', x: '' });
+      for (const [i, f] of (m.files || []).entries()) out.push({ ...m, id: m.id + '#f' + i, part: 'file', f, x: '' });
+    }
+    return out;
+  }
+  const picUrl = (sid, key) => media.get(key.startsWith('local:') ? 'local|' + key.slice(6) : sid + '|' + key);
+  // one picture's box: at most 240 wide and 360 tall, its shape kept
+  const picBox = r => { const sc = Math.min(1, 240 / Math.max(1, r.w), 360 / Math.max(1, r.h)); return [Math.max(40, Math.round(r.w * sc)), Math.max(40, Math.round(r.h * sc))]; };
+  function imgGrid(R, s, m) {
+    const ims = m.imgs, n = ims.length;
+    if (n === 1) {   // one picture: its own shape, at most 240 px wide
+      const k = ims[0].key, r = picUrl(s.sid, k), [w, h] = r ? picBox(r) : [200, 150];
+      return `<div class="cr-pics one"><img class="cr-pic" data-key="${esc(k)}" data-mid="${esc(m.id)}" data-i="0" alt="" style="width:${w}px;height:${h}px"${r ? ` src="${r.url}"` : ''}></div>`;
+    }
+    return `<div class="cr-pics grid${n % 2 ? ' odd' : ''}">` + ims.map((x, i) => { const r = picUrl(s.sid, x.key);
+      return `<img class="cr-pic" data-key="${esc(x.key)}" data-mid="${esc(m.id)}" data-i="${i}" alt=""${r ? ` src="${r.url}"` : ''}>`; }).join('') + '</div>';
+  }
+  function fileCard(f) {
+    const ft = ftype(f.name);
+    return `<div class="cr-file${f.size < 0 ? ' gone' : ''}" data-fp="${esc(f.p)}" title="${esc(f.p)}"><i class="cr-ficon" style="--fc:${ft.c}" title="${esc(ft.t)}">${SVG.doc}</i>`
+      + `<span class="cr-fmeta"><b>${esc(f.name)}</b><small>${esc(fmtSize(f.size))}</small></span></div>`;
+  }
+  // fetch the pictures that aren't loaded yet (one call each; main caches them too)
+  function loadPics(R, s) {
+    for (const img of R.msgs.querySelectorAll('img.cr-pic:not([src])')) {
+      const k = img.dataset.key, local = k.startsWith('local:');
+      const p = local ? window.api.chatThumb(k.slice(6)) : window.api.chatMedia(s.sid, k, false);
+      p.then(r => {
+        if (!r || !r.url) { img.classList.add('broken'); return; }
+        media.set(local ? 'local|' + k.slice(6) : s.sid + '|' + k, r);
+        if (img.closest('.one')) { const [w, h] = picBox(r); img.style.width = w + 'px'; img.style.height = h + 'px'; }
+        img.src = r.url;
+      }).catch(() => img.classList.add('broken'));
+    }
+  }
+  // the full-size viewer: the thumbnail at once, the full picture when it arrives; ← → between a message's pictures
+  let viewer = null;
+  function openViewer(R, s, keys, i) {
+    closeViewer();
+    const v = document.createElement('div'); v.className = 'cr-viewer';
+    v.innerHTML = `<img alt=""><button class="cr-vx" title="Close (Esc)">${SVG.x}</button>${keys.length > 1 ? '<button class="cr-vp" data-d="-1">‹</button><button class="cr-vn" data-d="1">›</button><span class="cr-vc"></span>' : ''}`;
+    document.body.appendChild(v); viewer = { v, keys, i, s };
+    const show = () => {
+      const k = viewer.keys[viewer.i], img = v.querySelector('img'), th = picUrl(s.sid, k), my = viewer.i;
+      img.src = th ? th.url : ''; const c = v.querySelector('.cr-vc'); if (c) c.textContent = `${viewer.i + 1} / ${viewer.keys.length}`;
+      const full = k.startsWith('local:') ? null : window.api.chatMedia(s.sid, k, true);
+      if (full) full.then(r => { if (r && r.url && viewer && viewer.i === my && viewer.v === v) img.src = r.url; }).catch(() => { });
+    };
+    viewer.show = show; show();
+    v.addEventListener('click', e => { const d = e.target.closest('[data-d]'); if (d) { viewer.i = (viewer.i + +d.dataset.d + keys.length) % keys.length; return show(); } if (e.target.tagName !== 'IMG') closeViewer(); });
+  }
+  function closeViewer() { if (viewer) { viewer.v.remove(); viewer = null; } }
+  addEventListener('keydown', e => {
+    if (!viewer) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeViewer(); }
+    else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && viewer.keys.length > 1) { e.preventDefault(); e.stopPropagation(); viewer.i = (viewer.i + (e.key === 'ArrowLeft' ? -1 : 1) + viewer.keys.length) % viewer.keys.length; viewer.show(); }
+  }, true);
   function head(R, s) {
     const k = [s.name, s.health, colorOf(s), s.model, s.subagents, s.hostLabel].join('|'); if (R.headKey === k) return; R.headKey = k;
     R.el.querySelector('.cr-av').innerHTML = avatar(s);
@@ -260,8 +387,13 @@
   function markSeen(s) { const t = lastT(s); if (!seenAt[s.sid] || seenAt[s.sid] < t) { seenAt[s.sid] = t; LS.set('chat.seen', seenAt); } }
   // clicks inside a room's messages: "See more" and folded tool runs
   document.addEventListener('click', e => {
-    const o = e.target.closest('.chatroom [data-open]'); if (!o) return;
-    const R = [...rooms.values()].find(r => r.el.contains(o)); if (!R) return;
+    const pic = e.target.closest('.chatroom img.cr-pic'), card = e.target.closest('.chatroom .cr-file'), o = e.target.closest('.chatroom [data-open]');
+    if (!pic && !card && !o) return;
+    const R = [...rooms.values()].find(r => r.el.contains(pic || card || o)); if (!R) return;
+    const s = sessions().find(x => x.sid === R.sid);
+    if (pic) { if (!s || !pic.src) return; const keys = [...pic.closest('.cr-pics').querySelectorAll('img.cr-pic')].map(x => x.dataset.key); return openViewer(R, s, keys, +pic.dataset.i || 0); }
+    if (card) { if (card.classList.contains('gone')) return toast('파일 없음'); if (s && s.onPeer) return toast(`This file is on ${s.hostLabel || 'the other Mac'}`);
+      return window.api.chatReveal(card.dataset.fp).then(ok => ok || toast('파일 없음')); }
     R.open.add(o.dataset.open); draw(R, true);
   });
 
@@ -272,6 +404,8 @@
     lastListHtml = '';
     syncRooms();
     renderListApp();   // the list redraws in whichever look is on now (app.js renderList hands over to us while the theme is on)
+    if (!on) closeViewer();
+    try { window.api.themeState(on); } catch { }
     if (typeof toast === 'function') toast(on ? `Theme: ${NAME}` : 'Theme: Default');
     requestAnimationFrame(() => { try { typeof fitAll === 'function' && fitAll(); } catch { } });
   }
@@ -284,7 +418,10 @@
     renderList,
     update() { if (on) { renderList(); } syncRooms(); },
     seen(sid) { const s = sessions().find(x => x.sid === sid); if (s && on) { markSeen(s); lastListHtml = ''; } },
+    // add files (paths) to a session's input bar as attachments
+    attach(sid, paths) { const R = [...rooms.values()].find(r => r.sid === sid); if (R && Array.isArray(paths)) attach(R, paths.map(p => ({ p: String(p) }))); return !!R; },
   };
   wireList();
+  try { window.api.themeState(on); window.api.onThemeSet(v => { if (v !== on) set(v); else window.api.themeState(on); }); } catch { }
   if (on) { document.body.classList.add('chat-theme'); setTimeout(() => { renderListApp(); syncRooms(); }, 0); }
 })();

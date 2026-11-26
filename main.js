@@ -48,6 +48,9 @@ app.setName(APP_NAME);
 app.setPath('userData', process.env.MESH_USERDATA || path.join(app.getPath('appData'), MESH.dataDir));
 ipcMain.on('app:name', e => { e.returnValue = APP_NAME; });
 ipcMain.on('app:chatThemeName', e => { e.returnValue = String(MESH.chatThemeName || 'Chat'); });   // the chat theme's label (renderer/chat-theme.js), from mesh.local.json
+// View ▸ Mesh ▸ Theme: the renderer reports which theme is on (it can also change from the mother star's menu)
+let chatThemeOn = false;
+ipcMain.on('theme:state', (_e, v) => { v = !!v; if (v === chatThemeOn) return; chatThemeOn = v; try { buildMenu(); } catch { } });
 const collector = new Collector();
 // Hermes Agent sessions (hermes-sessions.js): they live in tmux panes like Claude's and show up as full sessions
 const hermes = require('./hermes-sessions')({ userData: app.getPath('userData') });
@@ -630,6 +633,8 @@ function buildMenu() {
     win && win.webContents.send('ui:hidden', uiHidden); buildMenu();     // (Link strands also sits in the Window menu)
   } } : { type: 'separator' });
   meshShow.push({ type: 'separator' }, { label: 'Show all mesh features', click: () => { for (const it of MESH_ITEMS) if (it) delete uiHidden[it[0]]; try { fs.writeFileSync(UI_FILE, JSON.stringify(uiHidden)); } catch { } win && win.webContents.send('ui:hidden', uiHidden); buildMenu(); } });
+  meshShow.push({ label: 'Theme', submenu: [[false, 'Default'], [true, String(MESH.chatThemeName || 'Chat')]].map(([v, label]) => ({ label, type: 'radio', checked: chatThemeOn === v,
+    click: () => { chatThemeOn = v; win && win.webContents.send('theme:set', v); } })) });
   show.push({ type: 'separator' }, { label: 'Show everything', click: () => { uiHidden = {}; try { fs.writeFileSync(UI_FILE, '{}'); } catch { } win && win.webContents.send('ui:hidden', uiHidden); buildMenu(); } });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: app.name, submenu: [{ role: 'about' }, { type: 'separator' }, { label: 'Set Team Name…', click: () => win && win.webContents.send('team:edit') }, { label: 'Session Refresh…', click: () => win && win.webContents.send('refresh:open') }, { type: 'separator' },
@@ -1233,6 +1238,7 @@ function initPhone() {
     details: sid => sessionDetails(sid),
     stamps: sid => stampsFor(core.findTranscript(sid)),
     chat: (sid, n) => require('./transcript-chat').chatFor(core.findTranscript(sid), n),
+    chatMedia: (sid, key, full) => require('./transcript-chat').mediaFor(core.findTranscript(sid), key, full),
     usage: usageBoard,
     folders: () => { const o = {}; for (const [sid, f] of Object.entries(localFolders())) { const r = folderMirror.relOf(f.path); if (r) o[sid] = r; } return o; },
     folderHere: rel => folderMirror.here(rel),
@@ -1270,6 +1276,16 @@ const { chatFor } = require('./transcript-chat');
 ipcMain.handle('chat:get', (_e, sid, n) => { sid = String(sid || ''); if (isView(sid)) return null;   // view-only machine: no transcripts
   const s = liveSession(sid); return peerLink && ((s && s.onPeer) || (!s && peerLink.owns(sid)))
   ? peerLink.forward('GET', '/api/chat', undefined, { sid, n: String(+n || 150) }).catch(() => null) : chatFor(core.findTranscript(sid), n); });
+// its pictures (2026-11-26): a picture named by one of its chat items, scaled down (transcript-chat.js mediaFor); the
+// other Mac's through its /api/chat-media. chat:thumb = a picture you are about to send (local files only, never the API)
+// and chat:reveal shows an attached file in Finder.
+const chatMedia = require('./transcript-chat');
+ipcMain.handle('chat:media', (_e, sid, key, full) => { sid = String(sid || ''); if (isView(sid)) return null;
+  const s = liveSession(sid); return peerLink && ((s && s.onPeer) || (!s && peerLink.owns(sid)))
+  ? peerLink.forward('GET', '/api/chat-media', undefined, { sid, key: String(key || ''), ...(full ? { full: '1' } : {}) }, 20000).catch(() => null) : chatMedia.mediaFor(core.findTranscript(sid), key, full); });
+ipcMain.handle('chat:thumb', (_e, p) => chatMedia.fileImage(p, false));
+ipcMain.handle('chat:stat', (_e, ps) => (Array.isArray(ps) ? ps.slice(0, 50) : []).map(p => { try { const st = fs.statSync(String(p)); return st.isFile() ? st.size : -1; } catch { return -1; } }));
+ipcMain.handle('chat:reveal', (_e, p) => { p = String(p || ''); try { if (fs.statSync(p).isFile()) { shell.showItemInFolder(p); return true; } } catch { } return false; });
 ipcMain.handle('phone:set', (_e, v) => { phone.setEnabled(v); return phone.status(); });
 ipcMain.handle('phone:regen', () => { phone.regenerate(); return phone.status(); });
 ipcMain.handle('phone:qr', (_e, url) => require('qrcode').toDataURL(url, { margin: 1, width: 360, color: { dark: '#0a0826', light: '#ffffff' } }));

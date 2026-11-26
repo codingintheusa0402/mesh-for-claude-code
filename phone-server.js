@@ -85,7 +85,7 @@ function createPhoneServer(ctx) {
       const sid = u.searchParams.get('sid') || '';
       return json(res, 200, await (p === '/api/codemap' ? ctx.codemap.status(sid) : ctx.codemap.html(sid)));
     }
-    if (['/api/details', '/api/card', '/api/chat', '/api/stamps'].includes(p) && viewSid(u.searchParams.get('sid') || ''))   // view-only machine: no transcripts
+    if (['/api/details', '/api/card', '/api/chat', '/api/chat-media', '/api/stamps'].includes(p) && viewSid(u.searchParams.get('sid') || ''))   // view-only machine: no transcripts
       return json(res, 200, p === '/api/stamps' ? [] : p === '/api/details' ? { ok: false, err: 'view-only machine: no details' } : null);
     if (p === '/api/details') {
       const sid = u.searchParams.get('sid') || '';
@@ -108,6 +108,11 @@ function createPhoneServer(ctx) {
       const sid = u.searchParams.get('sid') || '', n = +u.searchParams.get('n') || 150;
       if (remote(sid)) return json(res, 200, await peer.forward('GET', '/api/chat', undefined, { sid, n: String(n) }).catch(() => null));
       return json(res, 200, ctx.chat ? await ctx.chat(sid, n) : null);
+    }
+    if (p === '/api/chat-media') {                                      // a picture in one of those messages (scaled down)
+      const sid = u.searchParams.get('sid') || '', key = u.searchParams.get('key') || '', full = u.searchParams.get('full') === '1';
+      if (remote(sid)) return json(res, 200, await peer.forward('GET', '/api/chat-media', undefined, { sid, key, ...(full ? { full: '1' } : {}) }, 20000).catch(() => null));
+      return json(res, 200, ctx.chatMedia ? await ctx.chatMedia(sid, key, full) : null);
     }
     if (p === '/api/stamps') {                                          // when each prompt / reply was made
       const sid = u.searchParams.get('sid') || '';
