@@ -1132,7 +1132,7 @@ ipcMain.handle('peer:upload', async (_e, paths) => {
   }
   return err ? { err } : { paths: out };
 });
-ipcMain.handle('peer:send', (_e, sid, text) => isView(sid) ? (viewPeers ? viewPeers.send(sid, text) : { ok: false, err: 'not ready' }) : peerLink ? peerLink.forward('POST', '/api/send', { sid, text }).catch(e => ({ ok: false, err: String(e.message || e) })) : { ok: false, err: 'no peer' });
+ipcMain.handle('peer:send', (_e, sid, text) => isView(sid) ? (viewPeers ? viewPeers.send(sid, text) : { ok: false, err: 'not ready' }) : peerLink ? peerLink.forward('POST', '/api/send', { sid, text }, undefined, 125000).catch(e => ({ ok: false, err: String(e.message || e) })) : { ok: false, err: 'no peer' });
 ipcMain.handle('peer:interrupt', (_e, sid) => isView(sid) ? (viewPeers ? viewPeers.interrupt(sid) : { ok: false, err: 'not ready' }) : peerLink ? peerLink.forward('POST', '/api/interrupt', { sid }).catch(e => ({ ok: false, err: String(e.message || e) })) : { ok: false, err: 'no peer' });
 // stop a running session (one outside the app — in-app terminals are closed by the renderer)
 ipcMain.handle('session:stop', async (_e, pid) => {

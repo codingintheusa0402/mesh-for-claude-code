@@ -904,6 +904,9 @@ $('#modal').onclick = e => { if (e.target.id === 'modal') closeModal(); };
 // turns image paths into [Image #n] attachments and other files into @-mentionable paths.
 const shq = p => p.replace(/([\s\\'"()&;|<>$`!*?#~{}\[\]])/g, '\\$1');
 const droppedPaths = e => [...(e.dataTransfer?.files || [])].map(f => window.api.pathForFile(f)).filter(Boolean);
+// a paste into the chat room's input box (chat theme) is the room's own: never into the terminal underneath
+// (2026-11-26: the terminal's capture listener took ⌘V first, so pictures went into the session's hidden input box)
+const inChatInput = e => !!(e.target && e.target.closest && e.target.closest('.cr-input'));
 async function clipboardInsert(peer) {
   const c = await window.api.clipRead();
   if (c.kind === 'files') {
@@ -1071,7 +1074,7 @@ function mirrorTerm(p) {
   term.onData(d => { if (!isReport(d)) termWrite(p.id, d); });
   const send = d => termWrite(p.id, d); wireEditKeys(term, send);
   // our own tmux panes use this view too: their files stay on this machine; only the other machine's terminals get an upload
-  el.addEventListener('paste', async e => { e.preventDefault(); e.stopPropagation(); const r = await clipboardInsert(!!p.onPeer); if (r.text) term.paste(r.text); }, true);
+  el.addEventListener('paste', async e => { if (inChatInput(e)) return; e.preventDefault(); e.stopPropagation(); const r = await clipboardInsert(!!p.onPeer); if (r.text) term.paste(r.text); }, true);
   el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('dropping'); });
   el.addEventListener('dragleave', () => el.classList.remove('dropping'));
   el.addEventListener('drop', async e => {
@@ -1229,6 +1232,7 @@ async function newTerm(opts) {
   // ⌘V: Finder-copied files → their paths, screenshot/image → saved PNG path, else plain text.
   // (Ctrl+V still goes straight to Claude Code, which reads image clipboards itself.)
   el.addEventListener('paste', async e => {
+    if (inChatInput(e)) return;
     e.preventDefault(); e.stopPropagation();
     const r = await clipboardInsert(); if (r.text) term.paste(r.text);
   }, true);

@@ -156,13 +156,13 @@
     R.send.onclick = () => doSend(R);
     // a pasted file or picture becomes an attachment chip (text pastes as text)
     R.ta.addEventListener('paste', async e => {
-      const dt = e.clipboardData, fs0 = dt ? [...dt.files] : [];
-      if (fs0.length) { const ps = fs0.map(f => { try { return window.api.pathForFile(f); } catch { return ''; } }).filter(Boolean); if (ps.length) { e.preventDefault(); return attach(R, ps.map(p => ({ p }))); } }
-      if (dt && dt.getData('text/plain')) return;
-      e.preventDefault();
+      // main reads the clipboard: Finder-copied files (whose text is only their name), screenshots / copied pictures
+      // (saved as a PNG) or text. Files and pictures become chips; text goes in as text.
+      e.preventDefault(); e.stopPropagation();
       let c = null; try { c = await window.api.clipRead(); } catch { }
       if (c && c.kind === 'files' && c.paths && c.paths.length) attach(R, c.paths.map(p => ({ p })));
-      else if (c && c.kind === 'text' && c.text) insert(R, c.text);
+      else if (c && c.text) insert(R, c.text);
+      else { const t = e.clipboardData && e.clipboardData.getData('text/plain'); if (t) insert(R, t); }
     });
     el.querySelector('.cr-atts').addEventListener('click', e => { const x = e.target.closest('[data-rm]'); if (!x) return; R.att.splice(+x.dataset.rm, 1); drawAtts(R); R.ta.focus(); });
     const fileIn = el.querySelector('input[type=file]'), emo = el.querySelector('.cr-emo');
@@ -225,7 +225,11 @@
   async function doSend(R) {
     const typed = R.ta.value.replace(/\s+$/, ''), att = R.att.slice(); if (!typed.trim() && !att.length) return;
     const s = sessions().find(x => x.sid === R.sid); if (!s) return toast('This session is not running');
-    const q = p => /\s/.test(p) ? `"${p}"` : p, text = [typed, ...att.map(a => q(a.p))].filter(Boolean).join(' ');
+    const q = p => /\s/.test(p) ? `"${p}"` : p;
+    // a session on the other Mac gets copies of the files there (the paths here mean nothing to it)
+    let sendPaths = att.map(a => a.p);
+    if (s.onPeer && sendPaths.length) { const u = await window.api.peer.upload(sendPaths).catch(e => ({ err: e.message })); if (u.err) return toast("Couldn't send the file: " + u.err); sendPaths = u.paths; }
+    const text = [typed, ...sendPaths.map(q)].filter(Boolean).join(' ');
     R.ta.value = ''; R.att = []; drawAtts(R);
     const p = { id: 'p' + Date.now(), t: Date.now(), k: 'u', x: typed.trim(), pending: true,
       imgs: att.filter(a => a.img).map(a => ({ key: 'local:' + a.p })), files: att.filter(a => !a.img).map(a => ({ p: a.p, name: a.name, size: a.size ?? -1 })) };
