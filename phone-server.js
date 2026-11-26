@@ -33,7 +33,7 @@ function createPhoneServer(ctx) {
 
   // static files: phone/ app + the shared renderer engine + xterm
   const STATIC = {
-    '/': 'phone/index.html', '/app-name.js': 'renderer/app-name.js', '/phone.js': 'phone/phone.js', '/phone-viz.js': 'phone/phone-viz.js', '/phone.css': 'phone/phone.css', '/usage-view.js': 'renderer/usage-view.js', '/live-view.js': 'renderer/live-view.js', '/live-view.css': 'renderer/live-view.css', '/usage-view.css': 'renderer/usage-view.css', '/icon.png': 'renderer/icon.png',
+    '/': 'phone/index.html', '/app-name.js': 'renderer/app-name.js', '/phone.js': 'phone/phone.js', '/phone-viz.js': 'phone/phone-viz.js', '/phone.css': 'phone/phone.css', '/usage-view.js': 'renderer/usage-view.js', '/live-view.js': 'renderer/live-view.js', '/live-view.css': 'renderer/live-view.css', '/avatars.js': 'renderer/avatars.js', '/usage-view.css': 'renderer/usage-view.css', '/icon.png': 'renderer/icon.png',
     '/apple-touch-icon.png': 'build/icon-ios.png',
     '/mesh.js': 'renderer/mesh.js', '/mother.js': 'renderer/mother.js', '/bubbles.js': 'renderer/bubbles.js', '/sun.js': 'renderer/sun.js', '/organism.js': 'renderer/organism.js', '/portal.js': 'renderer/portal.js', '/probe.js': 'renderer/probe.js', '/probe/probe_sheet.png': 'renderer/probe/probe_sheet.png', '/blackhole.js': 'renderer/blackhole.js', '/endurance.js': 'renderer/endurance.js', '/handles.js': 'renderer/handles.js', '/probe-life.js': 'renderer/probe-life.js', '/probe-tidy.js': 'renderer/probe-tidy.js', '/probe/probe.glb': 'renderer/probe/probe.glb', '/endurance/endurance_sheet.webp': 'renderer/endurance/endurance_sheet.webp', '/endurance/endurance.json': 'renderer/endurance/endurance.json', '/endurance/endurance.glb': 'renderer/endurance/endurance.glb', '/three3d.js': 'renderer/three3d.js',
     // three.js (the 3-D Endurance + black hole): every file by name, no folder serving
@@ -80,6 +80,11 @@ function createPhoneServer(ctx) {
       req.on('close', () => clients.delete(c)); return;
     }
     if (p === '/api/local-snapshot') { peerPolledAt = Date.now(); const snapNow = ctx.getSnap(); if (!snapNow) return json(res, 503, { error: 'starting' }); return json(res, 200, { ...snapNow, caps: ['upload', 'resize'] }); }   // caps: what this build accepts from the peer   // for the peer (never merged)
+    if (p === '/api/avatar' && ctx.avatars && req.method === 'GET') {    // a session picture, cropped (avatars.js); fetched from the other Mac if only it has it
+      const r = await ctx.avatars.image(u.searchParams.get('f') || '', +u.searchParams.get('s') || 256).catch(() => null);
+      if (!r) { res.writeHead(404); return res.end(); }
+      return fs.readFile(r.path, (err, data) => { if (err) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'Content-Type': r.type, 'Cache-Control': 'private, max-age=31536000, immutable' }); res.end(data); });
+    }
     if (p === '/api/history') return json(res, 200, await ctx.getHistory());
     if ((p === '/api/codemap' || p === '/api/codemap/html') && ctx.codemap && req.method === 'GET') {     // Code maps, for the other Mac (codemap.js)
       const sid = u.searchParams.get('sid') || '';
@@ -154,6 +159,7 @@ function createPhoneServer(ctx) {
     if (p === '/api/handoff/file' && req.method === 'PUT') return ctx.handoff ? ctx.handoff.receiveFile(u.searchParams, req, res) : json(res, 404, {});   // a session moving here (handoff.js)
     if (req.method !== 'POST') return json(res, 405, {});
     const b = await body(req, p === '/api/upload' ? 40e6 : 2e6);
+    if (p === '/api/avatars' && ctx.avatars) return json(res, 200, { ok: true, n: ctx.avatars.merge(b.merge || {}) });   // picks pushed by the other Mac
     if (p === '/api/upload') {                                           // a file pasted/dropped into the peer's mirror of our terminal
       if (viewSid(b.sid)) return json(res, 200, { ok: false, err: 'view-only machine: files are not sent there' });
       // from the iPhone: the file belongs on the machine that runs the session / terminal it's attached to

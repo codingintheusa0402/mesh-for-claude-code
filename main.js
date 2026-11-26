@@ -1255,6 +1255,7 @@ function initPhone() {
       metrics: app.getAppMetrics().map(m => ({ pid: m.pid, type: m.type, name: m.name || m.serviceName || '', created: m.creationTime, cpu: +(m.cpu.percentCPUUsage || 0).toFixed(1), kb: m.memory.workingSetSize })),
       contents: require('electron').webContents.getAllWebContents().map(w => ({ id: w.id, pid: w.getOSProcessId(), type: w.getType(), url: String(w.getURL()).slice(0, 160), destroyed: w.isDestroyed(), hostWin: (BrowserWindow.fromWebContents(w) || {}).id || null })),
     }),
+    avatars,
     getHistory: () => scanHistory(),
     codemap: { status: sid => cmCall(sid, 'status'), html: sid => cmCall(sid, 'html'), op: (sid, op) => ['generate', 'cancel'].includes(op) ? cmCall(sid, op) : { ok: false } },
     details: sid => sessionDetails(sid),
@@ -1308,6 +1309,27 @@ ipcMain.handle('chat:media', (_e, sid, key, full) => { sid = String(sid || ''); 
 ipcMain.handle('chat:thumb', (_e, p) => chatMedia.fileImage(p, false));
 ipcMain.handle('chat:stat', (_e, ps) => (Array.isArray(ps) ? ps.slice(0, 50) : []).map(p => { try { const st = fs.statSync(String(p)); return st.isFile() ? st.size : -1; } catch { return -1; } }));
 ipcMain.handle('chat:reveal', (_e, p) => { p = String(p || ''); try { if (fs.statSync(p).isFile()) { shell.showItemInFolder(p); return true; } } catch { } return false; });
+// ---------------- session pictures (avatars.js) ----------------
+// A picture per session NAME from a folder (mesh.local.json "avatars": dir, store, source, syncCmd); the window and its
+// detached rooms load them through meshav://img/<file>?s=256|512, the phone through /api/avatar. Picks travel in the
+// snapshot (snap.avatars), merge with the other Mac's on every peer poll and are pushed to it when made.
+require('electron').protocol.registerSchemesAsPrivileged([{ scheme: 'meshav', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
+const avatars = require('./avatars').createAvatars({ cfg: require('./mesh-name').avatars || {}, machine: USAGE_MACHINE, peer: () => peerLink,
+  onChange: () => { for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send('avatars:changed'); } });
+app.whenReady().then(() => {
+  require('electron').protocol.handle('meshav', async req => {
+    const u = new URL(req.url), f = decodeURIComponent(u.pathname.replace(/^\/+/, ''));
+    const r = await avatars.image(f, +u.searchParams.get('s') || 256).catch(() => null);
+    if (!r) return new Response('', { status: 404 });
+    try { return new Response(await fs.promises.readFile(r.path), { headers: { 'Content-Type': r.type, 'Cache-Control': 'max-age=31536000, immutable' } }); } catch { return new Response('', { status: 404 }); }
+  });
+  setTimeout(() => avatars.warm(), 20e3);
+});
+ipcMain.handle('avatars:list', () => avatars.list());
+ipcMain.handle('avatars:set', (_e, name, file) => avatars.set(String(name || ''), file ? String(file) : null));
+ipcMain.handle('avatars:sync', () => avatars.sync());
+ipcMain.handle('avatars:reveal', () => { try { fs.mkdirSync(avatars.dir, { recursive: true }); } catch { } return shell.openPath(avatars.dir); });
+ipcMain.handle('avatars:openSource', (_e, url) => /^https:\/\//.test(String(url || '')) ? shell.openExternal(String(url)) : null);
 ipcMain.handle('phone:set', (_e, v) => { phone.setEnabled(v); return phone.status(); });
 ipcMain.handle('phone:regen', () => { phone.regenerate(); return phone.status(); });
 ipcMain.handle('phone:qr', (_e, url) => require('qrcode').toDataURL(url, { margin: 1, width: 360, color: { dark: '#0a0826', light: '#ffffff' } }));
@@ -1436,7 +1458,7 @@ function sendChatWin(key, w, snap) {
   if (w.isDestroyed() || !w.isVisible() || w.isMinimized()) return;
   if (key === 'sessions') return w.webContents.send('telemetry', snap);
   const sid = key.slice(5);
-  w.webContents.send('telemetry', { ready: snap.ready, machine: snap.machine, peer: snap.peer, sessions: (snap.sessions || []).filter(s => s.sid === sid) });
+  w.webContents.send('telemetry', { ready: snap.ready, machine: snap.machine, peer: snap.peer, avatars: snap.avatars, sessions: (snap.sessions || []).filter(s => s.sid === sid) });
 }
 function sendChatWins(snap) { lastShown = snap; for (const [k, w] of chatWins) sendChatWin(k, w, snap); }
 ipcMain.handle('chatwin:open', (_e, key, at) => openChatWin(key, at));
@@ -1455,6 +1477,8 @@ async function loop() {
       const snap = collector.snapshot(ptyMap);
       snap.agents = core.agents(); refreshAgents();
       snap.usage = core.usage(); refreshUsage();
+      if (peerLink) { const pa = peerLink.avatars(); if (pa) avatars.merge(pa); }   // the other Mac's picks (last write wins per name)
+      snap.avatars = avatars.map();
       snap.mem = hostMem; snap.build = BUILD; snap.usageSum = usageBoard.summary(); snap.machine = USAGE_MACHINE;
       snap.ptys = [...ptys].map(([id, p]) => ({ id, pid: p.proc.pid, title: p.title, kind: p.kind, cwd: p.cwd }));
       panes.refresh();

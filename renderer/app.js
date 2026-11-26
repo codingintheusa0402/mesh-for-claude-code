@@ -536,7 +536,7 @@ function renderBoard() {
   if (!isSimple()) return;
   const CT = window.chatTheme && window.chatTheme.on;   // the chat theme: a squircle avatar and the unread badge on each card
   const html = (window.cleanupBar ? window.cleanupBar() : '') + (boardOrder(snap.sessions).map(s => `<div class="bcard b-${s.health}${s.sid === selected ? ' sel' : ''}" data-sid="${s.sid}">
-    ${CT ? window.chatTheme.avatar(s) + window.chatTheme.badge(s) : ''}<div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${sunTag(s)}${peerTag(s)}${usageRing(s)}</div>
+    ${CT ? window.chatTheme.avatar(s, '', true) + window.chatTheme.badge(s) : ''}<div class="n">${!CT && window.meshAvatars ? window.meshAvatars.html(s, { cls: 'bav', click: true }) : ''}<span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${sunTag(s)}${peerTag(s)}${usageRing(s)}</div>
     <div class="m"><span style="color:${FAMILY_COLOR[s.family]}">${esc((s.model || '—').replace('claude-', ''))}</span><span>${fmtTok(s.todayTok)}</span><span>${s.health === 'working' ? 'working' : ago(s.sinceUse ?? s.sinceWrite)}</span>${relayChip(s)}</div>
   </div>`).join('') || '<div class="bempty">No live sessions.</div>');
   if (html === lastBoard) return;
@@ -1324,8 +1324,9 @@ function renderTabs() {
   if (tabDrag) { tabDrag.dirty = true; return; }   // never rebuild the row under a tab being dragged
   applyTabOrder();
   const CT = window.chatTheme && window.chatTheme.on, ctS = id => CT && snap.sessions.find(x => termOf(x) === id);   // chat theme: avatar + unread badge
+  const picS = id => !CT && window.meshAvatars && snap.sessions.find(x => termOf(x) === id);   // Default theme: a picked picture only
   $('#tabs').innerHTML = [...terms].filter(([, t]) => !t.tabHidden).map(([id, t]) => `<div class="tab ${id === activeTerm ? 'on' : ''}" data-id="${id}">
-    ${(s => s ? window.chatTheme.avatar(s, 'xs') : '')(ctS(id))}<span class="hdot h-${t.health || (t.exited ? 'error' : 'idle')}"></span><span class="t">${esc(t.title)}</span>${termTag(id, t)}${(s => s ? window.chatTheme.badge(s) : '')(ctS(id))}<span class="x" data-x="${id}">×</span></div>`).join('') +
+    ${(s => s ? window.chatTheme.avatar(s, 'xs') : '')(ctS(id))}${(s => s ? window.meshAvatars.html(s, { cls: 'tav', letter: false }) : '')(picS(id))}<span class="hdot h-${t.health || (t.exited ? 'error' : 'idle')}"></span><span class="t">${esc(t.title)}</span>${termTag(id, t)}${(s => s ? window.chatTheme.badge(s) : '')(ctS(id))}<span class="x" data-x="${id}">×</span></div>`).join('') +
     `<div class="tab" id="tabNew" title="New session (⌘T)">＋</div>`;
   for (const el of document.querySelectorAll('.tab[data-id]')) { el.onclick = e => { if (tabDrag || el._dragged) { el._dragged = false; return; } if (e.target.dataset.x) closeTerm(e.target.dataset.x); else activate(el.dataset.id); };
     el.addEventListener('pointerdown', e => tabDragStart(e, el)); }

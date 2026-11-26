@@ -20,6 +20,15 @@ contextBridge.exposeInMainWorld('api', {
     onState: cb => ipcRenderer.on('chatwin:state', (_e, keys) => cb(keys)),
     onSelect: cb => ipcRenderer.on('chatwin:select', (_e, sid) => cb(sid)),
   },
+  // session pictures (avatars.js): the folder's pictures, a pick per session name, Sync now
+  avatars: {
+    list: () => ipcRenderer.invoke('avatars:list'),
+    set: (name, file) => ipcRenderer.invoke('avatars:set', name, file),
+    sync: () => ipcRenderer.invoke('avatars:sync'),
+    reveal: () => ipcRenderer.invoke('avatars:reveal'),
+    openSource: url => ipcRenderer.invoke('avatars:openSource', url),
+    onChanged: cb => ipcRenderer.on('avatars:changed', () => cb()),
+  },
   onTelemetry: cb => ipcRenderer.on('telemetry', (_e, s) => cb(s)),
   stamps: sid => ipcRenderer.invoke('stamps', sid),
   dockState: list => ipcRenderer.send('dock:state', list),

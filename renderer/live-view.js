@@ -27,7 +27,8 @@
       : last ? `last: <b>${esc(tool(last.name))}</b> ${esc(last.sum || '')}` : (s ? 'no tool calls yet' : 'select a session');
     const pct = h.cap ? Math.min(100, 100 * (h.ctx || 0) / h.cap) : 0;
     const port = h.uses || h.expect;
-    return `<div class="lv-h1"><span class="lv-dot h-${esc(health)}"></span><b class="lv-name">${esc(name)}</b><span class="lv-st">${esc(health)}</span>
+    const av = s && window.meshAvatars ? window.meshAvatars.html(s, { cls: 'lv-av', size: 512 }) : '';   // the session's picture (renderer/avatars.js) or its initial
+    return `<div class="lv-h1">${av}<span class="lv-dot h-${esc(health)}"></span><b class="lv-name">${esc(name)}</b><span class="lv-st">${esc(health)}</span>
         ${h.model ? `<span class="lv-model">${esc(model(h.model))}</span>` : ''}${port ? badge(port) : ''}</div>
       <div class="lv-h2">${h.cap ? `<span class="lv-ctx${pct > 90 ? ' hot' : pct > 75 ? ' warm' : ''}" title="context used / refresh cap"><i style="width:${pct.toFixed(1)}%"></i><em>${kTok(h.ctx)} / ${kTok(h.cap)}</em></span>` : ''}<span class="lv-step">${step}</span><span class="lv-ago" title="since its last activity">${esc(ago(h.sinceUse))}</span></div>`;
   }

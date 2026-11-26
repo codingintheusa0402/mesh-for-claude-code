@@ -171,6 +171,20 @@ Machine- or team-specific add-ons can go in `local/` (gitignored); `local/main.j
 
 A detached window (`renderer/chatwin.html`) runs the same chat-theme code as the main window, so the transcript, send, attach, paste and picture paths are the same, sessions on the other Mac included. It gets the snapshot main already makes for the main window (one session for a room), and only while it is visible and not minimised, so a room polls only what a shown docked room polls.
 
+### Session pictures (`avatars` in mesh.local.json)
+
+Click a session's avatar (a Simple-board card, a chat-list row or a room header, detached rooms included) to give it a picture: a grid of every picture and GIF in the pictures folder, **Letter** (back to the initial), **Sync now**, **Show folder** and **Open in Drive** (when the sync reports a cloud folder).
+
+- **Cropped for you.** Each picture becomes a centred square (a 16:9 GIF loses its sides, and with them corner watermarks) at 256 and 512 px, made with `ffmpeg` (Homebrew) and kept in `<dir>/.cache`. GIFs stay animated.
+- **Keyed by the session name**, not its id: a handoff, refresh or new generation keeps the picture. Picks live in one JSON file (`store`), `{ "<name>": { file, t, by } }`; sessions without one keep the initial-letter avatar.
+- **Both Macs.** Picks merge by name (last write wins) on every peer poll and are pushed to the paired Mac when made, so a pick shows on the other Mac within seconds; a picture only the other Mac has is fetched once from it (`/api/avatar`).
+- **Where it shows**: the Simple board cards (Default and chat theme), the chat list, Terminals tabs, room headers and reply avatars, the Live panel header, and the iPhone page (session list, cards, pane header; picked pictures only).
+- **Filling the folder** is up to you: drop files into `dir`, or set `syncCmd` to a command that mirrors a shared folder there (it runs from **Sync now**; run it on a schedule yourself) and writes `<dir>/.sync.json` `{ at, ok, error?, folderUrl? }` for the status line.
+
+```json
+"avatars": { "dir": "~/.mesh/avatars", "store": "~/.mesh/avatars.json", "source": "Team pictures", "syncCmd": "python3 ~/bin/pictures_sync.py" }
+```
+
 ### Live panel: your logged-in Chromes (`liveChrome` in mesh.local.json)
 
 All optional; without it the Browser view lists the DevTools ports from `chromePorts`.
@@ -237,6 +251,7 @@ pane-agents.js Watched agents: script loops in tmux windows shown in the Session
 model-fallback.js Model fallback: Opus outage → Sonnet per session, back after 10 min of Opus working
 mesh-name.js   The app's name / bundle id / data folder: MESH_NAME → mesh.local.json → defaults
 phone-server.js  iPhone web-app server: static files + token-protected JSON/SSE API (off by default)
+avatars.js     Session pictures: folder → square 256/512 px crops (ffmpeg, GIFs animated), picks per session name, peer merge
 phone/         iPhone home-screen app (index.html, phone.js, phone.css) — reuses the renderer engine
 ios/           Native iPhone app (SwiftUI + WKWebView, XcodeGen project.yml, Mesh.xcconfig + your Local.xcconfig)
 renderer/

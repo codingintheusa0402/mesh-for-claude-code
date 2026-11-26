@@ -246,12 +246,14 @@ function setTab(t, quiet) {
 }
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
 
+// a session's picture (renderer/avatars.js), only when one was picked — the phone keeps its look otherwise
+const AV = (s, cls, size = 256) => window.meshAvatars ? window.meshAvatars.html(s, { cls, size, letter: false }) : '';
 // ---------- sessions list ----------
 const subsOpen = new Set();                                              // main sessions whose sub-sessions are unfolded (folded by default)
 function renderSessions(open) {
   const S = snap.sessions, A = snap.agents || [], live = new Set(S.map(s => s.sid)), subs = new Map();
   for (const s of S) if (s.parent && live.has(s.parent)) { if (!subs.has(s.parent)) subs.set(s.parent, []); subs.get(s.parent).push(s); }
-  const row = (s, cls = '') => `<div class="item${cls}" data-sid="${s.sid}"><span class="dot ${s.health}"></span><div class="t"><div class="n">${esc(s.name)}${SUNTAG(s)}</div>
+  const row = (s, cls = '') => `<div class="item${cls}" data-sid="${s.sid}">${AV(s, 'pav')}<span class="dot ${s.health}"></span><div class="t"><div class="n">${esc(s.name)}${SUNTAG(s)}</div>
       <div class="m">${esc((s.model || '—').replace('claude-', ''))} · ${fmtTok(s.todayTok)} · ${s.health === 'working' ? Math.round(s.tps) + ' tok/s' : s.health + ' · ' + ago(s.sinceUse ?? s.sinceWrite) + ' ago'}${RELAYS(s)}${s.owner ? ' · ' + INAPP() : ''}${PEERTAG(s)}${pcBadges(s.sid)}</div>${cls ? '' : pcIntro(s.sid)}</div>›</div>`;
   const tree = s => { const k = subs.get(s.sid); if (!k) return row(s); const on = subsOpen.has(s.sid);
     return row(s) + `<div class="subtog" data-sub="${s.sid}">${on ? '▾' : '▸'} ${k.length} sub-session${k.length > 1 ? 's' : ''}</div>` + (on ? k.map(x => row(x, ' insub')).join('') : ''); };
@@ -579,7 +581,7 @@ function renderSplit(force) {
   const tid = s.owner || (!s.onPeer && s.pane) || null;            // a Mesh terminal, or the tmux pane the session runs in (2026-11-15)
   const kind = tid ? 'term' : 'ctl', key = kind + s.sid;
   $('#tpName').textContent = s.name; $('#tpSub').textContent = s.health === 'working' ? 'Working…' : s.onPeer ? 'on the other Mac' : (s.model || '').replace('claude-', '');
-  const head = `<span class="dot ${s.health}"></span><b>${esc(s.name)}</b><span class="pm">${s.health === 'working' ? Math.round(s.tps) + ' tok/s · ' : ''}${fmtTok(s.todayTok)}</span>`;
+  const head = `${AV(s, 'pav sm', 512)}<span class="dot ${s.health}"></span><b>${esc(s.name)}</b><span class="pm">${s.health === 'working' ? Math.round(s.tps) + ' tok/s · ' : ''}${fmtTok(s.todayTok)}</span>`;
   if (!force && paneKind === key) {                              // live refresh without touching the terminal or the text box
     $('#paneHead .ph').innerHTML = head;
     if (kind === 'ctl') { $('#pStats').innerHTML = paneStats(s); $('#pLog').innerHTML = paneLog(s); }
@@ -637,7 +639,7 @@ function renderGrid() {
     const col = FAMILY_COLOR[s.family] || '#9fb4d8', pct = s.ctxMax ? Math.min(100, s.ctx / s.ctxMax * 100) : 0, work = s.health === 'working';
     const last = [...s.log].reverse().find(l => l.kind === 'claude' || l.kind === 'you' || l.kind === 'tool');
     c.className = 'gcard ' + s.health;
-    c.innerHTML = `<div class="gh"><span class="dot ${s.health}"></span><span class="gn">${esc(s.name)}</span>${SUNTAG(s)}</div>
+    c.innerHTML = `<div class="gh">${AV(s, 'pav sm')}<span class="dot ${s.health}"></span><span class="gn">${esc(s.name)}</span>${SUNTAG(s)}</div>
       <div class="gm"><span style="color:${col}">${esc((s.model || '—').replace('claude-', '').replace(/-\d.*$/, ''))}</span><span>${s.owner ? INAPP() : s.kind === 'bg' ? 'bg' : 'terminal'}</span>${s.serverUses ? '<span>⇄ server</span>' : ''}${s.relaysToday ? `<span class="relays">⇄ ${s.relaysToday}</span>` : ''}</div>
       <div class="gv"><b>${work ? Math.round(s.tps) : fmtTok(s.todayTok)}</b><small>${work ? ' tok/s' : ' today'}</small><span class="gs">${work ? fmtTok(s.todayTok) : ago(s.sinceWrite) + ' ago'}</span></div>
       <svg class="gsp" viewBox="0 0 100 26" preserveAspectRatio="none"><path d="${sparkPath(s.spark || [0, 0], s.sparkPeak, 100, 26)}" stroke="${col}" /></svg>

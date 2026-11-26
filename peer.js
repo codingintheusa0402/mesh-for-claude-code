@@ -118,6 +118,12 @@ function createPeer({ userData, selfKind }) {
     },
     // raw SSE response of the peer's terminal `id` (with the peer: prefix), for the desktop window's mirror
     openTerm: id => request('GET', '/api/term/' + encodeURIComponent(id.slice(PREFIX.length)), { stream: true, timeout: 0 }).then(up => watchStream(up)),
+    // the peer's session pictures (avatars.js): its picks map from the last poll, and one cropped picture as bytes
+    avatars: () => (online && last && last.avatars) || null,
+    fetchRaw: (p, query) => request('GET', p, { query, stream: true, timeout: 15000 }).then(res => new Promise((ok, no) => {
+      const bufs = []; let n = 0; res.on('data', d => { n += d.length; if (n > 30e6) res.destroy(new Error('too big')); else bufs.push(d); });
+      res.on('end', () => ok({ status: res.statusCode, type: String(res.headers['content-type'] || ''), buf: Buffer.concat(bufs) })); res.on('error', no);
+    })),
     upload: (name, b64) => request('POST', '/api/upload', { body: { name, b64 }, timeout: 30000 }).then(r => r.json),
     termResize: (id, cols, rows) => request('POST', '/api/term/' + encodeURIComponent(id.slice(PREFIX.length)), { body: { resize: { cols, rows } } }).then(r => r.json),
     termWrite: (id, data) => request('POST', '/api/term/' + encodeURIComponent(id.slice(PREFIX.length)), { body: { data } }).then(r => r.json),

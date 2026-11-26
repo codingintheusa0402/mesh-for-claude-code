@@ -81,6 +81,7 @@
       "live-job.js",
       "phone-server.js",
       "peer.js",
+      "avatars.js",
       "peer-config.js",
       "view-peers.js",
       "handoff.js",

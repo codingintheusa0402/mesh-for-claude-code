@@ -81,7 +81,10 @@
     return (window.FAMILY_COLOR || {})[s.family] || '#9fb4d8';
   }
   const initial = s => { const m = String(s.name || '?').trim().match(/[\p{L}\p{N}]/u); return m ? m[0].toUpperCase() : '?'; };
-  const avatar = (s, cls = '') => `<span class="ct-av${cls}" style="--av:${esc(colorOf(s))}"><b>${esc(initial(s))}</b></span>`;
+  // a session picture (renderer/avatars.js, keyed by the session name) replaces the initial; click = true opens the picker
+  const picOf = (s, size) => (window.meshAvatars && window.meshAvatars.src(s.name, size)) || null;
+  const avatar = (s, cls = '', click = false, size = 256) => { const pic = picOf(s, size);
+    return `<span class="ct-av${cls}${pic ? ' pic' : ''}" style="--av:${esc(colorOf(s))}"${click ? ` data-avpick="${esc(s.sid)}" title="Change picture"` : ''}>${pic ? `<img src="${esc(pic)}" alt="" draggable="false">` : `<b>${esc(initial(s))}</b>`}</span>`; };
   const lastT = s => { const l = s.log || [], t = l.length ? l[l.length - 1].t : 0; const u = s.sinceUse ?? s.sinceWrite; return Math.max(t || 0, u != null ? Date.now() - u * 1000 : 0); };
   // another window (a detached room or list) marked something seen: take it over so badges match everywhere
   addEventListener('storage', e => {
@@ -112,7 +115,7 @@
       const badge = n ? `<span class="ct-badge">${n > 300 ? '300+' : n}</span>` : s.health === 'waiting' ? '<span class="ct-badge dot" title="Waiting for you"></span>' : '';
       const typing = s.health === 'working' ? '<span class="ct-typing" title="Working"><i></i><i></i><i></i></span>' : '';
       const subs = s.subagents ? `<span class="ct-cnt">${s.subagents + 1}</span>` : '';
-      return `<div class="ct-row${s.sid === selected ? ' sel' : ''}" data-sid="${esc(s.sid)}">${avatar(s)}
+      return `<div class="ct-row${s.sid === selected ? ' sel' : ''}" data-sid="${esc(s.sid)}">${avatar(s, '', true)}
         <div class="ct-mid"><div class="ct-name"><span class="ct-n">${esc(s.name)}</span>${subs}${host}</div><div class="ct-prev">${esc(preview(s))}</div></div>
         <div class="ct-side"><span class="ct-time">${esc(fmtWhen(lastT(s)))}</span>${typing || badge}</div></div>`;
     }).join('');
@@ -402,8 +405,8 @@
     else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && viewer.keys.length > 1) { e.preventDefault(); e.stopPropagation(); viewer.i = (viewer.i + (e.key === 'ArrowLeft' ? -1 : 1) + viewer.keys.length) % viewer.keys.length; viewer.show(); }
   }, true);
   function head(R, s) {
-    const k = [s.name, s.health, colorOf(s), s.model, s.subagents, s.hostLabel].join('|'); if (R.headKey === k) return; R.headKey = k;
-    R.el.querySelector('.cr-av').innerHTML = avatar(s);
+    const k = [s.name, s.health, colorOf(s), s.model, s.subagents, s.hostLabel, picOf(s, 512)].join('|'); if (R.headKey === k) return; R.headKey = k;
+    R.el.querySelector('.cr-av').innerHTML = avatar(s, '', true, 512);
     R.el.querySelector('.cr-name').textContent = s.name;
     R.el.querySelector('.cr-sub').innerHTML = `${SVG.person}<span>${2 + (s.subagents || 0)}</span>${s.model ? `<span class="cr-model">${esc(String(s.model).replace('claude-', ''))}</span>` : ''}${s.hostLabel ? `<span class="cr-model">${esc(s.hostLabel)}</span>` : ''}`;
     R.back.querySelector('span').textContent = NAME;
@@ -551,7 +554,7 @@
     seen(sid) { const s = sessions().find(x => x.sid === sid); if (s && on) { markSeen(s); lastListHtml = ''; } },
     // add files (paths) to a session's input bar as attachments
     attach(sid, paths) { const R = [...rooms.values()].find(r => r.sid === sid); if (R && Array.isArray(paths)) attach(R, paths.map(p => ({ p: String(p) }))); return !!R; },
-    avatar: (s, cls) => avatar(s, cls ? ' ' + cls : ''), badge: badgeOf,
+    avatar: (s, cls, click) => avatar(s, cls ? ' ' + cls : '', !!click), badge: badgeOf,
     // detached windows
     popRoom, popSessions, tearOff, outside,
     isOut: id => !!(terms.get(id) && terms.get(id)._ctOut),

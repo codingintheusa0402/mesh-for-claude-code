@@ -65,6 +65,9 @@ body.chat-theme .ct-av b { font: 700 19px var(--ct-font); color: #fff; text-shad
 body.chat-theme .ct-av.sm { width: 36px; height: 36px; border-radius: 13px; }
 body.chat-theme .ct-av.sm b { font-size: 15px; }
 body.chat-theme .ct-av.ghost { visibility: hidden; height: 0; }
+/* a session picture (renderer/avatars.js) fills the squircle */
+body.chat-theme .ct-av.pic { background: #1d1f26; overflow: hidden; }
+body.chat-theme .ct-av.pic img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit; }
 body.chat-theme .ct-mid { flex: 1; min-width: 0; padding-top: 1px; }
 body.chat-theme .ct-name { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 14.5px; font-weight: 700; line-height: 20px; color: var(--ct-text); }
 body.chat-theme .ct-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }

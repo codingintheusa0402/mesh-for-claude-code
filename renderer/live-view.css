@@ -88,3 +88,7 @@
 .lv-cnt { flex: none; font-size: 10.5px; color: #fff; background: var(--lv-bad); border-radius: 8px; padding: 0 6px; }
 .lv-cx { padding: 0 10px 8px; display: flex; flex-direction: column; gap: 4px; } .lv-res { color: #aab3c8; max-height: 260px; overflow: auto; }
 .lv-call.error .lv-res { color: #ffb3bb; }
+
+/* the session's picture or initial (renderer/avatars.js) */
+.lv-h1 .lv-av { width: 26px; height: 26px; margin-right: 2px; }
+.lv-h1 .lv-av b { font-size: 12px; }
