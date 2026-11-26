@@ -179,7 +179,7 @@ function createPhoneServer(ctx) {
       return json(res, 200, await peer.forward('POST', p, b).catch(e => ({ ok: false, err: `${peer.label()}: ${e.message}` })));
     if (p.startsWith('/api/term/') && peer && peer.ownsTerm(termId(p)))
       return json(res, 200, await (b.resize ? peer.termResize(termId(p), b.resize.cols, b.resize.rows) : peer.termWrite(termId(p), String(b.data || ''))).catch(() => ({ ok: false })));
-    if (p === '/api/send') return json(res, 200, await ctx.sendToSession(b.sid, String(b.text || '')));
+    if (p === '/api/send') return json(res, 200, await ctx.sendToSession(b.sid, String(b.text || ''), { now: !!b.now }));
     if (p === '/api/interrupt') return json(res, 200, await ctx.interruptSession(b.sid));
     if (p === '/api/resume') {
       if (b.engine) {                                                    // only Mesh's own switch, the credits fallback, or Kevin's own request; always logged
