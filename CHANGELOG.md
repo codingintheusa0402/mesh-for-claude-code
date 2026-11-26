@@ -2,6 +2,10 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-27
+
+- **iPhone page: the chat theme, light and dark, and profile pictures everywhere.** The phone page can now wear the desktop chat theme's look (the same palette as renderer/chat-theme.css): Light has a white list and Grid, the blue-grey room behind a session, white key and input pills and a yellow send button; Dark has #1E1E1E lists, a #1C1C1C room, grey pills and the same yellow. The terminal stays a dark rounded card in both, and Live keeps its dark view. **Theme** in the ☰ drawer cycles Default (the previous look) / Light / Dark / Match System; the choice is kept on the phone, and new phones start on Match System. Session pictures are now rounded squares (about 38 % corners) wherever a session shows: 44 px in the drawer (which no longer shows the `<>` icon) and the Sessions list, 40 px on Grid cards, 32 px in the session header (it was 22 px). Sessions without a picture show their initial on the session's colour, like the desktop, and GIFs stay animated. Drawer rows now show the session's last line under its name, like a chat list. The theme's label follows `chatThemeName` in mesh.local.json.
+
 ## 2026-11-26
 
 - **Orbit view: a session's picture pops up over its bubble.** Rest the pointer on a bubble (about 0.6 s without moving) and the session's picture (GIFs animated, else its initial) pops up above it with its name, follows the bubble, and fades out when the pointer moves off, leaves the view or clicks. Resting on the mother star shows the sun session's picture. Pure DOM (renderer/orbit-avatar.js); nothing runs while the pointer is outside the orbit view.

@@ -317,7 +317,115 @@ body[data-peer] #split, body[data-peer] #grid { backface-visibility: hidden; con
 #liveSheet .lv { font-size: 13px; } #liveSheet .lv-views button { font-size: 13px; padding: 6px 12px; } #liveSheet .lv-cl { padding: 8px 12px; }
 #liveSheet .lv-shot { min-height: 220px; } #liveSheet .lv-btop { max-height: 38%; }
 
-/* session pictures (renderer/avatars.js) */
-.pav { width: 34px; height: 34px; margin-right: 10px; }
-.pav.sm { width: 22px; height: 22px; margin-right: 6px; }
-.item .pav { margin-right: 0; }
+/* session profile pictures (renderer/avatars.js), the messenger's rounded square (~38 % corners) in every look:
+   44 px in the drawer and the Sessions list, 40 px on grid cards, 32 px in the session header. GIFs stay animated. */
+.mav.pav { width: 44px; height: 44px; border-radius: 38%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.05); }
+.mav.pav b { font-size: 18px; }
+.mav.pav.gav { width: 40px; height: 40px; } .mav.pav.gav b { font-size: 17px; }
+.mav.pav.hd { width: 32px; height: 32px; } .mav.pav.hd b { font-size: 14px; }
+.mav.pav.dav { margin: 0; }
+.mav.pav.pic { background: #1d1f26; }
+.gh { gap: 9px; }
+.gh .gn { flex: 1; min-width: 0; }
+#paneHead .ph { gap: 9px; }
+/* the drawer rows: picture, name over the last line, status on the right (like a chat list) */
+#drawer .dItem { gap: 12px; padding: 8px 10px; }
+#drawer .dT { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+#drawer .dT .cn { flex: none; font-size: 15.5px; font-weight: 600; }
+#drawer .dPrev { font-size: 12.5px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#drawer .dPrev:empty { display: none; }
+#drawer .dVal { flex: none; color: var(--dim); font-size: 14px; }
+:root { --term-bg: #000000; }
+
+/* ================= chat theme (2026-11-27): the desktop chat theme's palette (renderer/chat-theme.css) on the phone.
+   index.html / phone.js setTheme put html.ct + data-theme="light|dark" (Match System follows the phone); without .ct
+   everything above is the Default look. The terminal stays dark in both; the Live sheet keeps its dark view. ================= */
+html.ct {
+  --ct-room: #bacee0; --ct-list: #ffffff; --ct-head: #ffffff; --ct-sel: #ececec; --ct-press: #e8e8e8; --ct-line: #ececec; --ct-line2: #e2e2e2;
+  --ct-text: #191919; --ct-dim: #8a8a8a; --ct-chip: #f2f2f2; --ct-card: #f7f7f7; --ct-pop: #ffffff; --ct-input: #ffffff;
+  --ct-me: #fee500; --ct-me-text: #191919; --ct-red: #ff5a36; --ct-link: #2f6bd6;
+  --bg: var(--ct-list); --panel: var(--ct-card); --line: var(--ct-line2); --text: var(--ct-text); --dim: var(--ct-dim); --acc: var(--ct-text);
+  --ok: #1fa463; --warn: #e0a100; --err: #ff5a36; --term-bg: #17171a;
+  --ct-font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "SF Pro Text", "Helvetica Neue", sans-serif;
+  color-scheme: light;
+}
+html.ct[data-theme="dark"] {
+  --ct-room: #1c1c1c; --ct-list: #1e1e1e; --ct-head: #1e1e1e; --ct-sel: #2e2e2e; --ct-press: #363636; --ct-line: #2c2c2c; --ct-line2: #363636;
+  --ct-text: #ffffff; --ct-dim: #9a9a9a; --ct-chip: #3a3a3a; --ct-card: #262626; --ct-pop: #2c2c2c; --ct-input: #2a2a2a; --ct-link: #8fb4ff;
+  --ok: #5be3a4; --warn: #f2c14e; --term-bg: #141414;
+  color-scheme: dark;
+}
+html.ct body, html.ct #app { background: var(--ct-list); color: var(--ct-text); font-family: var(--ct-font); }
+html.ct button { color: var(--ct-text); border-color: var(--ct-line2); }
+html.ct button.primary, html.ct #pane .tin button.primary { background: var(--ct-me) !important; color: var(--ct-me-text) !important; border-color: var(--ct-me) !important; }
+html.ct input, html.ct textarea { color: var(--ct-text); background: var(--ct-input); border-color: var(--ct-line2); }
+html.ct ::placeholder { color: var(--ct-dim); }
+/* header: the room's colour over a session, the list's over Grid; chip-grey round buttons and title pill */
+html.ct #top { background: var(--ct-room) !important; }
+html.ct body[data-view="grid"] #top { background: var(--ct-head) !important; }
+html.ct #navBtn, html.ct #vnc .vbtn, html.ct #topSw .swtop, html.ct #disp .dbtn { background: var(--ct-chip) !important; border-color: transparent !important; color: var(--ct-text); }
+html.ct[data-theme="light"] body[data-view="split"] #navBtn, html.ct[data-theme="light"] body[data-view="split"] #vnc .vbtn,
+html.ct[data-theme="light"] body[data-view="split"] #titlePill { background: rgba(255,255,255,.55) !important; }
+html.ct #titlePill { background: var(--ct-chip); border-color: transparent; }
+html.ct #titlePill b { font-weight: 700; }
+/* the session = a chat room: room background, the terminal as a dark rounded card, white keys, a white input pill and a yellow send */
+html.ct body[data-view="split"] #split, html.ct body[data-peer="split"] #split { background: var(--ct-room); border-top-color: transparent; }
+html.ct #pxt, html.ct #xt { background: var(--term-bg); border: 0; border-radius: 14px; }
+html.ct #pxt .xterm-viewport, html.ct #xt .xterm-viewport { background-color: var(--term-bg) !important; }
+html.ct body[data-view="split"] #app { background: var(--ct-room); }
+html.ct[data-theme="light"] #disp .dbtn.off b, html.ct[data-theme="light"] #topSw .swtop.off b { color: #a87400; }
+html.ct .keys button { background: var(--ct-input); border-color: transparent; }
+html.ct[data-theme="light"] .keys button { box-shadow: 0 1px 1px rgba(0,0,0,.06); }
+html.ct #pane .tin { background: var(--ct-input); border-color: transparent; }
+html.ct #pane .tin button:not(.primary) { background: var(--ct-chip); border-color: transparent; }
+html.ct #paneHead .pm { color: var(--ct-dim); }
+html.ct[data-theme="light"] #paneHead button { background: rgba(255,255,255,.55); border-color: transparent; }
+html.ct .chips button { background: var(--ct-chip); border-color: transparent; }
+html.ct[data-theme="light"] #pScroll .chips button { background: #fff; }
+html.ct .log .you { color: var(--ct-text); } html.ct .log .claude { color: var(--ct-text); }
+html.ct[data-theme="light"] .log .err { color: #d6334a; }
+html.ct .log div { border-bottom-color: var(--ct-line); }
+/* Grid = the friends list: white page, soft grey cards */
+html.ct body[data-view="grid"] #grid, html.ct body[data-peer="grid"] #grid { background: var(--ct-list); }
+html.ct .gcard { background: var(--ct-card); border-color: transparent; }
+html.ct .gcard.working { border-color: rgba(31,164,99,.45); } html.ct .gcard.error { border-color: rgba(255,90,54,.55); }
+html.ct .gcard.waiting, html.ct .gcard.quiet { border-color: rgba(224,161,0,.45); }
+html.ct .gn { font-weight: 700; }
+html.ct .gbar, html.ct .bar { background: var(--ct-line2); }
+/* the drawer = the chat list */
+html.ct #drawer, html.ct body #drawer { background: var(--ct-list) !important; }
+html.ct #drawer .dHead { font-size: 22px; font-weight: 700; letter-spacing: -.2px; }
+html.ct #drawer .dRow, html.ct #drawer .dItem { color: var(--ct-text); border-radius: 12px; }
+html.ct #drawer .dRow.on, html.ct #drawer .dItem.on { background: var(--ct-sel); }
+html.ct #drawer .dRow:active, html.ct #drawer .dItem:active { background: var(--ct-press); }
+html.ct #drawer .ic { color: var(--ct-dim); }
+html.ct #drawer .dSec { color: var(--ct-dim); }
+html.ct #drawer .dDot { background: var(--ct-red); }
+html.ct #drawer .dSpin { border-color: var(--ct-line2); border-top-color: var(--ct-text); }
+html.ct[data-theme="light"] body.navOpen #app { box-shadow: -10px 0 30px rgba(0,0,0,.18); }
+/* sheets, lists, cards */
+html.ct .sheet { background: var(--ct-pop); border-color: var(--ct-line); box-shadow: 0 -12px 40px rgba(0,0,0,.18); }
+html.ct .grab { background: var(--ct-line2); }
+html.ct .item, html.ct .subtog { border-bottom-color: var(--ct-line); }
+html.ct .item .n { font-weight: 600; }
+html.ct .kpi, html.ct .pcbox { background: var(--ct-card); border-color: transparent; }
+html.ct .tag { border-color: var(--ct-line2); }
+html.ct .md code { background: var(--ct-chip); } html.ct .md pre { background: var(--ct-card); }
+html.ct .pcnext, html.ct .pcsrc, html.ct .lvs-back { color: var(--ct-link); }
+html.ct .pctabs button.on { border-color: var(--ct-text); color: var(--ct-on-fg, var(--ct-list)); background: var(--ct-text); }
+html.ct[data-theme="light"] .peerTag { color: #7b4fd6; }
+html.ct[data-theme="light"] .relays { color: #b86b00; }
+html.ct[data-theme="light"] .stag.sun { color: #a86f00; border-color: rgba(168,111,0,.45); }
+html.ct[data-theme="light"] .stag.dup { color: #d6334a; border-color: rgba(214,51,74,.4); }
+html.ct[data-theme="light"] .uview { --panel: var(--ct-card); --panel2: rgba(0,0,0,.08); --line2: rgba(0,0,0,.14); --faint: #a6a6a6; }
+html.ct[data-theme="dark"] .uview { --panel: var(--ct-card); --panel2: rgba(255,255,255,.1); }
+/* the rest */
+html.ct #toast { background: rgba(25,25,25,.88); color: #fff; border-color: transparent; }
+html.ct #offline { background: color-mix(in srgb, var(--ct-list) 94%, transparent); color: var(--ct-dim); }
+html.ct #offline .spin { border-color: var(--ct-line2); border-top-color: var(--ct-text); }
+html.ct #kbBar { background: var(--ct-head); border-top-color: var(--ct-line); }
+html.ct #kbDone { color: var(--ct-link); }
+/* Live stays the dark view it was built as (live-view.css); in the dark theme it takes the theme's greys */
+html.ct #liveSheet { --bg: #1e1e1e; --bg2: #1e1e1e; --text: #f2f2f2; --dim: #9a9a9a; --line: rgba(255,255,255,.1); color: #f2f2f2; color-scheme: dark; }
+html.ct #liveSheet button { color: #f2f2f2; border-color: rgba(255,255,255,.14); }
+html.ct #liveSheet .lvs-back { color: #8fb4ff; }

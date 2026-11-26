@@ -8,6 +8,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const APP_NAME = require('./mesh-name').name;           // the app's name — one setting (mesh-name.js)
+const CHAT_THEME_NAME = String(require('./mesh-name').chatThemeName || 'Chat');   // the chat theme's label (mesh.local.json)
 
 const PORT = +process.env.MESH_PHONE_PORT || 47320;   // env override: isolated test runs
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.webp': 'image/webp', '.glb': 'model/gltf-binary', '.wasm': 'application/wasm', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
@@ -60,6 +61,7 @@ function createPhoneServer(ctx) {
       fs.readFile(f, (err, data) => {
         if (err) { res.writeHead(404); return res.end(); }
         if (/\.(html|js)$/.test(f) && /index\.html$|app-name\.js$/.test(f)) data = Buffer.from(String(data).split('Mesh for Claude Code').join(APP_NAME));   // the configured name
+        if (/app-name\.js$/.test(f)) data = Buffer.from(String(data).split("|| 'Chat';").join('|| ' + JSON.stringify(CHAT_THEME_NAME) + ';'));   // the chat theme's label
         res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'no-cache' }); res.end(data);
       });
       return;

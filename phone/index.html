@@ -8,6 +8,14 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Mesh for Claude Code">
 <meta name="theme-color" content="#000000">
+<script>
+// the look, before the first paint (phone.js setTheme): Default, or the chat theme Light / Dark / Match System
+(function () { var p = 'system'; try { p = localStorage.getItem('mesh.phoneTheme') || 'system'; } catch (e) { }
+  var t = p === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : p === 'light' || p === 'dark' ? p : 'default';
+  var h = document.documentElement; h.dataset.theme = t; if (t !== 'default') h.classList.add('ct');
+  var m = document.querySelector('meta[name="theme-color"]'); if (m) m.content = t === 'light' ? '#bacee0' : t === 'dark' ? '#1c1c1c' : '#000000';
+  var b = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]'); if (b && t === 'light') b.content = 'default'; })();
+</script>
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" id="manifest">
 <title>Mesh for Claude Code</title>

@@ -1,6 +1,8 @@
 // The app's name for the pages: the desktop gets it from the main process (mesh-name.js via preload); the phone page is
 // served with the default below already swapped for the configured name (phone-server.js). Loaded before every script.
 var APP_NAME = (window.api && window.api.appName) || 'Mesh for Claude Code';
+// the chat theme's label (mesh.local.json chatThemeName); the phone page gets it swapped in the same way
+var CHAT_THEME_NAME = (window.api && window.api.chatThemeName) || 'Chat';
 (function () {
   const swap = s => s.split('Mesh for Claude Code').join(APP_NAME);
   document.title = swap(document.title);

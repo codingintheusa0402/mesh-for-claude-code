@@ -40,6 +40,24 @@ const ICON = {
   spark: IC('<path d="M12 3v18M5 8c4 0 7 2 7 4s3 4 7 4M5 16c4 0 7-2 7-4s3-4 7-4"/>', 17),
   check: IC('<path d="M5 12l5 5 9-10"/>', 15),
 };
+// ---------- the look (2026-11-27): Default, or the desktop chat theme's Light / Dark / Match System ----------
+// index.html sets html[data-theme] before the first paint; phone.css holds both palettes. Kept per phone (localStorage).
+const THEMES = ['default', 'light', 'dark', 'system'];
+let themePref = (() => { try { const v = localStorage.getItem('mesh.phoneTheme'); return THEMES.includes(v) ? v : 'system'; } catch { return 'system'; } })();
+const themeLabel = p => p === 'default' ? 'Default' : p === 'system' ? 'Match System' : CHAT_THEME_NAME + (p === 'light' ? ' Light' : ' Dark');
+const darkMQ = matchMedia('(prefers-color-scheme: dark)');
+const themeNow = () => themePref === 'system' ? (darkMQ.matches ? 'dark' : 'light') : themePref;
+const termTheme = () => { const bg = (getComputedStyle(document.documentElement).getPropertyValue('--term-bg') || '').trim() || '#000000';
+  return { background: bg, foreground: '#ececec', cursor: '#ede6d6', selectionBackground: 'rgba(255,255,255,.25)' }; };
+function setTheme(p, quiet) {
+  if (p) { themePref = p; try { localStorage.setItem('mesh.phoneTheme', p); } catch { } }
+  const t = themeNow(), h = document.documentElement; h.dataset.theme = t; h.classList.toggle('ct', t !== 'default');
+  const m = document.querySelector('meta[name="theme-color"]'); if (m) m.content = t === 'light' ? '#bacee0' : t === 'dark' ? '#1c1c1c' : '#000000';
+  try { if (term) term.options.theme = termTheme(); } catch { }   // (term is declared further down: TDZ on the first call)
+  if (!quiet && typeof render === 'function') { const d = $('#drawer'); d._html = ''; renderDrawer(); }
+}
+darkMQ.addEventListener && darkMQ.addEventListener('change', () => { if (themePref === 'system') setTheme(null); });
+setTheme(null, true);
 function renderVnc(snap) {
   const el = $('#vnc'), p = snap.peer, macs = [];
   if (/^[\w.-]+$/.test(location.hostname)) macs.push({ name: macName(p && p.selfLabel) || 'This Mac', host: location.hostname, on: true });
@@ -246,8 +264,9 @@ function setTab(t, quiet) {
 }
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
 
-// a session's picture (renderer/avatars.js), only when one was picked — the phone keeps its look otherwise
-const AV = (s, cls, size = 256) => window.meshAvatars ? window.meshAvatars.html(s, { cls, size, letter: false }) : '';
+// a session's profile picture (renderer/avatars.js): the picked picture or GIF, else its initial on the session's colour,
+// as a rounded square (phone.css .pav) — in the drawer, the Sessions list, the grid cards and the session header
+const AV = (s, cls, size = 256) => window.meshAvatars ? window.meshAvatars.html(s, { cls, size, letter: true }) : '';
 // ---------- sessions list ----------
 const subsOpen = new Set();                                              // main sessions whose sub-sessions are unfolded (folded by default)
 function renderSessions(open) {
@@ -440,7 +459,7 @@ const TLH = 1.12;   // terminal line height: a little air between lines, like th
 function mountTerm(host, id, box, sid) {
   termId = id; tes && tes.close(); if (term) { term._ro && term._ro.disconnect(); term._stamps && term._stamps.dispose(); term.dispose(); }
   term = new Terminal({ fontFamily: 'ui-monospace, "SF Mono", Menlo, "Apple Symbols", "Hiragino Sans", monospace', fontSize: 9, lineHeight: TLH, fontWeightBold: '600', letterSpacing: 0, convertEol: false, disableStdin: false, scrollback: 20000,
-    theme: { background: '#000000', foreground: '#ececec', cursor: '#ede6d6', selectionBackground: 'rgba(255,255,255,.25)' } });
+    theme: termTheme() });
   term.open(host); touchScroll(host);
   // a time column beside each prompt / reply (term-stamps.js; times from the session's transcript on the Mac)
   if (window.attachTermStamps && sid) term._stamps = attachTermStamps(term, host, { sid: () => sid, fetch: s => api('/api/stamps?sid=' + encodeURIComponent(s)) });
@@ -581,7 +600,7 @@ function renderSplit(force) {
   const tid = s.owner || (!s.onPeer && s.pane) || null;            // a Mesh terminal, or the tmux pane the session runs in (2026-11-15)
   const kind = tid ? 'term' : 'ctl', key = kind + s.sid;
   $('#tpName').textContent = s.name; $('#tpSub').textContent = s.health === 'working' ? 'Working…' : s.onPeer ? 'on the other Mac' : (s.model || '').replace('claude-', '');
-  const head = `${AV(s, 'pav sm', 512)}<span class="dot ${s.health}"></span><b>${esc(s.name)}</b><span class="pm">${s.health === 'working' ? Math.round(s.tps) + ' tok/s · ' : ''}${fmtTok(s.todayTok)}</span>`;
+  const head = `${AV(s, 'pav hd')}<span class="dot ${s.health}"></span><b>${esc(s.name)}</b><span class="pm">${s.health === 'working' ? Math.round(s.tps) + ' tok/s · ' : ''}${fmtTok(s.todayTok)}</span>`;
   if (!force && paneKind === key) {                              // live refresh without touching the terminal or the text box
     $('#paneHead .ph').innerHTML = head;
     if (kind === 'ctl') { $('#pStats').innerHTML = paneStats(s); $('#pLog').innerHTML = paneLog(s); }
@@ -639,7 +658,7 @@ function renderGrid() {
     const col = FAMILY_COLOR[s.family] || '#9fb4d8', pct = s.ctxMax ? Math.min(100, s.ctx / s.ctxMax * 100) : 0, work = s.health === 'working';
     const last = [...s.log].reverse().find(l => l.kind === 'claude' || l.kind === 'you' || l.kind === 'tool');
     c.className = 'gcard ' + s.health;
-    c.innerHTML = `<div class="gh">${AV(s, 'pav sm')}<span class="dot ${s.health}"></span><span class="gn">${esc(s.name)}</span>${SUNTAG(s)}</div>
+    c.innerHTML = `<div class="gh">${AV(s, 'pav gav')}<span class="dot ${s.health}"></span><span class="gn">${esc(s.name)}</span>${SUNTAG(s)}</div>
       <div class="gm"><span style="color:${col}">${esc((s.model || '—').replace('claude-', '').replace(/-\d.*$/, ''))}</span><span>${s.owner ? INAPP() : s.kind === 'bg' ? 'bg' : 'terminal'}</span>${s.serverUses ? '<span>⇄ server</span>' : ''}${s.relaysToday ? `<span class="relays">⇄ ${s.relaysToday}</span>` : ''}</div>
       <div class="gv"><b>${work ? Math.round(s.tps) : fmtTok(s.todayTok)}</b><small>${work ? ' tok/s' : ' today'}</small><span class="gs">${work ? fmtTok(s.todayTok) : ago(s.sinceWrite) + ' ago'}</span></div>
       <svg class="gsp" viewBox="0 0 100 26" preserveAspectRatio="none"><path d="${sparkPath(s.spark || [0, 0], s.sparkPeak, 100, 26)}" stroke="${col}" /></svg>
@@ -820,13 +839,20 @@ function renderDrawer() {
   const html = `<div class="dHead">${esc(APP_NAME)}</div>
     <button class="dRow${view === 'grid' ? ' on' : ''}" data-go="grid"><span class="ic">▦</span>Grid</button>
     <button class="dRow" data-go="history"><span class="ic">↺</span>All sessions</button>
+    <button class="dRow" data-theme-next><span class="ic">◐</span><span class="cn">Theme</span><span class="dVal">${esc(themeLabel(themePref))}</span></button>
     <div class="dSec">Sessions</div>
-    <div class="dList">${S.map(x => `<button class="dItem${view === 'split' && x.sid === splitSid ? ' on' : ''}" data-sid="${x.sid}"><span class="ic">${x.kind === 'hermes' ? ICON.spark : ICON.code}</span><span class="cn">${esc(x.name)}${SUNTAG(x)}</span>${st(x)}</button>`).join('')
+    <div class="dList">${S.map(x => `<button class="dItem${view === 'split' && x.sid === splitSid ? ' on' : ''}" data-sid="${x.sid}">${AV(x, 'pav dav')}<span class="dT"><span class="cn">${esc(x.name)}${SUNTAG(x)}</span><span class="dPrev">${esc(preview(x))}</span></span>${st(x)}</button>`).join('')
       || `<div class="meta" style="padding:10px 14px">${snap.ready ? 'No sessions running.' : 'Connecting…'}</div>`}</div>`;
   // rebuild only when something shows differently, and never under a finger: a replaced element loses its touchend
   if (html === d._html || window.__navDrag) return; d._html = html; d.innerHTML = html;
   d.querySelectorAll('[data-sid]').forEach(b => b.onclick = () => { toggleNav(false); pickSplit(b.dataset.sid); });
   d.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { toggleNav(false); setTab(b.dataset.go); });
+  const tb = d.querySelector('[data-theme-next]'); if (tb) tb.onclick = () => { const i = THEMES.indexOf(themePref); setTheme(THEMES[(i + 1) % THEMES.length]); toast('Theme: ' + themeLabel(themePref)); };
+}
+// the drawer row's second line, like a chat list: what the session did last
+function preview(x) {
+  const l = [...(x.log || [])].reverse().find(v => v.kind === 'claude' || v.kind === 'you' || v.kind === 'tool');
+  return l ? (l.kind === 'you' ? '› ' : '') + String(l.text || '').replace(/[*`#>]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 120) : (x.model || '').replace('claude-', '');
 }
 
 // ---------- press-and-hold a session: what it does, skills, commands, tools, CLAUDE.md ----------
