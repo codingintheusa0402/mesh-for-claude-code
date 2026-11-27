@@ -185,7 +185,7 @@ ipcMain.handle('hermes:new', async (_e, o) => {
 });
 ipcMain.handle('hermes:here', () => hermesHere());
 // One server per session (2026-11-14): a Claude session belongs to the Mac that last wrote its transcript (each Mac has its
-// own home folder, so the last "cwd" in it says which). With the Macs' link down, the MacBook once resumed GCX Mesh from
+// own home folder, so the last "cwd" in it says which). With the Macs' link down, the MacBook once resumed the app's own session from
 // its synced copy while it ran on the mini: two copies of one conversation. Resuming it on the other Mac now opens it on
 // its own Mac (its terminal shows here) or, if that Mac can't be reached, refuses; Move (handoff.js) changes the owner.
 function ownerElsewhere(sid) {

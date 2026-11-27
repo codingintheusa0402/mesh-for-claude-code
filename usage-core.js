@@ -12,7 +12,7 @@ const fs = require('fs'), path = require('path');
 const { DatabaseSync } = require('node:sqlite');
 const { createFolders } = require('./project-folders');
 const LINEAGE = require('./lineage');
-// projects that are one piece of work under several names (local/usage-projects.json: [{ "match": "^ticket-reporter$", "project": "Ticket Reporter" }])
+// projects that are one piece of work under several names (local/usage-projects.json: [{ "match": "^api-server$", "project": "API server" }])
 // an entry with "cwd" instead of "match" files a folder's script runs under that project (jobs living in another session's folder)
 let PROJECT_ALIAS = [], PROJECT_CWD = []; try { for (const x of JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 'usage-projects.json'), 'utf8'))) (x.cwd ? PROJECT_CWD : PROJECT_ALIAS).push([new RegExp(x.cwd || x.match, 'i'), x.project]); } catch { }
 // fixed daily budgets per session (local/usage-budgets.json: { "<session name>": <tokens> }); without one a session's budget is 2× its 7-day average

@@ -1318,7 +1318,7 @@ function termTag(id, t) {
   const s = ((snap && snap.sessions) || []).find(x => x.owner === id || x.pane === id);
   const mac = t.peer && !t.local ? macName(snap.peer && snap.peer.label) : macName((snap.peer && snap.peer.selfLabel) || snap.machine);
   const what = !s ? 'terminal' : s.watchOnly ? 'script' : s.kind === 'hermes' ? 'Hermes' : (s.spawnedBy || s.headless || s.kind === 'bg') ? 'helper' : 'command session';
-  // the name comes first (2026-11-20, Kevin: names were cut to "GCX …"): the tag shows only the Mac, plus the kind when it
+  // the name comes first (2026-11-20, names were cut to their first word): the tag shows only the Mac, plus the kind when it
   // isn't an ordinary command session; the full description is in the tooltip
   const short = what === 'command session' ? mac : `${mac} · ${what}`;
   return `<span class="tag${t.peer && !t.local ? ' peer' : ''}" title="${esc(mac)} · ${what}${t.local ? ' (in tmux)' : ''}">${esc(short)}</span>`;

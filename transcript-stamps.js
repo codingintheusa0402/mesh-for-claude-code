@@ -1,6 +1,6 @@
 // When each prompt and each reply was made, from a session's transcript (2026-11-01). The terminal shows these times in a
 // column beside the `>` prompt lines and `⏺` reply lines (term-stamps.js, Mac app and phone).
-// 2026-11-16: the first read covers the last 64 MB (was 8 MB: a session full of screenshots and long tool output — GCX
+// 2026-11-16: the first read covers the last 64 MB (was 8 MB: a session full of screenshots and long tool output — the app's own
 // Mesh, 54 MB — had only its last ~40 minutes inside 8 MB, so its older prompts showed no time). After that only the
 // bytes appended since the last read are parsed, so a growing transcript costs almost nothing to keep up to date.
 // Lines over 512 KB (pasted images, huge tool results) are skipped without parsing: they never hold a prompt line.
