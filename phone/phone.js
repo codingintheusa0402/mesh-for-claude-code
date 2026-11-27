@@ -54,7 +54,7 @@ function setTheme(p, quiet) {
   const t = themeNow(), h = document.documentElement; h.dataset.theme = t; h.classList.toggle('ct', t !== 'default');
   const m = document.querySelector('meta[name="theme-color"]'); if (m) m.content = t === 'light' ? '#bacee0' : t === 'dark' ? '#1c1c1c' : '#000000';
   try { if (term) term.options.theme = termTheme(); } catch { }   // (term is declared further down: TDZ on the first call)
-  if (!quiet && typeof render === 'function') { const d = $('#drawer'); d._html = ''; renderDrawer(); }
+  if (!quiet && typeof render === 'function') { const d = $('#drawer'); d._html = ''; renderDrawer(); if (view === 'split') renderSplit(true); }
 }
 darkMQ.addEventListener && darkMQ.addEventListener('change', () => { if (themePref === 'system') setTheme(null); });
 setTheme(null, true);
@@ -76,7 +76,7 @@ function paintDisp() {
   b.classList.toggle('dispOn', on === true); b.classList.toggle('dispOff', on === false); b.classList.toggle('dispWarn', !!dispSt.warning);
   const el = $('#disp'); if (!el) return;
   const st = dispBusy ? '…' : on === null ? '?' : on ? 'ON' : 'OFF';
-  const html = `<button class="vbtn dbtn${on === false ? ' off' : ''}${dispSt.warning ? ' warn' : ''}"><b>Display ${st}</b></button>`;
+  const html = `<button class="vbtn dbtn${on === false ? ' off' : ''}${dispSt.warning ? ' warn' : ''}"><b><span class="swl">Display</span> <span class="sws">${st}</span></b></button>`;
   if (el._h !== html) { el.innerHTML = html; el._h = html; el.querySelector('button').onclick = toggleDisp; }
   el.classList.remove('hidden');
 }
@@ -94,7 +94,7 @@ loadDisp(); setInterval(loadDisp, 15000);
 function renderTopSw(list) {
   const el = $('#topSw'); if (!el) return; list = (list || []).filter(w => w.place === 'top');
   const hm = t => t ? new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) : '';
-  const html = list.map(w => `<button class="vbtn swtop${w.enabled ? '' : ' off'}" data-id="${esc(w.id)}"><b>${esc((w.short || w.label) + ' ' + (w.offline ? '?' : w.enabled ? 'ON' : 'OFF') + (w.lastOk ? ' · ' + hm(w.lastOk) : ''))}</b></button>`).join('');
+  const html = list.map(w => `<button class="vbtn swtop${w.enabled ? '' : ' off'}" data-id="${esc(w.id)}"><b><span class="swl">${esc(w.short || w.label)}</span> <span class="sws">${w.offline ? '?' : w.enabled ? 'ON' : 'OFF'}<span class="swt">${w.lastOk ? ' · ' + hm(w.lastOk) : ''}</span></span></b></button>`).join('');
   if (el.innerHTML !== html) el.innerHTML = html;
   el.classList.toggle('hidden', !list.length);
   el.querySelectorAll('.swtop').forEach(b => b.onclick = async () => {
@@ -320,7 +320,7 @@ function renderSession(first) {
   pcWire();
   { const b = $('#sLive'); if (b) b.onclick = () => openLive(s.sid); }
   if (can) {
-    $('#sSend').onclick = async () => { const v = $('#sText').value.trim(); if (!v) return; const r = await api('/api/send', { sid: s.sid, text: v }); if (r.ok === false || r.out === 'notfound') return toast('Send failed' + (r.err ? ': ' + r.err : '')); $('#sText').value = ''; toast('Sent'); };
+    $('#sSend').onclick = async () => { const f = $('#sText'), v = withAtts(f.value, f._atts || []); if (!v) return; const r = await api('/api/send', { sid: s.sid, text: v }); takeAtts(f); if (r.ok === false || r.out === 'notfound') return toast('Send failed' + (r.err ? ': ' + r.err : '')); $('#sText').value = ''; toast('Sent'); };
     $('#sInt').onclick = async () => { await api('/api/interrupt', { sid: s.sid }); toast('Interrupt sent'); };
     $('#sAtt').onclick = () => attachInto($('#sText'), { sid: s.sid });
     document.querySelectorAll('#sheetBody [data-c]').forEach(b => b.onclick = () => runCmd(s, b.dataset.c));
@@ -350,7 +350,7 @@ function renderViewSession(s) {
     <div class="row"><button class="primary" id="sSend">Send</button><button id="sInt">Stop job</button></div>` : '<div class="meta">Send and stop work only while the job runs.</div>'}
     <div class="meta">${esc(s.hostLabel)} is a view-only machine: no terminal, no transcript, no resume.</div>`);
   if (!s.canSend) return;
-  $('#sSend').onclick = async () => { const v = $('#sText').value.trim(); if (!v) return; const r = await api('/api/send', { sid: s.sid, text: v }); if (r.ok === false) return toast('Send failed' + (r.err ? ': ' + r.err : '')); $('#sText').value = ''; toast('Sent'); };
+  $('#sSend').onclick = async () => { const f = $('#sText'), v = withAtts(f.value, f._atts || []); if (!v) return; const r = await api('/api/send', { sid: s.sid, text: v }); takeAtts(f); if (r.ok === false) return toast('Send failed' + (r.err ? ': ' + r.err : '')); $('#sText').value = ''; toast('Sent'); };
   $('#sInt').onclick = async () => { if (!confirm(`Stop the job ${s.name}?`)) return; const r = await api('/api/interrupt', { sid: s.sid }); toast(r.ok === false ? 'Stop failed' + (r.err ? ': ' + r.err : '') : 'Stop sent'); };
 }
 async function runCmd(s, cmd) {
@@ -505,8 +505,14 @@ function mountTerm(host, id, box, sid) {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(() => claim(true), 600); });
   tes.addEventListener('data', ev => term.write(textGlyphs(keepHist(JSON.parse(ev.data)))));
   tes.addEventListener('exit', () => term.write('\r\n\x1b[90m[process exited]\x1b[0m\r\n'));
+  wireControls(box, id, sid);
+}
+// the key row and the input pill under a session's terminal (or its chat room): keys and text go to the terminal
+function wireControls(box, id, sid) {
+  const write = d => api('/api/term/' + encodeURIComponent(id), { data: d });
   box.querySelectorAll('.keys button').forEach(b => b.onclick = () => write(decodeURIComponent(b.dataset.k)));
-  const inp = box.querySelector('.tIn'), go = () => { const v = inp.value; write(v); setTimeout(() => write('\r'), 60); inp.value = ''; };
+  const inp = box.querySelector('.tIn'), go = () => { const typed = inp.value, atts = takeAtts(inp), v = atts.length ? withAtts(typed, atts) : typed;
+    write(v); setTimeout(() => write('\r'), 60); inp.value = ''; if (sid) Room.pending(sid, typed, atts); };
   box.querySelector('.tGo').onclick = go; box.querySelector('.tAtt').onclick = () => attachInto(inp, { term: id }); inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
 }
 // Claude Code's full redraws erase the scrollback (ESC[3J) — on the phone, keep the history so you can scroll back
@@ -598,29 +604,50 @@ function renderSplit(force) {
   $('#switch').querySelectorAll('[data-sid]').forEach(b => b.onclick = () => pickSplit(b.dataset.sid));
   if (!s) { $('#pane').innerHTML = ''; paneKind = null; return; }
   const tid = s.owner || (!s.onPeer && s.pane) || null;            // a Mesh terminal, or the tmux pane the session runs in (2026-11-15)
-  const kind = tid ? 'term' : 'ctl', key = kind + s.sid;
+  const kind = tid ? 'term' : 'ctl', chat = Room.wanted(s), key = kind + s.sid + (chat ? ':chat' : '');
   $('#tpName').textContent = s.name; $('#tpSub').textContent = s.health === 'working' ? 'Working…' : s.onPeer ? 'on the other Mac' : (s.model || '').replace('claude-', '');
   const head = `${AV(s, 'pav hd')}<span class="dot ${s.health}"></span><b>${esc(s.name)}</b><span class="pm">${s.health === 'working' ? Math.round(s.tps) + ' tok/s · ' : ''}${fmtTok(s.todayTok)}</span>`;
   if (!force && paneKind === key) {                              // live refresh without touching the terminal or the text box
     $('#paneHead .ph').innerHTML = head;
-    if (kind === 'ctl') { $('#pStats').innerHTML = paneStats(s); $('#pLog').innerHTML = paneLog(s); }
+    if (chat) Room.update(s);
+    if (kind === 'ctl' && !chat) { $('#pStats').innerHTML = paneStats(s); $('#pLog').innerHTML = paneLog(s); }
     const on = $('#switch .chip.on'); if (on && renderSplit.last !== s.sid) { renderSplit.last = s.sid; on.scrollIntoView({ inline: 'center', block: 'nearest' }); }
     return;
   }
   paneKind = key;
-  $('#pane').innerHTML = `<div id="paneHead"><div class="ph">${head}</div>${kind === 'term' ? '<button id="pFull" title="Full screen" aria-label="Full screen">' + ICON.expand + '</button>' : ''}<button id="pInfo" title="Details" aria-label="Details">${ICON.info}</button></div>` +
-    (kind === 'term' ? `<div id="pxt"></div>${termControls()}`
+  if (!chat) Room.unmount();
+  // chat theme: Chat (the transcript as a chat room) or the raw terminal / controls, remembered on this phone
+  const seg = Room.themeOn() && Room.hasTranscript(s) ? `<div class="rvSeg" role="tablist"><button data-rv="chat" class="${chat ? 'on' : ''}" aria-label="Chat view">Chat</button><button data-rv="term" class="${chat ? '' : 'on'}" aria-label="${kind === 'term' ? 'Terminal view' : 'Status view'}">${kind === 'term' ? 'Terminal' : 'Status'}</button></div>` : '';
+  const canSend = s.tty && s.kind !== 'bg';
+  const ctlIn = `<div class="tin"><textarea id="pText" rows="1" placeholder="Message ${esc(s.name)}…"></textarea><button id="pAtt" aria-label="Attach a photo or file">${ICON.plus}</button><button class="primary" id="pSend" aria-label="Send">${ICON.up}</button></div>
+          <div class="chips"><button id="pInt">Interrupt</button>${QUICK.slice(0, 5).map(c => `<button data-c="${c}">${c}</button>`).join('')}</div>`;
+  $('#pane').innerHTML = `<div id="paneHead"><div class="ph">${head}</div>${seg}${kind === 'term' ? '<button id="pFull" title="Full screen" aria-label="Full screen">' + ICON.expand + '</button>' : ''}<button id="pInfo" title="Details" aria-label="Details">${ICON.info}</button></div>` +
+    (chat ? `<div id="proom" class="room"></div>${kind === 'term' ? termControls() : canSend ? ctlIn : '<div class="meta">Background session — view only.</div>'}`
+      : kind === 'term' ? `<div id="pxt"></div>${termControls()}`
       : `<div id="pScroll"><div id="pStats">${paneStats(s)}</div>${(s.tty && s.kind !== 'bg') ? `<div class="tin"><textarea id="pText" rows="2" placeholder="Message ${esc(s.name)}…"></textarea><button id="pAtt" aria-label="Attach a photo or file">${ICON.plus}</button><button class="primary" id="pSend" aria-label="Send">${ICON.up}</button></div>
           <div class="chips"><button id="pInt">Interrupt</button>${QUICK.slice(0, 5).map(c => `<button data-c="${c}">${c}</button>`).join('')}</div>` : '<div class="meta">Background session — view only.</div>'}<div id="pLog">${paneLog(s)}</div></div>`);
   $('#pInfo').onclick = () => openSession(s.sid);
-  if (kind === 'term') {
+  $('#pane').querySelectorAll('[data-rv]').forEach(b => b.onclick = () => { if ((b.dataset.rv === 'chat') === chat) return; Room.setPref(b.dataset.rv); renderSplit(true); });
+  if (chat) {
+    if (termId && sheetKind !== 'term') { tes && tes.close(); termId = null; }
+    Room.mount($('#proom'), s); window.meshPinTerm = () => Room.pin();
+    if (kind === 'term') { $('#pFull').onclick = () => openTerminal(tid, s.sid); wireControls($('#pane'), tid, s.sid); }
+    else if (canSend) {
+      $('#pSend').onclick = async () => { const f = $('#pText'), typed = f.value, atts = f._atts || [], v = withAtts(typed, atts); if (!v) return;
+        const r = await api('/api/send', { sid: s.sid, text: v }); if (r.ok === false || r.out === 'notfound') return toast('Send failed'); f.value = ''; Room.pending(s.sid, typed, takeAtts(f)); };
+      $('#pText').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#pSend').click(); } };
+      $('#pInt').onclick = async () => { await api('/api/interrupt', { sid: s.sid }); toast('Interrupt sent'); };
+      $('#pAtt').onclick = () => attachInto($('#pText'), { sid: s.sid });
+      $('#pane').querySelectorAll('[data-c]').forEach(b => b.onclick = () => runCmd(s, b.dataset.c));
+    }
+  } else if (kind === 'term') {
     $('#pFull').onclick = () => openTerminal(tid, s.sid);
     mountTerm($('#pxt'), tid, $('#pane'), s.sid);
   } else {
     if (termId && sheetKind !== 'term') { tes && tes.close(); }
     const send = $('#pSend');
     if (send) {
-      send.onclick = async () => { const v = $('#pText').value.trim(); if (!v) return; const r = await api('/api/send', { sid: s.sid, text: v }); if (r.ok === false || r.out === 'notfound') return toast('Send failed'); $('#pText').value = ''; toast('Sent'); };
+      send.onclick = async () => { const f = $('#pText'), v = withAtts(f.value, f._atts || []); if (!v) return; const r = await api('/api/send', { sid: s.sid, text: v }); if (r.ok === false || r.out === 'notfound') return toast('Send failed'); f.value = ''; takeAtts(f); toast('Sent'); };
       $('#pInt').onclick = async () => { await api('/api/interrupt', { sid: s.sid }); toast('Interrupt sent'); };
       $('#pAtt').onclick = () => attachInto($('#pText'), { sid: s.sid });
       $('#pane').querySelectorAll('[data-c]').forEach(b => b.onclick = () => runCmd(s, b.dataset.c));
@@ -680,24 +707,40 @@ function renderGrid() {
 // drag-and-drop does, so Claude Code turns image paths into [Image #n] attachments and other files into readable paths.
 const shq = p => p.replace(/([\s\\'"()&;|<>$`!*?#~{}\[\]])/g, '\\$1');
 const fileB64 = f => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1] || ''); r.onerror = no; r.readAsDataURL(f); });
+// attachments (2026-11-27): uploaded files wait as chips above the input (a picture as its thumbnail, × removes it);
+// their paths go into the message only when it is sent (withAtts), like the desktop chat room
 function attachInto(field, where) {
   const pick = document.createElement('input'); pick.type = 'file'; pick.multiple = true; pick.style.display = 'none';
   document.body.appendChild(pick);
   pick.onchange = async () => {
     const files = [...pick.files]; pick.remove(); if (!files.length) return;
     toast(`Uploading ${files.length} file${files.length > 1 ? 's' : ''}…`);
-    const got = [];
+    let n = 0; field._atts = field._atts || [];
     for (const f of files) {
       if (f.size > 28e6) { toast(`${f.name} is over 28 MB`); continue; }
       const r = await api('/api/upload', { ...where, name: f.name || 'photo.jpg', b64: await fileB64(f) }).catch(() => ({}));
-      if (r.ok && r.path) got.push(shq(r.path)); else toast(`Couldn't upload ${f.name}` + (r.err ? ': ' + r.err : ''));
+      if (!(r.ok && r.path)) { toast(`Couldn't upload ${f.name}` + (r.err ? ': ' + r.err : '')); continue; }
+      const img = /^image\//.test(f.type) || /\.(png|jpe?g|gif|webp|heic)$/i.test(f.name || '');
+      field._atts.push({ path: r.path, name: f.name || r.path.split('/').pop(), size: f.size, img, url: img ? URL.createObjectURL(f) : '' }); n++;
     }
-    if (!got.length) return;
-    field.value = (field.value.trim() ? field.value.replace(/\s*$/, ' ') : '') + got.join(' ') + ' ';
-    toast(`Attached ${got.length} — add a message and Send`);
+    drawAtts(field);
+    if (n) toast(`Attached ${n} — add a message and Send`);
   };
   pick.click();
 }
+function attBox(field) {
+  const anchor = field.closest('.tin') || field; let b = anchor.previousElementSibling;
+  if (!b || !b.classList.contains('tAtts')) { b = document.createElement('div'); b.className = 'tAtts'; anchor.parentNode.insertBefore(b, anchor); }
+  return b;
+}
+function drawAtts(field) {
+  const a = field._atts || [], b = attBox(field); b.hidden = !a.length;
+  b.innerHTML = a.map((x, i) => `<span class="tChip${x.img ? ' img' : ''}" title="${esc(x.name)}">${x.img ? `<img src="${esc(x.url)}" alt="">` : `<b>${esc(x.name)}</b>`}<button data-rm="${i}" aria-label="Remove ${esc(x.name)}">×</button></span>`).join('');
+  b.querySelectorAll('[data-rm]').forEach(btn => btn.onclick = () => { const r = a.splice(+btn.dataset.rm, 1)[0]; if (r && r.url) URL.revokeObjectURL(r.url); drawAtts(field); });
+}
+// what Send takes: the attachments (the chips clear; their thumbnails live on in the pending bubble)
+function takeAtts(field) { const a = field._atts || []; field._atts = []; if (a.length) drawAtts(field); return a; }
+const withAtts = (text, atts) => [String(text || '').trim(), ...atts.map(a => shq(a.path))].filter(Boolean).join(' ');
 
 // keyboard up (iOS): let the typing surface take the screen
 if (window.visualViewport) {

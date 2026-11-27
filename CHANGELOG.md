@@ -2,6 +2,13 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-27 — iPhone page: the session panel is a chat room in the chat theme
+- With the chat theme on (Light / Dark / Match System), the open session's panel shows the session as a chat room, like the desktop app: your prompts on the right in yellow bubbles, replies on the left with the session's picture and name (markdown rendered, long ones folded with See more), tool calls as small grey lines (a long run folded to "+ N more tool calls"), times, day dividers, pictures (tap for full size) and a "…" bubble while the session works. It reads the session's transcript (/api/chat, forwarded for a session on the other Mac) every 2 s while it works and every 6 s when idle, never while the page is hidden or on Grid; only changed rows are redrawn and it follows the newest message unless you scrolled up (↓ jumps back). New file phone/phone-room.js.
+- A **Chat / Terminal** switch in the session header goes back to the live terminal (Chat / Status for a session without a terminal here); the choice is kept on the phone. The Default theme shows the terminal as before. The key row and the input bar keep working in the room; a sent message shows as a pending bubble (read mark "1") until the transcript has it, matched ignoring spacing, file paths and [Image #n].
+- Text in the room can be long-pressed for Select / Select All / Copy (also the terminal's text rows); buttons and keys stay unselectable.
+- Attaching with + no longer puts the uploaded file's path into the text box: attachments wait as chips above the input (a picture as its thumbnail, × removes it) and their paths are added only when sent; the pending bubble shows the picture. Same for the session sheet and the status panel.
+- Narrow phones: the Display and switch buttons in the header show the label over the state (each cut with …, never mid-word, the last-run time hidden), so the title keeps its 90 px and nothing runs off an iPhone 15's screen. The session header's picture shows its initial again (a rule hiding the name also hid it).
+
 ## 2026-11-27 — The session that runs the app is tagged Core
 - The tag on the session that runs this app (the star in the middle of the mesh) reads Core instead of sun, in the window and on the iPhone page.
 
