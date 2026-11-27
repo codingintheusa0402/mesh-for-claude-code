@@ -390,7 +390,7 @@ body.ct-win-list #roomHost, body.ct-win-list #cwGone { display: none !important;
 body.ct-win #roomHost { position: fixed; inset: 0; }
 body.ct-win-list #side { position: fixed; inset: 0; }
 body.ct-win-list .ct-rail { padding-top: 44px; -webkit-app-region: drag; }
-body.ct-win-list .ct-rail .ct-ri, body.ct-win .ct-head .ct-hbtn, body.ct-win .cr-hb, body.ct-win .ct-chip, body.ct-win input { -webkit-app-region: no-drag; }
+body.ct-win-list .ct-rail .ct-ri, body.ct-win .ct-head .ct-hbtn, body.ct-win .cr-hb, body.ct-win .ct-chip, body.ct-win input, body.ct-win .cr-av, body.ct-win [data-avpick] { -webkit-app-region: no-drag; }
 body.ct-win-list .ct-head { padding-top: 18px; -webkit-app-region: drag; }
 /* the window's own traffic lights sit above the room's header */
 body.ct-win .cr-head { padding-top: 34px; -webkit-app-region: drag; }

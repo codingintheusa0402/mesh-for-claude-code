@@ -2,6 +2,9 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-27 — Detached rooms: the header picture opens the picker again
+- In a room in its own window, clicking the session's picture (or letter) in the header did nothing: the header is the window's drag area and took the click. The picture is now outside the drag area, so a click opens the picture picker as in the main window.
+
 ## 2026-11-27 — Two texts showed a raw placeholder
 - The Details panel's note for a session in this app read "Runs inside ${APP_NAME}", and the "versions differ" tooltip showed "\" + APP_NAME + \""; both now show the app's name.
 
