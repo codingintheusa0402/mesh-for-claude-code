@@ -3,7 +3,7 @@
 Newest first. Older changes are in the git log.
 
 ## 2026-11-28 — Animated pictures never restart: frame sheets on one clock
-- Swapping picture elements back after a rebuild was not enough: the chat list is rebuilt whenever a status or the Unread / Working counts change, and the pictures still started over. Small animated pictures (lists, rooms, tabs, board) now come from a frame sheet instead of a GIF: the picture's forward-then-backward loop at 128 px as one JPEG of 8 x 8 frames, and one 10 fps timer picks the frame from the clock. A rebuilt row shows the right frame at once, all windows show the same frame, and each picture has its own offset so they are not in step. The timer pauses while the window is hidden.
+- Swapping picture elements back after a rebuild was not enough: the chat list is rebuilt whenever a status or the Unread / Working counts change, and the pictures still started over. Small animated pictures (lists, rooms, tabs, board) now come from a frame sheet instead of a GIF: the picture's forward-then-backward loop at 128 px as one JPEG of 8 x 8 frames, and one 10 fps timer picks the frame from the clock. A rebuilt row shows the right frame at once, all windows show the same frame, and each picture has its own offset so they are not in step. The timer pauses while the window is hidden and only moves pictures that are on screen (scrolled-away messages and hidden panels stay still), so it adds little CPU.
 - Better colour too: a JPEG sheet keeps all colours, where a GIF has 256 (382 KB for a 58-frame sheet against 650 KB for the 128 px GIF).
 - The GIF copies stay for the picker, the orbit pop-up and the profile card. The element-swapping code is gone.
 

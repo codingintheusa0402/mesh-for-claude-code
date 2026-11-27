@@ -25,10 +25,15 @@
     return `<i class="avsh" data-n="${sh.n}" data-fps="${sh.fps}" data-cols="${sh.cols}" data-ph="${ph}" style="background-image:url('${esc(u)}');background-size:${sh.cols * 100}% ${sh.cols * 100}%;background-position:${posOf(frameAt(sh, ph), sh.cols)}"></i>`;
   }
   const sheets = document.getElementsByClassName('avsh');   // live list
+  // only pictures on screen move: an IntersectionObserver marks them (scrolled-away messages, hidden panels stay still)
+  const watched = new Set(), io = window.IntersectionObserver ? new IntersectionObserver(es => { for (const x of es) x.target._vis = x.isIntersecting; }) : null;
+  setInterval(() => { for (const el of watched) if (!el.isConnected) { io.unobserve(el); watched.delete(el); } }, 5000);
   setInterval(() => {
     if (document.hidden || !sheets.length) return;
     const now = Date.now() / 1000;
     for (const el of sheets) {
+      if (io && !el._io) { el._io = 1; el._vis = true; watched.add(el); io.observe(el); }
+      if (!el._vis) continue;
       const d = el.dataset, n = +d.n, i = Math.floor(now * d.fps + d.ph * n) % n;
       if (el._f !== i) { el._f = i; el.style.backgroundPosition = posOf(i, +d.cols); }
     }
