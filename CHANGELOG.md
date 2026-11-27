@@ -2,6 +2,9 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-27 — Popped-out windows get updates without a restart too
+- An update that applies without a restart reloaded only the main window; a popped-out Sessions list or room kept loading the installed version's code, even when reopened, so fixes (like GIF pictures that keep playing through refreshes) did not reach them. New pop-outs now load the same updated code as the main window.
+
 ## 2026-11-27 — Animated pictures no longer restart when a list refreshes
 - The chat list, board, rooms and the picture picker are rebuilt on every status change, and Chromium starts each new picture at its first frame, so GIFs kept restarting. When a rebuild drops an animated picture and adds the same one back, the old picture element is now put back in place of the new one (before the next paint), so it keeps playing. A first try that kept a hidden copy of each GIF did not help in the app and is gone.
 

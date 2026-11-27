@@ -1511,7 +1511,9 @@ function openChatWin(key, at) {
   const open = [...chatWins.entries()].filter(([, x]) => !x.isDestroyed());
   if (open.length >= CHATWIN_MAX) { const [, old] = open.sort((a, b) => (a[1].usedAt || 0) - (b[1].usedAt || 0))[0]; try { old.close(); } catch { } }
   chatWins.set(key, w);
-  w.loadFile(path.join(__dirname, 'renderer', 'chatwin.html'), { query: room ? { room: sid } : { panel: 'sessions' } });
+  // from the hot-reloaded renderer when there is one, so a popped-out window runs the same code as the main window
+  const hot = (() => { try { return updater.hotRoot(); } catch { return null; } })();
+  w.loadFile(path.join(hot || __dirname, 'renderer', 'chatwin.html'), { query: room ? { room: sid } : { panel: 'sessions' } });
   w.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   w.once('ready-to-show', () => { if (!w.isDestroyed()) w.show(); });
   const keep = () => { if (!w.isDestroyed() && !w.isMinimized() && !w.isFullScreen()) { cwLoad()[key] = w.getBounds(); cwSave(); } };
