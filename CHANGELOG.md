@@ -2,6 +2,9 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-27 — A sent message no longer shows twice in a chat room
+- The "sending" bubble stays until the session's transcript has the message, matched by exact text. The terminal sometimes changes spacing (a double space came back single) or adds the attached files' paths, so the match failed and the message showed twice for a minute. The match now ignores spacing, file paths and [Image #n] tags.
+
 ## 2026-11-27 — Dragging a divider no longer lags
 - Dragging the divider between panels (the Terminals panel, the sidebar or the dock split) refitted every terminal on every mouse move: each pixel reflowed the whole scrollback and resized the tmux pane, so Claude Code redrew non-stop. Terminals now keep their size while you drag and refit once when you let go; the panel size follows the pointer at most once per frame.
 

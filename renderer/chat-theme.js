@@ -290,7 +290,11 @@
     if (R.sid !== s.sid) return;
     R.items = items;
     // a sent message stays as a pending bubble until the transcript has it (or for a minute)
-    R.pending = R.pending.filter(p => !p.failed ? Date.now() - p.t < 60000 && !items.some(m => m.k === 'u' && m.t >= p.t - 5000 && m.x.trim() === p.x.trim() && !!(m.imgs || m.files) === !!(p.imgs || p.files)) : Date.now() - p.t < 30000);
+    // compared loosely: the terminal can change spacing (a double space came back single, 2026-11-27) and adds the files'
+    // paths or [Image #n] tags, so an exact match left the sent bubble showing twice
+    const norm = x => String(x || '').replace(/\[Image #\d+\]/g, ' ').replace(/"?\/\S+"?/g, ' ').replace(/\s+/g, ' ').trim();
+    const same = (m, p) => { const a = norm(m.x), b = norm(p.x); return a === b || (!!b && a.startsWith(b)); };
+    R.pending = R.pending.filter(p => !p.failed ? Date.now() - p.t < 60000 && !items.some(m => m.k === 'u' && m.t >= p.t - 5000 && same(m, p)) : Date.now() - p.t < 30000);
     draw(R, false);
   }
   function draw(R, force) {
