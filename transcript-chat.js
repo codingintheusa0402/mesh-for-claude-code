@@ -1,5 +1,5 @@
 // A session's conversation as chat messages, for the chat theme (renderer/chat-theme.js, 2026-11-15).
-// Reads only the end of the transcript (they grow to tens of MB) and caches per file size.
+// Reads only the end of the transcript (they grow to tens of MB), as far back as needed, and caches per file size.
 //   chatFor(file, n) → [{ id, t: epoch ms, k: 'u' (your prompt) | 'a' (reply) | 'tool', x: text,
 //                        imgs?: [{ key }], files?: [{ p, name, size }] }], oldest first
 // Skipped: meta lines, sidechains (sub-agents), tool results, system reminders and hook output.
@@ -11,7 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const MAX_BYTES = 2 * 1024 * 1024, MAX_TEXT = 4000;
+const MAX_BYTES = 2 * 1024 * 1024, MAX_WINDOW = 32 * 1024 * 1024, MAX_GROW = 8 * 1024 * 1024, MAX_TEXT = 4000;
 const cache = new Map();   // file → { size, out }
 
 // one line per tool call: its name and the most telling bit of its input
@@ -65,15 +65,39 @@ function attachments(x) {
   return { x: rest.replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').trim(), imgs, files };
 }
 
+// Reads backwards in growing windows (2 MB, 8 MB, 32 MB) until it has the messages asked for: pasted pictures and tool
+// results with images are kept as base64 lines of 0.5 MB and more, so a few of them used to fill the 2 MB window and the
+// room showed only the last tool calls (2026-11-27). A file that only grew is parsed from where the last read ended.
 function chatFor(file, n) {
   n = Math.max(1, Math.min(400, +n || 150));
   if (!file) return [];
   let st; try { st = fs.statSync(file); } catch { return []; }
   const c = cache.get(file); if (c && c.size === st.size) return c.out.slice(-n);
-  const start = Math.max(0, st.size - MAX_BYTES), len = st.size - start, buf = Buffer.alloc(len);
-  const fd = fs.openSync(file, 'r'); try { fs.readSync(fd, buf, 0, len, start); } finally { fs.closeSync(fd); }
-  const lines = buf.toString('utf8').split('\n'); if (start > 0) lines.shift();   // the first line may be cut
-  const out = [];
+  const fd = fs.openSync(file, 'r');
+  const read = (pos, len) => { const b = Buffer.alloc(len); const k = fs.readSync(fd, b, 0, len, pos); return b.subarray(0, k).toString('utf8'); };
+  let out, size;
+  try {
+    if (c && st.size > c.size && st.size - c.size <= MAX_GROW && c.out.length >= Math.min(n, c.want)) {
+      const txt = read(c.size, st.size - c.size), end = txt.lastIndexOf('\n');
+      out = c.out.slice(); size = c.size + Buffer.byteLength(txt.slice(0, end + 1));
+      if (end >= 0) parseLines(txt.slice(0, end).split('\n'), out);
+    } else {
+      const want = Math.max(n, 150);
+      for (let w = MAX_BYTES; ; w *= 4) {
+        const start = Math.max(0, st.size - w), txt = read(start, st.size - start), end = txt.lastIndexOf('\n');
+        const lines = txt.slice(0, end + 1).split('\n'); if (start > 0) lines.shift();   // the first line may be cut, the last one still being written
+        out = []; parseLines(lines, out); size = start + Buffer.byteLength(txt.slice(0, end + 1));
+        if (out.length >= want || start === 0 || w >= MAX_WINDOW) break;
+      }
+    }
+  } finally { fs.closeSync(fd); }
+  const res = out.slice(-400);
+  cache.delete(file); cache.set(file, { size, out: res, want: Math.max(n, 150) });
+  if (cache.size > 40) cache.delete(cache.keys().next().value);
+  return res.slice(-n);
+}
+
+function parseLines(lines, out) {
   for (const l of lines) {
     if (!l || (l.indexOf('"type":"user"') < 0 && l.indexOf('"type":"assistant"') < 0)) continue;
     let j; try { j = JSON.parse(l); } catch { continue; }
@@ -108,10 +132,6 @@ function chatFor(file, n) {
       });
     }
   }
-  const res = out.slice(-400);
-  cache.set(file, { size: st.size, out: res });
-  if (cache.size > 40) cache.delete(cache.keys().next().value);
-  return res.slice(-n);
 }
 
 // ---------- pictures ----------

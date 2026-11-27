@@ -2,6 +2,9 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-27 — Chat room: older messages no longer vanish after pasted pictures
+- The chat room read only the last 2 MB of a session's transcript. Pasted screenshots and pictures a session opens are kept there as base64 lines of 0.5 MB and more, so a few of them filled that window and the room showed only the latest tool calls, with your messages above gone. It now reads further back (2, 8, then 32 MB) until it has the messages it needs, and after that parses only what was added since the last read. Same for the iPhone room and detached windows.
+
 ## 2026-11-27 — Session refresh: working hours per session
 - `busyHours` in `local/session-refresh.json` (`match`, `schedule` = a schedule object or a JSON file whose `schedule` key is read live: enabled, start, end, days Mon=0..Sun=6, tz; optional `note` command). Inside a session's working hours no automatic refresh, handoff or idle park runs for it: a due context-cap or nightly refresh waits and runs on the first check after the hours end (log line HOLD). A refresh you start yourself still runs any time. Safety valve: at 90 % or more of the model's context window it refreshes anyway, logs VALVE and runs `note` with the reason.
 
