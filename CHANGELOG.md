@@ -2,6 +2,11 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-28 — Profile card, lighter pictures, pictures out of step
+- **Profile card.** A click on a session's picture (chat list, room header, a message in a room, Simple-board card, detached windows) opens its profile, like a messenger's: the picture large, name, status and machine, then project, model, context used, today's tokens and cost, total cost and turns, how long it has run (and its generation), subagents. **Chat** opens its room, **Change picture** (or a click on the big picture) opens the picture picker. Esc or a click outside closes it.
+- **Pictures at the size they are shown.** A new 128 px copy is used everywhere a picture is small (lists, rooms, tabs, Live panel; at most 64 px on screen, so still sharp on a Retina screen). 256 px is left for the picker and the orbit pop-up, 512 px for the profile card. A 128 px GIF is about a quarter of the 256 px one, so the window holds much less image data.
+- **Out of step.** Each animated picture starts at its own point of its loop (from its file name), so pictures that start together no longer turn around at the same moment, which looked like all of them restarting at once.
+
 ## 2026-11-27 — Popped-out windows get updates without a restart too
 - An update that applies without a restart reloaded only the main window; a popped-out Sessions list or room kept loading the installed version's code, even when reopened, so fixes (like GIF pictures that keep playing through refreshes) did not reach them. New pop-outs now load the same updated code as the main window.
 

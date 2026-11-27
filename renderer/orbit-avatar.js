@@ -20,8 +20,8 @@
   function show(sid) {
     const s = session(sid); if (!s) return;
     shownSid = sid;
-    const src = window.meshAvatars.src(s.name, 512);
-    pop.innerHTML = (src ? `<img alt="" src="${src}">` : window.meshAvatars.html(s, { cls: 'orbit-av-letter', size: 512 })) + `<span class="orbit-av-name">${s.name.replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch])}</span>`;
+    const src = window.meshAvatars.src(s.name, 256);
+    pop.innerHTML = (src ? `<img alt="" src="${src}">` : window.meshAvatars.html(s, { cls: 'orbit-av-letter', size: 256 })) + `<span class="orbit-av-name">${s.name.replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch])}</span>`;
     cancelAnimationFrame(raf); place(); pop.classList.add('on');
   }
   function hide() { clearTimeout(timer); if (!shownSid) return; shownSid = null; pop.classList.remove('on'); cancelAnimationFrame(raf); }

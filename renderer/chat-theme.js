@@ -84,8 +84,8 @@
   const initial = s => { const m = String(s.name || '?').trim().match(/[\p{L}\p{N}]/u); return m ? m[0].toUpperCase() : '?'; };
   // a session picture (renderer/avatars.js, keyed by the session name) replaces the initial; click = true opens the picker
   const picOf = (s, size) => (window.meshAvatars && window.meshAvatars.src(s.name, size)) || null;
-  const avatar = (s, cls = '', click = false, size = 256) => { const pic = picOf(s, size);
-    return `<span class="ct-av${cls}${pic ? ' pic' : ''}" style="--av:${esc(colorOf(s))}"${click ? ` data-avpick="${esc(s.sid)}" title="Change picture"` : ''}>${pic ? `<img src="${esc(pic)}" alt="" draggable="false">` : `<b>${esc(initial(s))}</b>`}</span>`; };
+  const avatar = (s, cls = '', click = false, size = 128) => { const pic = picOf(s, size);
+    return `<span class="ct-av${cls}${pic ? ' pic' : ''}" style="--av:${esc(colorOf(s))}"${click ? ` data-avpick="${esc(s.sid)}" title="Profile"` : ''}>${pic ? `<img src="${esc(pic)}" alt="" draggable="false">` : `<b>${esc(initial(s))}</b>`}</span>`; };
   const lastT = s => { const l = s.log || [], t = l.length ? l[l.length - 1].t : 0; const u = s.sinceUse ?? s.sinceWrite; return Math.max(t || 0, u != null ? Date.now() - u * 1000 : 0); };
   // another window (a detached room or list) marked something seen: take it over so badges match everywhere
   addEventListener('storage', e => {
@@ -338,7 +338,7 @@
       }
       const cls = `${firstOfRun ? ' first' : ''}${m.pending ? ' pending' : ''}${m.failed ? ' failed' : ''}${kind}${neu}`;
       if (m.k === 'u') out.push(`<div class="cr-msg me${cls}">${time}${inner}</div>`);
-      else out.push(`<div class="cr-msg them${cls}">${firstOfRun ? avatar(s) : '<span class="ct-av ghost"></span>'}<div class="cr-col">${firstOfRun ? `<div class="cr-from">${esc(s.name)}</div>` : ''}<div class="cr-line">${inner}${time}</div></div></div>`);
+      else out.push(`<div class="cr-msg them${cls}">${firstOfRun ? avatar(s, '', true) : '<span class="ct-av ghost"></span>'}<div class="cr-col">${firstOfRun ? `<div class="cr-from">${esc(s.name)}</div>` : ''}<div class="cr-line">${inner}${time}</div></div></div>`);
     }
     if (!all.length) out.push(`<div class="cr-empty">No messages yet. Say hello below.</div>`);
     R.msgs.innerHTML = out.join('');
@@ -410,8 +410,8 @@
     else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && viewer.keys.length > 1) { e.preventDefault(); e.stopPropagation(); viewer.i = (viewer.i + (e.key === 'ArrowLeft' ? -1 : 1) + viewer.keys.length) % viewer.keys.length; viewer.show(); }
   }, true);
   function head(R, s) {
-    const k = [s.name, s.health, colorOf(s), s.model, s.subagents, s.hostLabel, picOf(s, 512)].join('|'); if (R.headKey === k) return; R.headKey = k;
-    R.el.querySelector('.cr-av').innerHTML = avatar(s, '', true, 512);
+    const k = [s.name, s.health, colorOf(s), s.model, s.subagents, s.hostLabel, picOf(s, 128)].join('|'); if (R.headKey === k) return; R.headKey = k;
+    R.el.querySelector('.cr-av').innerHTML = avatar(s, '', true);
     R.el.querySelector('.cr-name').textContent = s.name;
     R.el.querySelector('.cr-sub').innerHTML = `${SVG.person}<span>${2 + (s.subagents || 0)}</span>${s.model ? `<span class="cr-model">${esc(String(s.model).replace('claude-', ''))}</span>` : ''}${s.hostLabel ? `<span class="cr-model">${esc(s.hostLabel)}</span>` : ''}`;
     R.back.querySelector('span').textContent = NAME;

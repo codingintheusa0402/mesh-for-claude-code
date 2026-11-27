@@ -17,10 +17,11 @@ const { execFile } = require('child_process');
 const HOME = os.homedir();
 const tilde = p => String(p || '').replace(/^~(?=\/|$)/, HOME);
 const IMG = /\.(png|jpe?g|gif|webp)$/i;
-const SIZES = [256, 512];
+const SIZES = [128, 256, 512];   // 128: lists, rooms, tabs (≤ 64 px on screen, sharp at 2x); 256: picker, orbit; 512: the profile card
 // bump when the copies are made differently, so every cached copy is made again (pp = GIFs play forward, then backward)
-const RECIPE = 'pp1';
+const RECIPE = 'pp2';
 const FFMPEG = ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/usr/bin/ffmpeg'].find(p => { try { fs.accessSync(p, fs.constants.X_OK); return true; } catch { return false; } }) || 'ffmpeg';
+const FFPROBE = FFMPEG.replace(/ffmpeg$/, 'ffprobe');
 
 function createAvatars({ cfg = {}, machine = os.hostname(), peer = () => null, onChange = () => { } } = {}) {
   const dir = tilde(process.env.MESH_AVATARS_DIR || cfg.dir || '~/.mesh/avatars');
@@ -90,14 +91,20 @@ function createAvatars({ cfg = {}, machine = os.hostname(), peer = () => null, o
     const src = path.join(dir, f), gif = /\.gif$/i.test(f), ext = gif ? 'gif' : 'png';
     fs.mkdirSync(cache, { recursive: true });
     const sq = "crop='min(iw,ih)':'min(iw,ih)'";        // centred square: the sides of a 16:9 frame (and its corner marks) go
+    // every picture starts at its own point of the loop (from its name), so pictures that start together don't all turn
+    // around at the same moment
+    const durOf = () => new Promise(res => execFile(FFPROBE, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', src], { timeout: 20e3 }, (e, out) => res(+String(out || '').trim() || 0)));
+    const phase = parseInt(crypto.createHash('sha1').update(f).digest('hex').slice(0, 6), 16) / 0xffffff;
+    let K = 0;
     const one = size => new Promise((res, rej) => {
       const out = outOf(f, size, ext), tmp = out + '.tmp.' + ext;
+      const rot = K >= 0.2 ? `split[p1][p2];[p1]trim=start=${K.toFixed(2)},setpts=PTS-STARTPTS[q1];[p2]trim=end=${K.toFixed(2)},setpts=PTS-STARTPTS[q2];[q1][q2]concat=n=2:v=1,` : '';
       const args = gif
-        ? ['-y', '-v', 'error', '-i', src, '-filter_complex', `[0:v]${sq},scale=${size}:${size}:flags=lanczos,split[f][r];[r]trim=start_frame=1,setpts=PTS-STARTPTS,reverse,trim=start_frame=1,setpts=PTS-STARTPTS[rv];[f][rv]concat=n=2:v=1,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a:diff_mode=rectangle`, '-loop', '0', tmp]
+        ? ['-y', '-v', 'error', '-i', src, '-filter_complex', `[0:v]${sq},scale=${size}:${size}:flags=lanczos,split[f][r];[r]trim=start_frame=1,setpts=PTS-STARTPTS,reverse,trim=start_frame=1,setpts=PTS-STARTPTS[rv];[f][rv]concat=n=2:v=1,${rot}split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a:diff_mode=rectangle`, '-loop', '0', tmp]
         : ['-y', '-v', 'error', '-i', src, '-vf', `${sq},scale=${size}:${size}:flags=lanczos`, '-frames:v', '1', tmp];
       execFile(FFMPEG, args, { timeout: 120e3 }, err => { if (err) { try { fs.unlinkSync(tmp); } catch { } return rej(err); } fs.renameSync(tmp, out); res(); });
     });
-    return SIZES.reduce((p, s) => p.then(() => one(s)), Promise.resolve()).then(() => {
+    return (gif ? durOf().then(d => { K = d > 0.5 ? phase * (2 * d - 0.3) : 0; }) : Promise.resolve()).then(() => SIZES.reduce((p, s) => p.then(() => one(s)), Promise.resolve())).then(() => {
       const sig = sigOf(f);
       index[f] = { sig, ext, v: crypto.createHash('sha1').update(f + sig).digest('hex').slice(0, 10), from: 'local' }; saveIndex();
     });
@@ -150,7 +157,7 @@ function createAvatars({ cfg = {}, machine = os.hostname(), peer = () => null, o
     set, merge: mergeRemote, ensure, warm,
     // a cropped copy for meshav:// and /api/avatar: { path, type } or null
     async image(f, size) {
-      size = SIZES.includes(+size) ? +size : 256;
+      size = SIZES.find(x => x >= +size) || 512;   // the smallest copy at least that big
       const e = await ensure(f); if (!e) return null;
       return { path: outOf(path.basename(f), size, e.ext), type: e.ext === 'gif' ? 'image/gif' : 'image/png' };
     },
