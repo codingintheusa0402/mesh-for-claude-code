@@ -13,18 +13,23 @@
   const map = () => { const s = snapNow(); return (s && s.avatars) || {}; };
   const url = (file, v, size) => APP ? `meshav://img/${encodeURIComponent(file)}?s=${size}&v=${v}`
     : `/api/avatar?f=${encodeURIComponent(file)}&s=${size}&v=${v}&t=${encodeURIComponent(tok())}`;
-  // A list or board rebuilt with innerHTML makes new <img>s; when the last <img> of a GIF goes, Chromium resets its animation,
-  // so a list that re-renders every second or two never got past the first part of the loop. One 1 px copy per GIF URL in
-  // use stays on the page and keeps the animation running across rebuilds; it is dropped when nothing on screen shows it.
-  const keep = new Map(); let kbox = null;
-  function hold(u) {
-    if (keep.has(u) || !document.body) return;
-    if (!kbox) { kbox = document.createElement('div'); kbox.setAttribute('aria-hidden', 'true');
-      kbox.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;opacity:.01;pointer-events:none;z-index:-1'; document.body.appendChild(kbox); }
-    const i = new Image(1, 1); i.alt = ''; i.dataset.keep = '1'; i.src = u; kbox.appendChild(i); keep.set(u, i);
-  }
-  setInterval(() => { for (const [u, i] of keep) if (![...document.querySelectorAll('img')].some(x => x !== i && x.src === u)) { i.remove(); keep.delete(u); } }, 5000);
-  function src(name, size = 256) { const e = map()[name]; if (!(e && e.file && e.v)) return null; const u = url(e.file, e.v, size); if (/\.gif$/i.test(e.file)) hold(u); return u; }
+  // A list, board or room rebuilt with innerHTML makes new <img>s and Chromium starts each new one at frame 1, so a list that
+  // re-renders on every status change kept restarting its GIFs. When a rebuild drops an animated picture and adds the same
+  // URL back (same mutation batch, before the next paint), the old <img> goes back in place of the new one and keeps playing.
+  const AV = n => n.nodeType === 1 ? (n.tagName === 'IMG' ? [n] : n.firstElementChild ? n.getElementsByTagName('img') : []) : [];
+  const anim = i => /^meshav:/.test(i.src) && /\.gif(\?|%3F|$)/i.test(decodeURIComponent(i.src.split('?')[0])) || i.dataset.anim === '1';
+  const mo = new MutationObserver(recs => {
+    let pool = null;
+    for (const r of recs) for (const n of r.removedNodes) for (const i of AV(n)) if (!i.isConnected && anim(i)) { (pool ||= new Map()); const l = pool.get(i.src); l ? l.push(i) : pool.set(i.src, [i]); }
+    if (!pool) return;
+    for (const r of recs) for (const n of r.addedNodes) for (const i of [...AV(n)]) {
+      if (!i.isConnected) continue; const l = pool.get(i.src), old = l && l.shift(); if (!old) continue;
+      old.className = i.className; if (i.title) old.title = i.title; i.replaceWith(old);
+    }
+    mo.takeRecords();   // our own swaps: not a rebuild, or the two <img>s would swap back and forth forever
+  });
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+  function src(name, size = 256) { const e = map()[name]; if (!(e && e.file && e.v)) return null; return url(e.file, e.v, size); }
   const initial = s => { const m = String((s && s.name) || '?').trim().match(/[\p{L}\p{N}]/u); return m ? m[0].toUpperCase() : '?'; };
   const colorOf = s => { try { if (s.color && typeof ORB_PAL !== 'undefined' && ORB_PAL[s.color]) return ORB_PAL[s.color].rim; } catch { } return ((typeof FAMILY_COLOR !== 'undefined' && FAMILY_COLOR) || window.FAMILY_COLOR || {})[s && s.family] || '#9fb4d8'; };
   function html(s, { cls = '', click = false, size = 256, letter = true } = {}) {
@@ -87,7 +92,7 @@ body.chat-theme:not(.ct-dark) .avp { --bg: #fff; --fg: #1d1d1f; --dim: #6e7480; 
     const sb = P.el.querySelector('[data-sync]'); sb.hidden = !d.canSync; sb.disabled = !!P.syncing;
     P.el.querySelector('[data-drive]').hidden = !d.sourceUrl;
   }
-  const tileUrl = x => { const u = url(x.file, x.v, 256); if (/\.gif$/i.test(x.file)) hold(u); return u; };
+  const tileUrl = x => url(x.file, x.v, 256);
   async function load() { if (!P) return; try { P.data = await window.api.avatars.list(); } catch { } draw(); }
   function close() { if (P) { P.el.remove(); P = null; } }
   function pick(s) {

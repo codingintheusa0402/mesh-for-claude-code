@@ -3,7 +3,7 @@
 Newest first. Older changes are in the git log.
 
 ## 2026-11-27 — Animated pictures no longer restart when a list refreshes
-- The chat list, board, rooms and the picture picker are rebuilt as sessions work, and each rebuild restarted every GIF from its first frame, so a picture often never got past its first second. One hidden 1 px copy of each GIF in use now keeps its animation running across rebuilds (all copies of a picture play in step). It is dropped as soon as nothing on screen shows that picture, so nothing animates out of sight.
+- The chat list, board, rooms and the picture picker are rebuilt on every status change, and Chromium starts each new picture at its first frame, so GIFs kept restarting. When a rebuild drops an animated picture and adds the same one back, the old picture element is now put back in place of the new one (before the next paint), so it keeps playing. A first try that kept a hidden copy of each GIF did not help in the app and is gone.
 
 ## 2026-11-27 — Animated session pictures loop back and forth
 - A GIF picture now plays forward and then backward (0…N-1, then N-2…1) before it starts again, so the loop has no jump back to the first frame and a 3 s GIF moves smoothly for about 6 s. The cached copies are made again once, by themselves (about 2 s per picture, one at a time).
