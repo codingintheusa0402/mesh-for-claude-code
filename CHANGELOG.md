@@ -2,6 +2,9 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-27 — Terminals panel: up to 4 terminals at once
+- Split view in the Terminals panel: the new split button after ＋ in the tab row (or ⌘\\) shows the current terminal and the last other one side by side; ⌘-click a tab, or drag a tab down onto the terminal area (it outlines), to add one, up to 4; ⌘-click a shown tab or × on its pane label to take it out. Two sit side by side (stacked in a tall panel), three as three columns or one tall pane plus two, four as 2 × 2. Clicking a pane focuses it (outlined, its tab lit); clicking a tab that isn't shown puts it into the focused pane. Tabs on screen are underlined. Works in both themes (each chat room fills its pane); not in Grid view or the mini window. Which terminals are split is kept per machine, so it comes back after a restart.
+
 ## 2026-11-27 — Chat room: older messages no longer vanish after pasted pictures
 - The chat room read only the last 2 MB of a session's transcript. Pasted screenshots and pictures a session opens are kept there as base64 lines of 0.5 MB and more, so a few of them filled that window and the room showed only the latest tool calls, with your messages above gone. It now reads further back (2, 8, then 32 MB) until it has the messages it needs, and after that parses only what was added since the last read. Same for the iPhone room and detached windows.
 

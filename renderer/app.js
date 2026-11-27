@@ -1063,7 +1063,7 @@ const addStamps = (term, el, id) => {
 };
 function mirrorTerm(p) {
   const el = document.createElement('div'); el.className = 'term peer';
-  el.innerHTML = `<div class="tlabel"><span class="hdot h-idle"></span><span class="ttl"></span></div><div class="xt"></div>`;
+  el.innerHTML = `<div class="tlabel"><span class="hdot h-idle"></span><span class="ttl"></span><span class="tx" title="Take it out of the split">×</span></div><div class="xt"></div>`;
   $('#terms').appendChild(el);
   const term = new Terminal(termOpts());
   const fit = new FitAddon.FitAddon(); term.loadAddon(fit);
@@ -1221,7 +1221,7 @@ async function newTerm(opts) {
     return info.id;
   }
   const el = document.createElement('div'); el.className = 'term';
-  el.innerHTML = `<div class="tlabel"><span class="hdot h-idle"></span><span class="ttl"></span></div><div class="xt"></div>`;
+  el.innerHTML = `<div class="tlabel"><span class="hdot h-idle"></span><span class="ttl"></span><span class="tx" title="Take it out of the split">×</span></div><div class="xt"></div>`;
   $('#terms').appendChild(el);
   const term = new Terminal(termOpts());
   const fit = new FitAddon.FitAddon(); term.loadAddon(fit);
@@ -1268,6 +1268,7 @@ window.api.pty.onExit((id) => {
 const visibleTerms = () => [...terms].filter(([, t]) => !t.tabHidden).map(([id]) => id);
 function closeTerm(id, really) {
   const t = terms.get(id); if (!t) return;
+  unsplit(id);
   if (!really && !t.peer && !t.exited) {
     t.tabHidden = true; t.el.classList.add('tab-hidden'); t.el.classList.remove('on');
     if (activeTerm === id) activeTerm = visibleTerms().pop() || null;
@@ -1293,9 +1294,11 @@ function activate(id) {
   { const prev = terms.get(activeTerm); if (prev && activeTerm !== id && prev.el.classList.contains('on') && prev.el.offsetHeight) { const b = prev.term.buffer.active; prev.pinned = b.viewportY >= b.baseY; } }
   { const t = terms.get(id); if (t && t._ctOut && window.chatTheme) { window.chatTheme.focusOut(id); return; } }   // its room is in a window of its own: bring that window up
   { const t = terms.get(id); if (t && t.tabHidden) { t.tabHidden = false; t.el.classList.remove('tab-hidden'); $('#noTerms').style.display = 'none'; layoutGrid(); } }
-  activeTerm = id;
+  const prevActive = activeTerm; activeTerm = id;
   { const s = snap.sessions.find(x => termOf(x) === id); if (s) seen(s.sid); }
-  for (const [k, t] of terms) t.el.classList.toggle('on', k === id);
+  // split view: a tab not on screen takes the place of the focused pane (like an editor group); one on screen just gets focus
+  if (splitOn() && !split.includes(id)) { const i = split.indexOf(prevActive); if (i >= 0) split[i] = id; else split[split.length - 1] = id; saveSplit(); }
+  applyShown();
   renderTabs(); markFocus();
   const tab = document.querySelector(`#tabs .tab[data-id="${id}"]`);   // bring the tab into view in a long tab row
   if (tab) tab.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: isSimple() ? 'auto' : 'smooth' });
@@ -1325,12 +1328,16 @@ function renderTabs() {
   applyTabOrder();
   const CT = window.chatTheme && window.chatTheme.on, ctS = id => CT && snap.sessions.find(x => termOf(x) === id);   // chat theme: avatar + unread badge
   const picS = id => !CT && window.meshAvatars && snap.sessions.find(x => termOf(x) === id);   // Default theme: a picked picture only
-  $('#tabs').innerHTML = [...terms].filter(([, t]) => !t.tabHidden).map(([id, t]) => `<div class="tab ${id === activeTerm ? 'on' : ''}" data-id="${id}">
+  const inSplit = id => splitOn() && split.includes(id);
+  $('#tabs').innerHTML = [...terms].filter(([, t]) => !t.tabHidden).map(([id, t]) => `<div class="tab ${id === activeTerm ? 'on' : ''}${inSplit(id) ? ' insplit' : ''}" data-id="${id}" title="⌘-click or drag down onto the terminal: show it next to this one (up to ${SPLIT_MAX})">
     ${(s => s ? window.chatTheme.avatar(s, 'xs') : '')(ctS(id))}${(s => s ? window.meshAvatars.html(s, { cls: 'tav', letter: false }) : '')(picS(id))}<span class="hdot h-${t.health || (t.exited ? 'error' : 'idle')}"></span><span class="t">${esc(t.title)}</span>${termTag(id, t)}${(s => s ? window.chatTheme.badge(s) : '')(ctS(id))}<span class="x" data-x="${id}">×</span></div>`).join('') +
-    `<div class="tab" id="tabNew" title="New session (⌘T)">＋</div>`;
+    `<div class="tab" id="tabNew" title="New session (⌘T)">＋</div>` +
+    `<div class="tab${splitOn() ? ' on' : ''}" id="tabSplit" title="${splitOn() ? 'Back to one terminal (⌘\\)' : 'Show two terminals side by side (⌘\\). ⌘-click a tab or drag it onto the terminal to add more, up to ' + SPLIT_MAX}"><svg width="14" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.4"><rect x=".7" y=".7" width="12.6" height="10.6" rx="2"/><path d="M7 .7v10.6"/></svg></div>`;
   for (const el of document.querySelectorAll('.tab[data-id]')) { el.onclick = e => { if (tabDrag || el._dragged) { el._dragged = false; return; } if (e.target.dataset.x) closeTerm(e.target.dataset.x); else activate(el.dataset.id); };
     el.addEventListener('pointerdown', e => tabDragStart(e, el)); }
+  for (const el of document.querySelectorAll('.tab[data-id]')) el.addEventListener('click', e => { if ((e.metaKey || e.ctrlKey) && !e.target.dataset.x) { e.stopImmediatePropagation(); toggleSplit(el.dataset.id); } }, true);
   $('#tabNew').onclick = openNew;
+  $('#tabSplit').onclick = splitButton;
   for (const [, t] of terms) { t.el.querySelector('.ttl').textContent = t.title; t.el.querySelector('.hdot').className = 'hdot h-' + (t.health || 'idle'); }
   if (window.chatTheme) window.chatTheme.update();
 }
@@ -1347,7 +1354,7 @@ function applyTabOrder() {
 }
 function tabDragStart(e, el) {
   if (e.button !== 0 || e.target.dataset.x) return;
-  const x0 = e.clientX, y0 = e.clientY, id = el.dataset.id; let on = false, slot = null, out = false;
+  const x0 = e.clientX, y0 = e.clientY, id = el.dataset.id; let on = false, slot = null, out = false, intoSplit = false;
   try { el.setPointerCapture(e.pointerId); } catch { }   // keep getting the pointer when it leaves the window (a tab dragged out = its own window)
   const CT = () => window.chatTheme && window.chatTheme.on;
   const tabsEl = $('#tabs'), others = () => [...tabsEl.querySelectorAll('.tab[data-id]')].filter(t => t !== el);
@@ -1356,10 +1363,12 @@ function tabDragStart(e, el) {
   const outsidePanel = ev => { if (!panelEl) return false; const r = panelEl.getBoundingClientRect(), m = 8;
     return ev.clientX < r.left - m || ev.clientX > r.right + m || ev.clientY < r.top - m || ev.clientY > r.bottom + m; };
   const mv = ev => {
-    if (!on) { if (Math.abs(ev.clientX - x0) < 6 && !(CT() && Math.abs(ev.clientY - y0) > 14)) return; on = true; tabDrag = { id }; el.classList.add('dragging'); document.body.classList.add('tab-dragging'); }
+    if (!on) { if (Math.abs(ev.clientX - x0) < 6 && !(Math.abs(ev.clientY - y0) > 14)) return; on = true; tabDrag = { id }; el.classList.add('dragging'); document.body.classList.add('tab-dragging'); }
     // chat theme: outside the Terminals panel (not only outside the window), letting go opens the room in a window of its own
     out = CT() && (window.chatTheme.outside(ev) || outsidePanel(ev)); document.body.classList.toggle('ct-tearing', out);
-    el.style.transform = CT() ? `translate(${ev.clientX - x0}px, ${out ? ev.clientY - y0 : Math.max(-40, Math.min(60, ev.clientY - y0))}px)` : `translateX(${ev.clientX - x0}px)`;
+    // over the terminal area (below the tab row, inside the panel): letting go shows it next to the one on screen
+    { const tr = $('#terms').getBoundingClientRect(); intoSplit = !out && canSplit() && ev.clientY > tr.top + 12 && ev.clientY < tr.bottom && ev.clientX > tr.left && ev.clientX < tr.right; $('#terms').classList.toggle('drop-split', intoSplit); }
+    el.style.transform = CT() || intoSplit ? `translate(${ev.clientX - x0}px, ${out || intoSplit ? ev.clientY - y0 : Math.max(-40, Math.min(60, ev.clientY - y0))}px)` : `translateX(${ev.clientX - x0}px)`;
     const list = others(); slot = list.length;
     for (let i = 0; i < list.length; i++) { const r = list[i].getBoundingClientRect(); if (ev.clientX < r.left + r.width / 2) { slot = i; break; } }
     list.forEach((t, i) => t.classList.toggle('drop-before', i === slot)); tabsEl.classList.toggle('drop-end', slot === list.length);
@@ -1369,7 +1378,9 @@ function tabDragStart(e, el) {
     removeEventListener('pointermove', mv); removeEventListener('pointerup', up);
     if (!on) return;
     el._dragged = true; el.style.transform = ''; el.classList.remove('dragging'); document.body.classList.remove('tab-dragging', 'ct-tearing'); tabsEl.classList.remove('drop-end');
+    $('#terms').classList.remove('drop-split');
     if (out && window.chatTheme.tearOff('term', id, ev)) { others().forEach(t => t.classList.remove('drop-before')); tabDrag = null; renderTabs(); return; }
+    if (intoSplit) { others().forEach(t => t.classList.remove('drop-before')); tabDrag = null; addSplit(id); return; }
     const list = others().map(t => t.dataset.id); list.splice(slot == null ? list.length : slot, 0, id);
     const hiddenIds = [...terms.keys()].filter(k => !list.includes(k));
     const m = new Map([...list, ...hiddenIds].map(k => [k, terms.get(k)])); terms.clear(); for (const [k, v] of m) terms.set(k, v);
@@ -1393,27 +1404,82 @@ function syncTermTitles() {
 // while a divider is being dragged the terminals keep their grid (the box just clips/grows): refitting on every mouse move
 // reflowed 20k lines of scrollback per terminal and resized the tmux pane each pixel, so Claude Code redrew non-stop (lag).
 // One fit runs when the drag ends (sizingDone).
+
+// ---- split view (2026-11-27): 2 to 4 terminals side by side in the Terminals panel ----
+// ⌘-click a tab (add / remove), drag a tab down onto the terminal area (add), or the split button in the tab row (two ↔ one,
+// ⌘\\). Clicking a tab that isn't shown puts it in the focused pane. Not in Grid view (it shows them all) or the mini window.
+// Kept per machine as session keys, so the split comes back after a restart.
+var SPLIT_MAX = 4;
+var split = [];
+const canSplit = () => !isMini() && document.body.dataset.view !== 'grid';
+const splitIds = () => split.filter(id => terms.has(id) && !terms.get(id).tabHidden);
+const splitOn = () => canSplit() && splitIds().length >= 2;
+function saveSplit() { split = splitIds(); store.set('splitKeys', split.map(tabKey)); }
+function restoreSplit() {    // a terminal that comes back after a restart rejoins the split it was in
+  const keys = store.get('splitKeys', []); if (keys.length < 2 || split.length >= keys.length) return;
+  const ids = keys.map(k => [...terms.keys()].find(id => tabKey(id) === k)).filter(Boolean);
+  if (ids.length > split.length) { split = ids.slice(0, SPLIT_MAX); applyShown(); renderTabs(); }
+}
+function applyShown() {
+  const on = splitOn(), ids = on ? splitIds() : [activeTerm], box = $('#terms');
+  box.classList.toggle('multi', on); box.dataset.n = on ? ids.length : 1;
+  for (const [k, t] of terms) { const i = ids.indexOf(k); t.el.classList.toggle('on', i >= 0); t.el.style.order = on && i >= 0 ? i : ''; t.el.classList.toggle('pane-first', on && i === 0); }
+  if (on) {   // 2: side by side, or stacked in a tall panel; 3: three columns when wide, else the first pane on the left full height; 4: 2 × 2
+    const r = box.getBoundingClientRect(), wide = r.width > r.height * 1.1, n = ids.length;
+    const cols = n === 2 ? (wide ? 2 : 1) : n === 3 ? (r.width > r.height * 2.2 ? 3 : 2) : 2;
+    box.style.setProperty('--mcols', cols); box.classList.toggle('first-tall', n === 3 && cols === 2);
+  }
+  requestAnimationFrame(fitAll);
+}
+function addSplit(id) {
+  if (!canSplit()) { toast('Split view works in Split and Mesh views of the full window'); return; }
+  let ids = splitIds(); if (ids.length < 2) ids = activeTerm && activeTerm !== id ? [activeTerm] : [];
+  if (ids.includes(id)) { activate(id); return; }
+  if (ids.length >= SPLIT_MAX) { toast(`Up to ${SPLIT_MAX} terminals at once: ⌘-click a shown tab to take it out first`); return; }
+  split = [...ids, id]; saveSplit();
+  if (document.body.dataset.view === 'mesh') setView('split');
+  activate(id);
+}
+function unsplit(id) { if (!split.includes(id)) return; split = split.filter(x => x !== id); if (split.length < 2) split = []; saveSplit(); applyShown(); }
+function toggleSplit(id) { if (splitOn() && split.includes(id)) { unsplit(id); if (activeTerm === id) activate(split[0] || id); else renderTabs(); } else addSplit(id); }
+// in a split, a click in a pane focuses it (its tab lights up); × on its label takes it out
+$('#terms').addEventListener('pointerdown', e => {
+  if (!splitOn()) return;
+  const el = e.target.closest('.term'), id = el && [...terms].find(([, t]) => t.el === el)?.[0]; if (!id) return;
+  if (e.target.closest('.tx')) { e.preventDefault(); toggleSplit(id); return; }
+  if (id !== activeTerm) { activeTerm = id; markFocus(); renderTabs(); }
+}, true);
+function splitButton() {
+  if (splitOn()) { split = []; saveSplit(); applyShown(); renderTabs(); return; }
+  const ids = visibleTerms(), other = ids.filter(x => x !== activeTerm).pop();
+  if (!activeTerm || !other) { toast('Open a second terminal first'); return; }
+  addSplit(other); activate(activeTerm === other ? ids[0] : split[0]);
+}
+
 const SIZING = /\b(dk-resizing-[xy]|side-resizing|dock-resizing)\b/;
 function sizingDone() { requestAnimationFrame(() => { viz.resize(); fitAll(); }); }
 function fitAll() {
   if (SIZING.test(document.body.className)) return;
+  restoreSplit();
   for (const [id, t] of terms) {
     if (document.body.dataset.view !== 'grid' && !t.el.classList.contains('on')) continue;
     try { fitTerm(id, t); } catch { }
   }
 }
 function layoutGrid() {
+  if (split.length) applyShown();
   const n = Math.max(1, visibleTerms().length);
   const cols = n <= 1 ? 1 : n <= 4 ? 2 : 3;
   $('#terms').style.setProperty('--cols', cols);
   requestAnimationFrame(fitAll);
 }
-new ResizeObserver(() => fitAll()).observe($('#terms'));
+new ResizeObserver(() => { if (splitOn()) applyShown(); else fitAll(); }).observe($('#terms'));
 
 // ---------------- views, dock resize, keys ----------------
 function setView(v) {
   document.body.dataset.view = v; store.set('view', v);
   document.querySelectorAll('#viewSeg button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  if (activeTerm && terms.has(activeTerm)) applyShown();
   layoutGrid(); requestAnimationFrame(() => { viz.resize(); fitAll(); });
 }
 document.querySelectorAll('#viewSeg button').forEach(b => b.onclick = () => setView(b.dataset.view));
@@ -1473,6 +1539,7 @@ addEventListener('keydown', e => {
   if (e.key === '1') { e.preventDefault(); setView('mesh'); }
   else if (e.key === '2') { e.preventDefault(); setView('split'); }
   else if (e.key === '3') { e.preventDefault(); setView('grid'); }
+  else if (e.key === '\\') { e.preventDefault(); splitButton(); }
   else if (e.key === 't') { e.preventDefault(); openNew(); }
   else if (e.key === 'b') { e.preventDefault(); openBroadcast(); }
   else if (e.key === 'p') { e.preventDefault(); $('#simpleBtn').click(); }

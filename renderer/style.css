@@ -758,3 +758,19 @@ body.simple .bcard.b-waiting { animation: bBlinkWarn 1.6s steps(1, end) infinite
   box-shadow: 0 0 0 3px rgba(255,255,255,.85), 0 10px 30px rgba(0,0,0,.55), 0 0 28px rgba(140,170,255,.35); background: var(--av, #222); }
 .orbit-av .orbit-av-letter b { font: inherit; color: inherit; }
 .orbit-av .orbit-av-name { font: 600 12px/1.2 -apple-system, system-ui, sans-serif; color: #fff; padding: 3px 9px; border-radius: 10px; background: rgba(10,12,24,.78); max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* split view (2026-11-27): 2 to 4 terminals side by side in the Terminals panel (app.js applyShown) */
+.term .tlabel .tx { display: none; }
+#terms.multi { display: grid; gap: 6px; padding: 6px; grid-template-columns: repeat(var(--mcols, 2), minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); }
+#terms.multi .term.on { position: relative; inset: auto; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 9px; padding: 0; overflow: hidden; min-width: 0; min-height: 0; }
+#terms.multi .term.on.focus { border-color: #4b5aa8; box-shadow: 0 0 0 1px #4b5aa8; }
+#terms.multi .term .tlabel { display: flex; gap: 8px; align-items: center; padding: 4px 10px; font-size: 11.5px; color: var(--dim); background: var(--panel); border-bottom: 1px solid var(--line); }
+#terms.multi .term.focus .tlabel { color: var(--text, inherit); }
+#terms.multi .term .tlabel .ttl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#terms.multi .term .tlabel .tx { display: inline; cursor: pointer; opacity: .55; padding: 0 2px; }
+#terms.multi .term .tlabel .tx:hover { opacity: 1; }
+#terms.multi .term .xt { flex: 1; min-height: 0; height: auto; padding: 4px 4px 2px 8px; }
+#terms.multi.first-tall .term.on.pane-first { grid-row: span 2; }
+#terms.drop-split { outline: 2px dashed #4b5aa8; outline-offset: -4px; }
+#tabs .tab.insplit { box-shadow: inset 0 -2px 0 #4b5aa8; }
+#tabSplit { display: flex; align-items: center; justify-content: center; }
