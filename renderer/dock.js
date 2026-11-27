@@ -133,9 +133,10 @@
       const a = Math.max(minF, Math.min(a0 + b0 - minF, a0 + d));
       n.sizes[i] = a; n.sizes[i + 1] = a0 + b0 - a;
       kids[i].style.flex = `${n.sizes[i]} 1 0px`; kids[i + 1].style.flex = `${n.sizes[i + 1]} 1 0px`;
-      dispatchEvent(new Event('resize'));
     };
-    const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); document.body.classList.remove('dk-resizing-x', 'dk-resizing-y'); save(); };
+    // terminals refit once on release (app.js fitAll skips while dk-resizing-* is set)
+    const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); document.body.classList.remove('dk-resizing-x', 'dk-resizing-y'); save();
+      dispatchEvent(new Event('resize')); if (typeof sizingDone === 'function') sizingDone(); };
     addEventListener('pointermove', mv); addEventListener('pointerup', up);
   }
 

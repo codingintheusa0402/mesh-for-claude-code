@@ -1386,7 +1386,13 @@ function syncTermTitles() {
   if (changed) renderTabs();
 }
 
+// while a divider is being dragged the terminals keep their grid (the box just clips/grows): refitting on every mouse move
+// reflowed 20k lines of scrollback per terminal and resized the tmux pane each pixel, so Claude Code redrew non-stop (lag).
+// One fit runs when the drag ends (sizingDone).
+const SIZING = /\b(dk-resizing-[xy]|side-resizing|dock-resizing)\b/;
+function sizingDone() { requestAnimationFrame(() => { viz.resize(); fitAll(); }); }
 function fitAll() {
+  if (SIZING.test(document.body.className)) return;
   for (const [id, t] of terms) {
     if (document.body.dataset.view !== 'grid' && !t.el.classList.contains('on')) continue;
     try { fitTerm(id, t); } catch { }
@@ -1414,8 +1420,11 @@ setView(store.get('view', 'split'));
   const saved = store.get('dockH', null); if (saved) dock.style.height = saved + 'px';
   h.onmousedown = e => {
     const y0 = e.clientY, h0 = dock.offsetHeight;
-    const mm = ev => { const nh = Math.max(80, Math.min(window.innerHeight - 200, h0 - (ev.clientY - y0))); dock.style.height = nh + 'px'; viz.resize(); fitAll(); };
-    const mu = () => { removeEventListener('mousemove', mm); removeEventListener('mouseup', mu); store.set('dockH', dock.offsetHeight); };
+    let raf = 0, ny = y0; document.body.classList.add('dock-resizing');
+    const mm = ev => { ny = ev.clientY; if (!raf) raf = requestAnimationFrame(() => { raf = 0; dock.style.height = Math.max(80, Math.min(window.innerHeight - 200, h0 - (ny - y0))) + 'px'; }); };
+    const mu = () => { removeEventListener('mousemove', mm); removeEventListener('mouseup', mu); cancelAnimationFrame(raf); raf = 0;
+      dock.style.height = Math.max(80, Math.min(window.innerHeight - 200, h0 - (ny - y0))) + 'px';
+      document.body.classList.remove('dock-resizing'); store.set('dockH', dock.offsetHeight); sizingDone(); };
     addEventListener('mousemove', mm); addEventListener('mouseup', mu);
   };
 })();
@@ -1495,9 +1504,10 @@ function notifyTransitions() {
   h.addEventListener('mousedown', e => {
     e.preventDefault(); const x0 = e.clientX, w0 = side.getBoundingClientRect().width;
     document.body.classList.add('side-resizing');
-    const mv = ev => { apply(w0 + ev.clientX - x0); viz.resize(); fitAll && fitAll(); };
-    const up = () => { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); document.body.classList.remove('side-resizing');
-      store.set('sideW', side.getBoundingClientRect().width); viz.resize(); };
+    let raf = 0, nx = x0;
+    const mv = ev => { nx = ev.clientX; if (!raf) raf = requestAnimationFrame(() => { raf = 0; apply(w0 + nx - x0); }); };
+    const up = () => { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); cancelAnimationFrame(raf); raf = 0; apply(w0 + nx - x0);
+      document.body.classList.remove('side-resizing'); store.set('sideW', side.getBoundingClientRect().width); sizingDone(); };
     addEventListener('mousemove', mv); addEventListener('mouseup', up);
   });
   h.addEventListener('dblclick', () => { apply(DEF); store.set('sideW', DEF); viz.resize(); });

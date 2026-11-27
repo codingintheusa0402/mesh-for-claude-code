@@ -65,6 +65,7 @@ textarea:focus, input:focus { border-color: #4b5aa8; }
 #loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--dim); pointer-events: none; }
 #dockHandle { height: 5px; cursor: row-resize; background: var(--line); flex: none; }
 #dockHandle:hover { background: #3a4560; }
+body.dock-resizing, body.dock-resizing * { cursor: row-resize !important; user-select: none; }
 #dock { height: 42%; flex: none; display: flex; flex-direction: column; background: #07080d; min-height: 80px; }
 #tabs { display: flex; gap: 2px; padding: 5px 6px 0; border-bottom: 1px solid var(--line); overflow-x: auto; flex: none; }
 .tab { display: flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 7px 7px 0 0; cursor: pointer; color: var(--dim); white-space: nowrap; border: 1px solid transparent; border-bottom: 0; max-width: 300px; }
