@@ -131,13 +131,13 @@ function createAvatars({ cfg = {}, machine = os.hostname(), peer = () => null, o
   }
   // crop what the picks need and what the folder holds, in the background
   function warm() {
-    for (const e of Object.values(picks)) if (e.file && !ready(e.file)) ensure(e.file).then(r => r && changed());
+    for (const e of Object.values(picks)) if (e.file && !(index[e.file] && ready(e.file) && index[e.file].sig === sigOf(e.file))) ensure(e.file).then(r => r && changed());
     for (const x of files()) if (!x.v) ensure(x.file).then(r => r && changed());
   }
 
   function files() {
     let names = []; try { names = fs.readdirSync(dir).filter(n => !n.startsWith('.') && IMG.test(n)); } catch { }
-    return names.map(file => { const st = fs.statSync(path.join(dir, file)), e = index[file], ok = e && e.sig === `${st.size}-${Math.round(st.mtimeMs)}` && ready(file);
+    return names.map(file => { const st = fs.statSync(path.join(dir, file)), e = index[file], ok = e && e.sig === sigOf(file) && ready(file);
       return { file, size: st.size, mtime: st.mtimeMs, v: ok ? e.v : null }; }).sort((a, b) => b.mtime - a.mtime);
   }
   function syncState() { try { return JSON.parse(fs.readFileSync(path.join(dir, '.sync.json'), 'utf8')); } catch { return null; } }
