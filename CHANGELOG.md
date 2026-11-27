@@ -2,6 +2,9 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-27 — At most 6 detached chat windows
+- Each detached window is its own page process (about 90 MB, ~0% CPU when idle). At most 6 stay open (MESH_CHATWIN_MAX); opening another docks the one used longest ago back into the main window.
+
 ## 2026-11-27 — Code map, all projects: both Macs
 - The all-projects map showed only the sessions of the Mac it was opened on. Each Mac now serves its half (GET /api/codemap-hub, its own sessions and maps) and the window merges the other Mac's in: its projects with their areas, a folder both Macs work in as one hub, and folder-inside links across the two Macs.
 

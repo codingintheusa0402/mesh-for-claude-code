@@ -1484,6 +1484,7 @@ function cwFit(b) {   // a saved or dropped spot, kept on a screen
   const width = Math.min(b.width, wa.width), height = Math.min(b.height, wa.height);
   return { x: Math.round(Math.min(Math.max(b.x, wa.x), wa.x + wa.width - width)), y: Math.round(Math.min(Math.max(b.y, wa.y), wa.y + wa.height - height)), width, height };
 }
+const CHATWIN_MAX = Math.max(1, +process.env.MESH_CHATWIN_MAX || 6);
 function openChatWin(key, at) {
   key = String(key || '');
   const room = key.startsWith('room:'), sid = room ? key.slice(5) : '';
@@ -1496,6 +1497,11 @@ function openChatWin(key, at) {
     backgroundColor: dark ? (room ? '#1c1c1c' : '#1e1e1e') : (room ? '#bacee0' : '#ffffff'),
     ...(IS_WIN ? { autoHideMenuBar: true } : { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 12, y: 12 } }),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: true } });
+  // each window is its own page process (~90 MB): at most CHATWIN_MAX stay open; opening one more docks the one used
+  // longest ago (it goes back into the main window, nothing is lost)
+  w.usedAt = Date.now(); w.on('focus', () => { w.usedAt = Date.now(); });
+  const open = [...chatWins.entries()].filter(([, x]) => !x.isDestroyed());
+  if (open.length >= CHATWIN_MAX) { const [, old] = open.sort((a, b) => (a[1].usedAt || 0) - (b[1].usedAt || 0))[0]; try { old.close(); } catch { } }
   chatWins.set(key, w);
   w.loadFile(path.join(__dirname, 'renderer', 'chatwin.html'), { query: room ? { room: sid } : { panel: 'sessions' } });
   w.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//.test(url)) shell.openExternal(url); return { action: 'deny' }; });
