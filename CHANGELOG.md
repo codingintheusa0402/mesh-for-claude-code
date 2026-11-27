@@ -5,6 +5,10 @@ Newest first. Older changes are in the git log.
 ## 2026-11-27 — The session that runs the app is tagged Core
 - The tag on the session that runs this app (the star in the middle of the mesh) reads Core instead of sun, in the window and on the iPhone page.
 
+## 2026-11-27 — Code map, all projects: a Detail view
+- **Simple / Detail** in the all-projects header. **Detail** draws every project's real items and links instead of one hub and its biggest areas: small dots coloured by area (a pastel palette per project), hair-thin curved links, each project a dense cluster around its hub (picture and name, small), loose areas floating as islands, and the links between projects (folder, imports, same names, messages, lineage) drawn faintly between the clusters. Big projects are sampled: half their best-linked items and half spread over their areas, at most 1,500 per project and about 9,000 items / 15,000 links in all (both Macs share the budget), so the header says "showing N of M items". Hover an item for its name, file, area and project; click it to light up its neighbours; double-click a cluster to open that project's own map. Search dims everything that doesn't match. The layout runs once in a Web Worker and then stays still; drawing is batched per colour and only what is in view, so panning stays well under a frame (about 1 ms per redraw with 8,300 items). Its data is a separate call (the Simple view stays light), cached per graph.json; the other Mac's half comes from GET /api/codemap-hub?detail=1. The choice is remembered; light and dark themes both have their own look.
+- Simple view: labels no longer overlap. A session's name under its picture and the project's name under the hub (two sessions on one folder, say) now go below, above or beside their dot, wherever there is room; area names that fit nowhere are left out until you zoom in.
+
 ## 2026-11-27 — At most 6 detached chat windows
 - Each detached window is its own page process (about 90 MB, ~0% CPU when idle). At most 6 stay open (MESH_CHATWIN_MAX); opening another docks the one used longest ago back into the main window.
 

@@ -66,9 +66,81 @@ async function summarize(file, labelsFile) {
   return sum;
 }
 
+// ---- Detail view (2026-11-27): the real items and links of each project, sampled ----
+// A project can hold 20k items and 35k links, so each graph.json is sampled once per change (cached by mtime): items are
+// ordered so that any prefix is a fair sample (each area's best-linked items first, areas in proportion to their size,
+// so small areas still show as islands), and links are ordered by their later end, so trimming to the first k items
+// keeps exactly the links among them as a prefix too. trimDetail() then shares one budget across all projects.
+const DETAIL_ITEMS = 1500, DETAIL_LINKS = 4000;        // per project, before the shared budget
+const BUDGET_ITEMS = 9000, BUDGET_LINKS = 15000;       // the whole picture (both Macs)
+const dcache = new Map();
+async function sample(file, labelsFile) {
+  let st; try { st = fs.statSync(file); } catch { return null; }
+  const hit = dcache.get(file); if (hit && hit.mtime === st.mtimeMs) return hit.d;
+  let g; try { g = JSON.parse(await fs.promises.readFile(file, 'utf8')); } catch { return null; }
+  let labels = {}; try { labels = JSON.parse(fs.readFileSync(labelsFile, 'utf8')) || {}; } catch { }
+  const nodes = g.nodes || [], links = g.links || g.edges || [], idx = new Map(), deg = new Int32Array(nodes.length);
+  nodes.forEach((n, i) => idx.set(n.id, i));
+  const L = [];
+  for (const l of links) {
+    const a = idx.get(typeof l.source === 'object' ? l.source.id : l.source), b = idx.get(typeof l.target === 'object' ? l.target.id : l.target);
+    if (a === undefined || b === undefined || a === b) continue; deg[a]++; deg[b]++; L.push(a, b);
+  }
+  // areas (communities), biggest first: the area's index is its colour
+  const comm = new Map();
+  nodes.forEach((n, i) => { const c = n.community ?? -1; let a = comm.get(c); if (!a) comm.set(c, a = { id: c, items: [], names: new Map() }); a.items.push(i);
+    if (n.community_name) a.names.set(n.community_name, (a.names.get(n.community_name) || 0) + 1); });
+  const areas = [...comm.values()].sort((a, b) => b.items.length - a.items.length);
+  const key = new Float64Array(nodes.length), areaOf = new Int32Array(nodes.length);
+  areas.forEach((a, ai) => { a.items.sort((x, y) => deg[y] - deg[x]); a.items.forEach((i, r) => { key[i] = (r + .5) / a.items.length; areaOf[i] = ai; }); });
+  // half the sample is the best-linked items overall (the connected core), half is spread over the areas (islands)
+  const byDeg = nodes.map((_, i) => i).sort((x, y) => deg[y] - deg[x]); byDeg.forEach((i, r) => { key[i] = Math.min(key[i], (r + .5) / nodes.length); });
+  const order = nodes.map((_, i) => i).sort((x, y) => key[x] - key[y] || deg[y] - deg[x]).slice(0, DETAIL_ITEMS);
+  const pos = new Map(order.map((i, k) => [i, k]));
+  const keep = [];
+  for (let j = 0; j < L.length; j += 2) { const a = pos.get(L[j]), b = pos.get(L[j + 1]); if (a !== undefined && b !== undefined) keep.push([a, b]); }
+  const seen = new Set(), ll = [];
+  keep.sort((x, y) => Math.max(x[0], x[1]) - Math.max(y[0], y[1]));
+  for (const [a, b] of keep) { const k = a < b ? a * 65536 + b : b * 65536 + a; if (seen.has(k)) continue; seen.add(k); ll.push(a, b); if (ll.length >= DETAIL_LINKS * 2) break; }
+  // only the areas the sample uses, renumbered
+  const used = new Map(), aOut = [];
+  const area = order.map(i => { const ai = areaOf[i]; if (!used.has(ai)) { const a = areas[ai]; used.set(ai, aOut.length);
+    aOut.push({ name: String(labels[a.id] || labels[String(a.id)] || [...a.names.entries()].sort((x, y) => y[1] - x[1]).map(x => x[0])[0] || (a.id === -1 ? 'Other' : 'Area ' + a.id)).slice(0, 60), size: a.items.length }); }
+    return used.get(ai); });
+  const files = [], fIdx = new Map();
+  const file2 = order.map(i => { const f = nodes[i].source_file ? String(nodes[i].source_file).replace(/\\/g, '/') : ''; if (!f) return -1;
+    let k = fIdx.get(f); if (k === undefined) { fIdx.set(f, k = files.length); files.push(f); } return k; });
+  const d = { total: nodes.length, totalLinks: links.length, label: order.map(i => String(nodes[i].label || nodes[i].id || '').slice(0, 80)), file: file2, files, area, areas: aOut,
+    deg: order.map(i => deg[i]), links: ll };
+  dcache.set(file, { mtime: st.mtimeMs, d });
+  return d;
+}
+// share one budget across projects: each gets min(what it has, t), with t chosen so the total fits (small projects whole)
+function fill(have, budget) {
+  const tot = have.reduce((a, b) => a + b, 0); if (tot <= budget) return have.slice();
+  let lo = 0, hi = Math.max(...have);
+  for (let i = 0; i < 40; i++) { const t = (lo + hi) / 2; if (have.reduce((a, b) => a + Math.min(b, t), 0) > budget) hi = t; else lo = t; }
+  return have.map(h => Math.min(h, Math.floor(lo)));
+}
+function cut(D, k, m) {
+  const ll = []; for (let j = 0; j < D.links.length && ll.length < m * 2; j += 2) { if (D.links[j] < k && D.links[j + 1] < k) ll.push(D.links[j], D.links[j + 1]); else if (Math.max(D.links[j], D.links[j + 1]) >= k) break; }
+  return { ...D, label: D.label.slice(0, k), file: D.file.slice(0, k), area: D.area.slice(0, k), deg: D.deg.slice(0, k), links: ll };
+}
+function trimDetail(out, items = BUDGET_ITEMS, linkBudget = BUDGET_LINKS) {
+  const P = (out.projects || []).filter(p => p.detail && p.detail.label);
+  const ks = fill(P.map(p => p.detail.label.length), items);
+  const avail = P.map((p, i) => { let n = 0; const L = p.detail.links; for (let j = 0; j < L.length; j += 2) { if (Math.max(L[j], L[j + 1]) >= ks[i]) break; n++; } return n; });
+  const ms = fill(avail, linkBudget);
+  P.forEach((p, i) => { p.detail = cut(p.detail, ks[i], ms[i]); });
+  out.shown = P.reduce((a, p) => a + p.detail.label.length, 0); out.totalItems = P.reduce((a, p) => a + p.detail.total, 0);
+  out.shownLinks = P.reduce((a, p) => a + p.detail.links.length / 2, 0);
+  return out;
+}
+
 // sessions: [{ sid, name, project (folder or null), peer, avatar, color, health, lineage, relays: [{name, pid}] }]
 // where(project) → { graph, dir, own, meta } (codemap.js), jobs() → { running, queued }
-async function build({ sessions, where, jobs, home }) {
+// detail: also each project's sampled items and links (the Detail view; a separate, heavier call)
+async function build({ sessions, where, jobs, home, detail }) {
   const tilde = p => p && home && (p === home || p.startsWith(home + path.sep)) ? '~' + p.slice(home.length) : p;
   const byKey = new Map(), J = jobs ? jobs() : { running: null, queued: [] };
   for (const s of sessions) {
@@ -87,6 +159,7 @@ async function build({ sessions, where, jobs, home }) {
     let at = w.meta && w.meta.at; if (!at) { try { at = fs.statSync(w.graph).mtimeMs; } catch { } }
     Object.assign(P, { built: true, at, nodes: sum.nodes, edges: sum.edges, areas: sum.areas, comms: sum.comms, clinks: sum.clinks });
     P._sum = sum;
+    if (detail) P.detail = await sample(w.graph, path.join(w.dir, '.graphify_labels.json'));
   }
   // ---- links between projects ----
   const links = [], add = (a, b, type, label, w = 1) => { if (a !== b) links.push({ a, b, type, label, w }); };
@@ -125,10 +198,11 @@ async function build({ sessions, where, jobs, home }) {
   const lin = new Map(); for (const s of sessions) if (s.lineage && s.key) lin.set(s.lineage, (lin.get(s.lineage) || []).concat(s));
   for (const g of lin.values()) for (let i = 1; i < g.length; i++) slinks.push({ a: g[0].sid, b: g[i].sid, type: 'lineage', label: `${g[0].name} and ${g[i].name}: the same handed-off work (lineage)`, w: 1.5 });
   for (const P of projects) delete P._sum;
-  return {
-    at: Date.now(), projects, links, slinks,
+  const out = {
+    at: Date.now(), projects, links, slinks, detail: !!detail,
     sessions: sessions.map(s => ({ sid: s.sid, name: s.name, key: s.key, peer: !!s.peer, avatar: s.avatar || null, color: s.color || null, health: s.health || '' })),
   };
+  return detail ? trimDetail(out) : out;
 }
 
 // the other Mac's half (its build() result) merged into this one: its projects keep their maps (opened and built there);
@@ -137,12 +211,13 @@ function mergePeer(mine, theirs) {
   if (!theirs) return mine;
   const out = { ...mine, projects: mine.projects.slice(), links: mine.links.slice(), slinks: (mine.slinks || []).concat(theirs.slinks || []), sessions: mine.sessions.slice() };
   const byPath = new Map(out.projects.map(P => [P.path, P])), remap = new Map();
-  const STAT = ['built', 'at', 'nodes', 'edges', 'areas', 'comms', 'clinks'];
+  const STAT = ['built', 'at', 'nodes', 'edges', 'areas', 'comms', 'clinks', 'detail'];
   for (const T of theirs.projects || []) {
     const same = byPath.get(T.path);
     if (same) {
       same.sessions = same.sessions.concat(T.sessions); remap.set(T.key, same.key);
       if (!same.built && T.built) for (const k of STAT) same[k] = T[k];
+      else if (!same.detail && T.detail) same.detail = T.detail;
       continue;
     }
     const key = 'peer:' + T.key; remap.set(T.key, key);
@@ -160,4 +235,4 @@ function mergePeer(mine, theirs) {
   return out;
 }
 
-module.exports = { build, summarize, mergePeer };
+module.exports = { build, summarize, mergePeer, sample, trimDetail };

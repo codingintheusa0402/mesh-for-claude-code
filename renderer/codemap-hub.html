@@ -1,6 +1,6 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>Code map · All projects</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data: meshav:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' 'unsafe-inline'; worker-src 'self' file:; style-src 'self' 'unsafe-inline'; img-src 'self' file: data: meshav:">
 <style>
 /* Code map, all projects (2026-11-27): every session's project as one picture. Data: main.js codemap:hub → codemap-hub.js.
    Drawn on a canvas by a small force layout (projects are hubs, their Graphify areas hang off them). */
@@ -10,6 +10,8 @@
 :root[data-theme="light"] { --bg: #f5f6f8; --panel: #ffffff; --side: #ffffff; --line: rgba(0,0,0,.09); --text: #1d1d1f; --dim: #6e7480; --acc: #3a6df0; --btn: #f1f3f6; --pri: #dfe7fd;
   --ok: #1f9d63; --warn: #b7741f; --row: rgba(0,0,0,.045); --tip: rgba(255,255,255,.98); --grey: #b3b9c6; --spoke: rgba(60,70,100,.16); }
 :root[data-theme="light"][data-kind="chat"] { --acc: #191919; --pri: #fee500; }
+/* the Detail view's own canvas colours (a dark, neuron-like render; a paper-like one in light) */
+:root { --dbg: #0e0f17; --dlink: rgba(190,200,235,.10); } :root[data-kind="chat"] { --dbg: #111214; } :root[data-theme="light"] { --dbg: #f7f8fa; --dlink: rgba(40,50,80,.13); }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif; overflow: hidden; }
 body { display: flex; flex-direction: column; }
@@ -45,12 +47,17 @@ canvas.drag { cursor: grabbing; } canvas.hot { cursor: pointer; }
 #info .bt { display: flex; gap: 8px; margin-top: 10px; }
 #legend { position: absolute; left: 14px; bottom: 14px; display: flex; flex-wrap: wrap; gap: 4px 12px; max-width: 60%; color: var(--dim); font-size: 11.5px; z-index: 2; }
 #legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; -webkit-app-region: no-drag; }
+.seg button { border: 0; border-radius: 0; padding: 6px 11px; background: var(--btn); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--pri); font-weight: 600; }
 #empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--dim); text-align: center; padding: 30px; }
 [hidden] { display: none !important; }
 </style></head>
 <body>
 <header>
   <div class="t"><div class="n"><span class="k">Code map</span>All projects</div><div class="m" id="meta">Loading…</div></div>
+  <div class="seg" id="mode" title="Simple: one hub per project with its biggest areas · Detail: every project's real items and links"><button data-m="simple">Simple</button><button data-m="detail">Detail</button></div>
   <button id="fit" title="Fit everything in view">Fit</button>
   <button id="reload" title="Read the maps again">Refresh</button>
 </header>
@@ -97,7 +104,7 @@ function graphOf(d) {
     const h = add({ id: 'p:' + p.key, kind: 'hub', p, ss, solo, color: solo ? solo.color || colOf(solo.name) : colOf(p.key), r: p.built ? 22 + Math.min(16, Math.log2((p.nodes || 0) + 1) * 1.4) : 20,
       label: solo ? solo.name : p.name, x: Math.cos(a) * R, y: Math.sin(a) * R });
     if (!solo) for (const s of ss) { const sn = add({ id: 's:' + s.sid, kind: 'sess', s, p, color: s.color || colOf(s.name), r: 12, label: s.name, x: h.x + Math.random() * 40 - 20, y: h.y + Math.random() * 40 - 20 });
-      edges.push({ a: h, b: sn, type: 'same', len: 44, k: .08, label: `${s.name} works in ${p.name}` }); }
+      edges.push({ a: h, b: sn, type: 'same', len: 58, k: .08, label: `${s.name} works in ${p.name}` }); }
     for (const c of p.comms || []) {
       const cn = add({ id: 'c:' + p.key + ':' + c.id, kind: 'area', c, p, hub: h, color: h.color, r: Math.min(17, 3.5 + Math.sqrt(c.size) * .75), label: c.name,
         x: h.x + Math.random() * 80 - 40, y: h.y + Math.random() * 80 - 40 });
@@ -133,7 +140,7 @@ function tick() {
   alpha *= .985;
 }
 function kick() { if (!raf) raf = requestAnimationFrame(loop); }
-function loop() { raf = 0; if (alpha > .004) { tick(); tick(); if (fitPending && alpha < .5) { fit(); fitPending = false; } } draw(); if (alpha > .004) kick(); }
+function loop() { raf = 0; if (mode === 'detail') return; if (alpha > .004) { tick(); tick(); if (fitPending && alpha < .5) { fit(); fitPending = false; } } draw(); if (alpha > .004) kick(); }
 
 // ---------------- drawing ----------------
 const c = $('cv'), ctx = c.getContext('2d');
@@ -150,8 +157,9 @@ const hit = n => !filter || (n.label || '').toLowerCase().includes(filter) || (n
 function near(n) { const f = sel || hov; if (!f) return true; if (f === n) return true; const fp = f.kind === 'area' ? f.hub : f;
   if (n.kind === 'area') return n.hub === fp || n.hub === f.hub; if (n.p === f.p) return true;
   return edges.some(e => e.cross && ((e.a === fp && e.b === n) || (e.b === fp && e.a === n))); }
-function draw() {
-  if (!W) return; const dark = theme.theme !== 'light';
+function draw() { if (mode === 'detail') return drawDetail(); drawSimple(); }
+function drawSimple() {
+  if (!W) return; const dark = theme.theme !== 'light'; labs = [];
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
   ctx.setTransform(dpr * T.k, 0, 0, dpr * T.k, dpr * T.x, dpr * T.y);
   const focus = sel || hov, spoke = V('--spoke');
@@ -171,7 +179,7 @@ function draw() {
     ctx.globalAlpha = (near(n) ? 1 : .15) * (hit(n) ? 1 : .2);
     if (n.kind === 'area') {
       ctx.fillStyle = n.color; ctx.globalAlpha *= n === hov || n === sel ? 1 : .72; ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, 7); ctx.fill();
-      if (showAreaLabels || n === hov || n === sel || (focus && near(n) && focus !== n && (focus === n.hub))) label(n, n.label, n.y + n.r + 10, 10.5, false);
+      if (showAreaLabels || n === hov || n === sel || (focus && near(n) && focus !== n && (focus === n.hub))) labs.push({ n, lines: [[n.label, 10.5, false]], pri: n === hov || n === sel ? 1 : 3, gap: 4, a: ctx.globalAlpha / (n === hov || n === sel ? 1 : .72) });
       continue;
     }
     const built = n.p.built, grey = V('--grey');
@@ -186,16 +194,224 @@ function draw() {
     if (n.kind === 'hub' && !built) ctx.setLineDash([4, 4]);
     if (n.kind === 'hub' && (n.p.running || n.p.queued)) { ctx.strokeStyle = V('--warn'); ctx.lineWidth = 3; ctx.setLineDash([6, 4]); ctx.lineDashOffset = -(Date.now() / 40) % 20; kick(); }
     ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 1, 0, 7); ctx.stroke(); ctx.setLineDash([]); ctx.lineDashOffset = 0;
-    if (n.kind === 'hub') { label(n, n.label, n.y + n.r + 15, 13, true); label(n, n.solo ? n.p.name + (n.p.built ? '' : n.p.peer ? ' · other Mac' : ' · not built') : (n.p.built ? nn(n.p.nodes) + ' items' : n.p.peer ? 'other Mac' : 'not built'), n.y + n.r + 29, 10.5, false); }
-    else label(n, n.label, n.y + n.r + 12, 11, false);
+    const la = ctx.globalAlpha;
+    if (n.kind === 'hub') labs.push({ n, pri: 0, gap: 7, a: la, lines: [[n.label, 13, true], [n.solo ? n.p.name + (n.p.built ? '' : n.p.peer ? ' · other Mac' : ' · not built') : (n.p.built ? nn(n.p.nodes) + ' items' : n.p.peer ? 'other Mac' : 'not built'), 10.5, false]] });
+    else labs.push({ n, pri: 2, gap: 5, a: la, lines: [[n.label, 11, false]] });
   }
+  placeLabels(labs);
   ctx.globalAlpha = 1;
 }
+// labels go below their dot when there is room, else above, right or left; one that fits nowhere takes the place it
+// overlaps least (hubs and sessions) or is left out (areas). The dots of hubs and sessions count as taken space too.
+let labs = [];
+function placeLabels(L) {
+  const taken = [], ov = (b) => { let s = 0; for (const t of taken) { const w = Math.min(b.x1, t.x1) - Math.max(b.x0, t.x0), h = Math.min(b.y1, t.y1) - Math.max(b.y0, t.y0); if (w > 0 && h > 0) s += w * h; } return s; };
+  for (const n of nodes) if (n.kind !== 'area') taken.push({ x0: n.x - n.r - 2, x1: n.x + n.r + 2, y0: n.y - n.r - 2, y1: n.y + n.r + 2 });
+  L.sort((a, b) => a.pri - b.pri);
+  for (const l of L) {
+    let w = 0, h = 0;
+    for (const [t, px, bold] of l.lines) { ctx.font = `${bold ? 600 : 400} ${px}px -apple-system, system-ui, sans-serif`; const tt = clip(t); w = Math.max(w, ctx.measureText(tt).width); h += px + 3; }
+    const n = l.n, g = l.gap, cands = [[n.x - w / 2, n.y + n.r + g], [n.x - w / 2, n.y - n.r - g - h], [n.x + n.r + g, n.y - h / 2], [n.x - n.r - g - w, n.y - h / 2]];
+    let best = null, bs = Infinity;
+    for (const [x, y] of cands) { const b = { x0: x - 2, x1: x + w + 2, y0: y, y1: y + h }, o = ov(b); if (o < bs) { bs = o; best = b; } if (!o) break; }
+    if (bs > 0 && l.pri >= 3) continue;
+    taken.push(best);
+    let y = best.y0; ctx.globalAlpha = l.a;
+    for (const [t, px, bold] of l.lines) { label({ x: (best.x0 + best.x1) / 2 }, t, y + px / 2 + 1, px, bold); y += px + 3; }
+  }
+}
+const clip = t => { t = String(t || ''); return t.length > 34 ? t.slice(0, 32) + '…' : t; };
 function label(n, t, y, px, bold) {
   ctx.font = `${bold ? 600 : 400} ${px}px -apple-system, system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  t = String(t || ''); if (t.length > 34) t = t.slice(0, 32) + '…';
+  t = clip(t);
   ctx.lineWidth = 3.5; ctx.strokeStyle = V('--bg'); ctx.strokeText(t, n.x, y); ctx.fillStyle = bold ? V('--text') : V('--dim'); ctx.fillText(t, n.x, y);
 }
+
+// ---------------- the Detail view ----------------
+// Every project's real items (sampled in codemap-hub.js: sample / trimDetail) as small dots coloured by area, its links
+// hair-thin, each project a cluster around its hub; laid out once in a Web Worker (codemap-hub-layout.js), then frozen.
+// Drawn in batches: one path per colour for the links and one per colour for the dots, only what is in view.
+const DPAL = { dark: ['#8fb4ff', '#7fe0c4', '#ffb38a', '#d7a6ff', '#86d8f7', '#f5d17a', '#a8e07a', '#ff9fb6', '#9fe8c8', '#ffc8e1', '#b8b0ff', '#f0a58f'],
+  light: ['#3f6fe0', '#139a7c', '#e0702f', '#9b55e0', '#1f9bd0', '#c79a10', '#5d9e2a', '#e0557a', '#1f9e6e', '#cc4f93', '#6a5fe0', '#c8553a'] };
+const NC = 12;
+let mode = (() => { try { return localStorage.getItem('cmHubMode') === 'detail' ? 'detail' : 'simple'; } catch { return 'simple'; } })();
+let DD = null, dWorker = null, dGen = 0, dSel = -1, dHov = -1, dMoved = false, dMatch = null, Ts = null, Td = null;
+const perf = window.__cmPerf = { draws: [], first: 0, done: 0, t0: 0 };
+function startDetail(d) {
+  const list = []; let off = 0, M = 0;
+  d.projects.forEach((p, pi) => { const det = p.detail && p.detail.label ? p.detail : null, n = det ? det.label.length : 0;
+    list.push({ p, pi, off, n, det, sh: hash(p.key) % NC }); off += n; M += det ? det.links.length / 2 : 0; });
+  const N = off, R = new Float32Array(N), col = new Uint8Array(N), proj = new Uint16Array(N), L = new Int32Array(2 * M), lcol = new Uint8Array(M);
+  let m = 0;
+  for (const e of list) { if (!e.det) continue;
+    for (let j = 0; j < e.n; j++) { const i = e.off + j; R[i] = Math.min(7, 1.5 + Math.sqrt(e.det.deg[j] || 0) * .4); col[i] = (e.det.area[j] + e.sh) % NC; proj[i] = e.pi; }
+    const ll = e.det.links; for (let k = 0; k < ll.length; k += 2) { const a = e.off + ll[k], b = e.off + ll[k + 1]; L[2 * m] = a; L[2 * m + 1] = b; lcol[m] = e.det.area[ll[k]] === e.det.area[ll[k + 1]] ? col[a] : NC; m++; } }
+  const group = (cnt, colOf) => { const g = Array.from({ length: NC + 1 }, () => []); for (let i = 0; i < cnt; i++) g[colOf(i)].push(i); return g.map(a => Int32Array.from(a)); };
+  // neighbours of each item (for highlighting), compact
+  const dg = new Int32Array(N + 1); for (let k = 0; k < 2 * M; k++) dg[L[k] + 1]++; for (let i = 0; i < N; i++) dg[i + 1] += dg[i];
+  const nb = new Int32Array(2 * M), fillp = dg.slice(0, N); for (let k = 0; k < M; k++) { nb[fillp[L[2 * k]]++] = L[2 * k + 1]; nb[fillp[L[2 * k + 1]]++] = L[2 * k]; }
+  // links between projects (the Simple view's kinds), and the sessions' ones mapped to their project
+  const pIdx = new Map(d.projects.map((p, i) => [p.key, i])), sKey = new Map(d.sessions.map(s => [s.sid, s.key])), cross = [];
+  for (const l of d.links) { const a = pIdx.get(l.a), b = pIdx.get(l.b); if (a !== undefined && b !== undefined && a !== b) cross.push({ a, b, type: l.type, label: l.label, w: l.w || 1 }); }
+  for (const l of d.slinks || []) { const a = pIdx.get(sKey.get(l.a)), b = pIdx.get(sKey.get(l.b)); if (a !== undefined && b !== undefined && a !== b) cross.push({ a, b, type: l.type, label: l.label, w: l.w || 1 }); }
+  const pairN = new Map(); for (const e of cross) { const k = Math.min(e.a, e.b) + '|' + Math.max(e.a, e.b), i = pairN.get(k) || 0; pairN.set(k, i + 1); e.bend = (e.a < e.b ? 1 : -1) * (.14 + i * .12); }
+  const sess = new Map(d.sessions.map(s => [s.sid, s]));
+  for (const e of list) { e.ss = e.p.sessions.map(x => sess.get(x)).filter(Boolean); e.solo = e.ss.length === 1 ? e.ss[0] : null; e.color = e.solo ? e.solo.color || colOf(e.solo.name) : colOf(e.p.key); }
+  DD = { list, N, M, R, col, proj, L, lcol, ng: group(N, i => col[i]), lg: group(M, k => lcol[k]), dg, nb, cross, X: null, Y: null, C: null, done: false, areaLab: [] };
+  dSel = dHov = -1; dMatch = null; matchDetail();
+  const gen = ++dGen, msg = { projects: list.map(e => ({ n: e.n, area: Int32Array.from(e.det ? e.det.area : []), deg: Int32Array.from(e.det ? e.det.deg : []), links: Int32Array.from(e.det ? e.det.links : []) })),
+    plinks: cross.map(e => [e.a, e.b, e.w]) };
+  const onPos = m => { if (gen !== dGen) return; DD.X = m.x; DD.Y = m.y; DD.C = m.centers; DD.done = m.done; gridDetail(); if (m.done) areaLabels();
+    if (!dMoved) fitDetail(); if (!perf.first) perf.first = performance.now() - perf.t0; if (m.done) perf.done = performance.now() - perf.t0; draw(); metaDetail(); };
+  if (dWorker) { dWorker.terminate(); dWorker = null; }
+  const inPage = () => { const go = () => setTimeout(() => self.cmDetailLayout(msg, onPos), 0);
+    if (self.cmDetailLayout) return go(); const sc = document.createElement('script'); sc.src = 'codemap-hub-layout.js'; sc.onload = go; document.head.appendChild(sc); };
+  try { dWorker = new Worker('codemap-hub-layout.js'); dWorker.onmessage = e => onPos(e.data); dWorker.onerror = e => { e.preventDefault(); dWorker = null; inPage(); };
+    dWorker.postMessage(msg); } catch { inPage(); }
+  metaDetail();
+}
+function metaDetail() {
+  if (!data || !DD) return; const d = data, nl = d.links.length + (d.slinks || []).length;
+  $('meta').textContent = `${d.projects.length} projects · showing ${nn(d.shown || DD.N)} of ${nn(d.totalItems || DD.N)} items · ${nn(d.shownLinks || DD.M)} links · ${nl} connection${nl === 1 ? '' : 's'} between projects${DD.done ? '' : ' · laying out…'}`;
+}
+// a grid over the items, for picking under the pointer
+function gridDetail() {
+  const { X, Y, N } = DD; let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < N; i++) { if (X[i] < x0) x0 = X[i]; if (X[i] > x1) x1 = X[i]; if (Y[i] < y0) y0 = Y[i]; if (Y[i] > y1) y1 = Y[i]; }
+  const cs = 24, gw = Math.max(1, Math.ceil((x1 - x0) / cs) + 1), gh = Math.max(1, Math.ceil((y1 - y0) / cs) + 1), cnt = new Int32Array(gw * gh + 1), cell = new Int32Array(N);
+  for (let i = 0; i < N; i++) { cell[i] = Math.floor((Y[i] - y0) / cs) * gw + Math.floor((X[i] - x0) / cs); cnt[cell[i] + 1]++; }
+  for (let c = 0; c < gw * gh; c++) cnt[c + 1] += cnt[c];
+  const items = new Int32Array(N), f = cnt.slice(); for (let i = 0; i < N; i++) items[f[cell[i]]++] = i;
+  DD.grid = { x0, y0, cs, gw, gh, cnt, items };
+}
+function pickDetail(p) {
+  if (!DD || !DD.grid) return -1; const g = DD.grid, rr = 6 / T.k, cx = Math.floor((p.x - g.x0) / g.cs), cy = Math.floor((p.y - g.y0) / g.cs), span = Math.ceil(rr / g.cs) + 1;
+  let best = -1, bd = Infinity;
+  for (let y = cy - span; y <= cy + span; y++) for (let x = cx - span; x <= cx + span; x++) { if (x < 0 || y < 0 || x >= g.gw || y >= g.gh) continue; const c = y * g.gw + x;
+    for (let k = g.cnt[c]; k < g.cnt[c + 1]; k++) { const i = g.items[k], d = Math.hypot(DD.X[i] - p.x, DD.Y[i] - p.y); if (d <= Math.max(DD.R[i], rr) && d < bd) { bd = d; best = i; } } }
+  return best;
+}
+const clusterAt = p => { if (!DD || !DD.C) return -1; let best = -1, bd = Infinity; for (let i = 0; i < DD.list.length; i++) { const d = Math.hypot(DD.C[3 * i] - p.x, DD.C[3 * i + 1] - p.y); if (d < Math.max(DD.C[3 * i + 2], 26 / T.k) && d < bd) { bd = d; best = i; } } return best; };
+// the names of the bigger areas, at their middle, shown when zoomed in
+function areaLabels() {
+  const out = [];
+  for (const e of DD.list) { if (!e.det) continue; const A = e.det.areas.length, sx = new Float64Array(A), sy = new Float64Array(A), c = new Int32Array(A);
+    for (let j = 0; j < e.n; j++) { const a = e.det.area[j]; sx[a] += DD.X[e.off + j]; sy[a] += DD.Y[e.off + j]; c[a]++; }
+    for (let a = 0; a < A; a++) if (c[a] >= 8) out.push({ x: sx[a] / c[a], y: sy[a] / c[a], n: c[a], t: e.det.areas[a].name, col: (a + e.sh) % NC }); }
+  DD.areaLab = out.sort((a, b) => b.n - a.n);
+}
+function fitDetail() {
+  if (!DD || !DD.C) return; let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; const C = DD.C;
+  for (let i = 0; i < DD.list.length; i++) { const r = C[3 * i + 2]; x0 = Math.min(x0, C[3 * i] - r); x1 = Math.max(x1, C[3 * i] + r); y0 = Math.min(y0, C[3 * i + 1] - r); y1 = Math.max(y1, C[3 * i + 1] + r + 30); }
+  const k = Math.min(3, Math.min((W - 60) / (x1 - x0 || 1), (H - 60) / (y1 - y0 || 1)));
+  T = { k, x: W / 2 - (x0 + x1) / 2 * k, y: H / 2 - (y0 + y1) / 2 * k };
+}
+function matchDetail() {
+  if (!DD) return; if (!filter) { dMatch = null; return; } const mm = new Uint8Array(DD.N);
+  for (const e of DD.list) { const pm = (e.p.name || '').toLowerCase().includes(filter) || e.ss.some(s => s.name.toLowerCase().includes(filter));
+    for (let j = 0; j < e.n; j++) mm[e.off + j] = pm || e.det.label[j].toLowerCase().includes(filter) || (e.det.files[e.det.file[j]] || '').toLowerCase().includes(filter) ? 1 : 0; }
+  dMatch = mm;
+}
+function drawDetail() {
+  if (!W) return; const t0 = performance.now(), dark = theme.theme !== 'light', pal = DPAL[dark ? 'dark' : 'light'];
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.globalAlpha = 1; ctx.fillStyle = V('--dbg'); ctx.fillRect(0, 0, W, H);
+  if (!DD || !DD.X) return;
+  ctx.setTransform(dpr * T.k, 0, 0, dpr * T.k, dpr * T.x, dpr * T.y);
+  const { X, Y, R, L } = DD, k = T.k, m = 8 / k, vx0 = -T.x / k - m, vy0 = -T.y / k - m, vx1 = (W - T.x) / k + m, vy1 = (H - T.y) / k + m;
+  const inV = i => X[i] > vx0 && X[i] < vx1 && Y[i] > vy0 && Y[i] < vy1;
+  const focus = dSel >= 0 ? dSel : -1, dim = focus >= 0 || dMatch ? .16 : 1;
+  // links: hair-thin, slightly curved, one path per colour
+  ctx.lineWidth = .6 / k; const neutral = V('--dlink');
+  for (let g = 0; g <= NC; g++) {
+    const ls = DD.lg[g]; if (!ls.length) continue;
+    ctx.strokeStyle = g === NC ? neutral : pal[g]; ctx.globalAlpha = (g === NC ? 1 : dark ? .26 : .24) * dim; ctx.beginPath();
+    for (let q = 0; q < ls.length; q++) { const e = ls[q], a = L[2 * e], b = L[2 * e + 1]; if (!inV(a) && !inV(b)) continue;
+      const ax = X[a], ay = Y[a], bx = X[b], by = Y[b]; ctx.moveTo(ax, ay); ctx.quadraticCurveTo((ax + bx) / 2 - (by - ay) * .12, (ay + by) / 2 + (bx - ax) * .12, bx, by); }
+    ctx.stroke();
+  }
+  // links between projects: subtle, coloured by kind, between the cluster middles
+  const C = DD.C;
+  ctx.lineWidth = 1.4 / k;
+  for (const e of DD.cross) { const L2 = LINK[e.type] || LINK.same, ax = C[3 * e.a], ay = C[3 * e.a + 1], bx = C[3 * e.b], by = C[3 * e.b + 1];
+    ctx.strokeStyle = L2[0]; ctx.globalAlpha = (e === dHovE ? .95 : .42) * (focus >= 0 ? .4 : 1); ctx.setLineDash(e.type === 'names' ? [6 / k, 5 / k] : e.type === 'lineage' ? [2 / k, 4 / k] : []);
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.quadraticCurveTo((ax + bx) / 2 - (by - ay) * e.bend, (ay + by) / 2 + (bx - ax) * e.bend, bx, by); ctx.stroke(); }
+  ctx.setLineDash([]);
+  // dots, one path per colour; tiny ones as squares (cheaper, look the same)
+  const tiny = 1.4 / k;
+  for (let g = 0; g < NC; g++) {
+    const ns = DD.ng[g]; if (!ns.length) continue; ctx.fillStyle = pal[g]; ctx.globalAlpha = (dark ? .92 : .85) * dim; ctx.beginPath();
+    for (let q = 0; q < ns.length; q++) { const i = ns[q]; if (!inV(i)) continue; const r = Math.max(R[i], 1 / k);
+      if (r < tiny) ctx.rect(X[i] - r, Y[i] - r, 2 * r, 2 * r); else { ctx.moveTo(X[i] + r, Y[i]); ctx.arc(X[i], Y[i], r, 0, 6.2832); } }
+    ctx.fill();
+  }
+  // a search: the matching items bright
+  if (dMatch && focus < 0) { for (let g = 0; g < NC; g++) { ctx.fillStyle = pal[g]; ctx.globalAlpha = 1; ctx.beginPath(); const ns = DD.ng[g];
+    for (let q = 0; q < ns.length; q++) { const i = ns[q]; if (!dMatch[i] || !inV(i)) continue; const r = Math.max(R[i], 1.6 / k); ctx.moveTo(X[i] + r, Y[i]); ctx.arc(X[i], Y[i], r, 0, 6.2832); } ctx.fill(); } }
+  // the selected item and its neighbours
+  const ring = (i, w) => { ctx.beginPath(); ctx.arc(X[i], Y[i], Math.max(R[i], 2 / k) + 2 / k, 0, 6.2832); ctx.lineWidth = w / k; ctx.strokeStyle = V('--acc'); ctx.globalAlpha = 1; ctx.stroke(); };
+  if (focus >= 0) {
+    const a0 = DD.dg[focus], a1 = DD.dg[focus + 1];
+    ctx.lineWidth = 1 / k; ctx.strokeStyle = pal[DD.col[focus]]; ctx.globalAlpha = .9; ctx.beginPath();
+    for (let q = a0; q < a1; q++) { const b = DD.nb[q]; ctx.moveTo(X[focus], Y[focus]); ctx.lineTo(X[b], Y[b]); } ctx.stroke();
+    for (let q = a0; q <= a1; q++) { const i = q < a1 ? DD.nb[q] : focus, r = Math.max(R[i], 1.8 / k); ctx.fillStyle = pal[DD.col[i]]; ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(X[i], Y[i], r, 0, 6.2832); ctx.fill(); }
+    ring(focus, 2);
+  }
+  if (dHov >= 0 && dHov !== focus) ring(dHov, 1.5);
+  // screen-space: area names when zoomed in, then each project's hub (picture or initial) and name at its middle
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const sx = x => x * k + T.x, sy = y => y * k + T.y, taken = [], free = b => !taken.some(t => b.x0 < t.x1 && b.x1 > t.x0 && b.y0 < t.y1 && b.y1 > t.y0);
+  const hubs = DD.list.map((e, i) => ({ e, i, x: sx(C[3 * i]), y: sy(C[3 * i + 1]) })).filter(h => h.x > -80 && h.x < W + 80 && h.y > -60 && h.y < H + 60);
+  for (const h of hubs) taken.push({ x0: h.x - 14, x1: h.x + 14, y0: h.y - 14, y1: h.y + 14 });
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const text = (t, x, y, px, bold, fill) => { ctx.font = `${bold ? 600 : 400} ${px}px -apple-system, system-ui, sans-serif`; ctx.lineWidth = 3; ctx.strokeStyle = V('--dbg'); ctx.strokeText(t, x, y); ctx.fillStyle = fill; ctx.fillText(t, x, y); };
+  // hub names first (they win), then area names in the room left
+  const hubLab = [];
+  for (const h of hubs) { const e = h.e, t1 = clip(e.solo ? e.solo.name : e.p.name), t2 = clip((e.solo ? e.p.name + ' · ' : e.ss.length > 1 ? e.ss.length + ' sessions · ' : '') + (e.det ? (e.n < e.det.total ? `${nn(e.n)} of ${nn(e.det.total)} items` : `${nn(e.n)} items`) : e.p.peer ? 'other Mac' : e.p.built === false ? 'no map yet' : 'no items'));
+    ctx.font = '600 12px -apple-system, system-ui, sans-serif'; const w1 = ctx.measureText(t1).width; ctx.font = '400 10.5px -apple-system, system-ui, sans-serif'; const w = Math.max(w1, ctx.measureText(t2).width);
+    let y = h.y + 16; for (const dy of [0, -60, 22, 44]) { const b = { x0: h.x - w / 2 - 3, x1: h.x + w / 2 + 3, y0: h.y + 16 + dy, y1: h.y + 16 + dy + 28 }; if (dy === -60) { b.y0 = h.y - 44; b.y1 = h.y - 16; } if (free(b) || dy === 44) { y = b.y0; taken.push(b); break; } }
+    hubLab.push([h, t1, t2, y]); }
+  if (DD.areaLab.length) { let shown = 0;
+    for (const a of DD.areaLab) { if (shown > 70) break; const rad = Math.sqrt(a.n) * 5 * k; if (rad < 34) continue; const x = sx(a.x), y = sy(a.y); if (x < 0 || y < 0 || x > W || y > H) continue;
+      const t = clip(a.t); ctx.font = '400 11px -apple-system, system-ui, sans-serif'; const w = ctx.measureText(t).width, b = { x0: x - w / 2 - 3, x1: x + w / 2 + 3, y0: y - 8, y1: y + 8 };
+      if (!free(b)) continue; taken.push(b); ctx.globalAlpha = focus >= 0 || dMatch ? .4 : .9; text(t, x, y, 11, false, dark ? pal[a.col] : V('--text')); shown++; } }
+  ctx.globalAlpha = 1;
+  for (const h of hubs) { const e = h.e, r = 11, pic = e.solo && img(e.solo.avatar);
+    ctx.save(); ctx.beginPath(); ctx.arc(h.x, h.y, r, 0, 6.2832); ctx.fillStyle = e.p.built === false ? V('--grey') : e.color; ctx.fill();
+    if (pic) { ctx.clip(); ctx.drawImage(pic, h.x - r, h.y - r, 2 * r, 2 * r); } else { ctx.fillStyle = '#fff'; ctx.font = '700 11px -apple-system, system-ui, sans-serif'; ctx.fillText(initial(e.solo ? e.solo.name : e.p.name), h.x, h.y + .5); }
+    ctx.restore(); ctx.beginPath(); ctx.arc(h.x, h.y, r + 1, 0, 6.2832); ctx.lineWidth = 1.5; ctx.strokeStyle = dark ? 'rgba(255,255,255,.8)' : 'rgba(255,255,255,.95)'; ctx.stroke(); }
+  for (const [h, t1, t2, y] of hubLab) { text(t1, h.x, y + 7, 12, true, V('--text')); text(t2, h.x, y + 21, 10.5, false, V('--dim')); }
+  perf.draws.push(performance.now() - t0); if (perf.draws.length > 400) perf.draws.shift();
+}
+let dHovE = null;
+function tipDetail(i) {
+  const e = DD.list[DD.proj[i]], j = i - e.off, det = e.det, f = det.files[det.file[j]] || '', nbs = DD.dg[i + 1] - DD.dg[i];
+  return `<b>${esc(det.label[j])}</b><span>${f ? esc(f) + '<br>' : ''}area: <span style="color:${DPAL[theme.theme !== 'light' ? 'dark' : 'light'][DD.col[i]]}">●</span> ${esc(det.areas[det.area[j]].name)}<br>project: ${esc(e.p.name)}${e.solo ? ' (' + esc(e.solo.name) + ')' : ''}<br>${det.deg[j]} link${det.deg[j] === 1 ? '' : 's'} in the map${nbs ? ` · ${nbs} shown` : ''}<br>click: its neighbours · double-click: open ${esc(e.p.name)}'s map</span>`;
+}
+function selectDetail(i) {
+  dSel = i; draw(); const I = $('info'); if (i < 0) { I.hidden = true; return; }
+  const e = DD.list[DD.proj[i]], j = i - e.off, det = e.det, f = det.files[det.file[j]] || '';
+  I.innerHTML = `<h3>${esc(det.label[j])}</h3>${f ? `<p>${esc(f)}</p>` : ''}<p>area ${esc(det.areas[det.area[j]].name)} · ${esc(e.p.name)}</p><p>${det.deg[j]} links in the map · ${DD.dg[i + 1] - DD.dg[i]} neighbours shown</p>`
+    + `<div class="bt"><button class="pri" data-a="open">Open ${esc(e.p.name)}'s map</button></div>`;
+  I.hidden = false; I.querySelector('[data-a="open"]').onclick = () => openProject(e);
+}
+function openProject(e) { const sid = (e.solo || e.ss[0] || {}).sid; if (!sid) return; const s = data.sessions.find(x => x.sid === sid);
+  location.href = 'codemap.html?' + new URLSearchParams({ sid, name: (s && s.name) || '', hub: '1', theme: theme.theme, kind: theme.kind }); }
+function pickCross(p) {
+  if (!DD || !DD.C) return null; let best = null, bd = 6 / T.k; const C = DD.C;
+  for (const e of DD.cross) { const ax = C[3 * e.a], ay = C[3 * e.a + 1], bx = C[3 * e.b], by = C[3 * e.b + 1], cx = (ax + bx) / 2 - (by - ay) * e.bend, cy = (ay + by) / 2 + (bx - ax) * e.bend;
+    for (let t = .2; t <= .8; t += .04) { const u = 1 - t, x = u * u * ax + 2 * u * t * cx + t * t * bx, y = u * u * ay + 2 * u * t * cy + t * t * by, d = Math.hypot(x - p.x, y - p.y); if (d < bd) { bd = d; best = e; } } }
+  return best;
+}
+function setMode(m) {
+  if (m === mode) return; if (mode === 'detail') Td = T; else Ts = T;
+  mode = m; try { localStorage.setItem('cmHubMode', m); } catch { }
+  paintMode(); $('info').hidden = true; $('tip').hidden = true; sel = null; dSel = -1;
+  if (m === 'detail') { if (data && data.detail && DD) { if (Td) T = Td; draw(); metaDetail(); legend(); } else load(); }
+  else { if (Ts) T = Ts; else fit(); if (data) metaSimple(data); legend(); draw(); kick(); }
+}
+function paintMode() { for (const b of $('mode').querySelectorAll('button')) b.classList.toggle('on', b.dataset.m === mode); }
+$('mode').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.m); });
+paintMode();
 
 // ---------------- pointer ----------------
 let drag = null, hovE = null, down = null;
@@ -208,14 +424,15 @@ function pickEdge(p) {
     for (let t = 0; t <= 1; t += .05) { const u = 1 - t, x = u * u * e.a.x + 2 * u * t * cx + t * t * e.b.x, y = u * u * e.a.y + 2 * u * t * cy + t * t * e.b.y, d = Math.hypot(x - p.x, y - p.y); if (d < bd) { bd = d; best = e; } } }
   return best;
 }
-c.addEventListener('mousedown', e => { const p = world(e), n = pick(p); down = { x: e.clientX, y: e.clientY, moved: false };
+c.addEventListener('mousedown', e => { const p = world(e), n = mode === 'detail' ? null : pick(p); down = { x: e.clientX, y: e.clientY, moved: false };
   drag = n ? { n, dx: n.x - p.x, dy: n.y - p.y } : { pan: true, x: e.clientX - T.x, y: e.clientY - T.y }; c.classList.add('drag'); });
 addEventListener('mousemove', e => {
   if (drag) { if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 3) down.moved = true;
-    if (drag.pan) { T.x = e.clientX - drag.x; T.y = e.clientY - drag.y; draw(); }
+    if (drag.pan) { T.x = e.clientX - drag.x; T.y = e.clientY - drag.y; if (mode === 'detail') { dMoved = true; drawSoon(); } else draw(); }
     else if (down.moved) { const p = world(e); drag.n.fx = p.x + drag.dx; drag.n.fy = p.y + drag.dy; alpha = Math.max(alpha, .25); kick(); }
     $('tip').hidden = true; return; }
   if (e.target !== c) return;
+  if (mode === 'detail') return hoverDetail(e);
   const p = world(e), n = pick(p), ed = n ? null : pickEdge(p);
   if (n !== hov || ed !== hovE) { hov = n; hovE = ed; draw(); }
   c.classList.toggle('hot', !!(n || ed));
@@ -227,13 +444,24 @@ addEventListener('mousemove', e => {
 addEventListener('mouseup', e => {
   const d = drag; drag = null; c.classList.remove('drag');
   if (d && d.n) { d.n.fx = d.n.fy = null; }
-  if (down && !down.moved && e.target === c) { const n = pick(world(e)); select(n); }
+  if (down && !down.moved && e.target === c) { if (mode === 'detail') selectDetail(pickDetail(world(e))); else select(pick(world(e))); }
   down = null;
 });
-c.addEventListener('dblclick', e => { const n = pick(world(e)); if (n) openOf(n); });
+c.addEventListener('dblclick', e => { if (mode === 'detail') { const p = world(e), i = pickDetail(p), ci = i >= 0 ? DD.proj[i] : clusterAt(p); if (ci >= 0) openProject(DD.list[ci]); return; }
+  const n = pick(world(e)); if (n) openOf(n); });
 c.addEventListener('wheel', e => { e.preventDefault(); const r = c.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
-  const k = Math.max(.15, Math.min(5, T.k * Math.exp(-e.deltaY * (e.ctrlKey ? .01 : .0018)))); T.x = mx - (mx - T.x) * k / T.k; T.y = my - (my - T.y) * k / T.k; T.k = k; draw(); }, { passive: false });
-c.addEventListener('mouseleave', () => { hov = hovE = null; $('tip').hidden = true; draw(); });
+  const k = Math.max(.15, Math.min(5, T.k * Math.exp(-e.deltaY * (e.ctrlKey ? .01 : .0018)))); T.x = mx - (mx - T.x) * k / T.k; T.y = my - (my - T.y) * k / T.k; T.k = k; if (mode === 'detail') { dMoved = true; drawSoon(); } else draw(); }, { passive: false });
+c.addEventListener('mouseleave', () => { hov = hovE = null; dHov = -1; dHovE = null; $('tip').hidden = true; draw(); });
+// Detail: at most one redraw per frame while panning or zooming
+let drawRaf = 0; function drawSoon() { if (!drawRaf) drawRaf = requestAnimationFrame(() => { drawRaf = 0; draw(); }); }
+function hoverDetail(e) {
+  const p = world(e), i = pickDetail(p), ed = i >= 0 ? null : pickCross(p);
+  if (i !== dHov || ed !== dHovE) { dHov = i; dHovE = ed; drawSoon(); }
+  c.classList.toggle('hot', i >= 0 || !!ed); const tip = $('tip');
+  if (i >= 0 || ed) { tip.innerHTML = i >= 0 ? tipDetail(i) : `<b>${esc((LINK[ed.type] || LINK.same)[1])}</b><span>${esc(ed.label || '')}</span>`; tip.hidden = false;
+    const r = c.getBoundingClientRect(); tip.style.left = Math.min(r.width - 350, e.clientX - r.left + 14) + 'px'; tip.style.top = Math.min(r.height - 120, e.clientY - r.top + 14) + 'px'; }
+  else tip.hidden = true;
+}
 
 function status(p) { return p.peer && !p.built ? 'on ' + (data.peer || 'the other Mac') : p.peer ? `${nn(p.nodes)} items · ${nn(p.edges)} links · on ${data.peer || 'the other Mac'}` : p.running ? 'building now…' : p.queued ? 'waiting to build' : p.built ? `${nn(p.nodes)} items · ${nn(p.edges)} links · ${p.areas} areas · built ${ago(p.at)}` : 'not built'; }
 function tipOf(n) {
@@ -273,30 +501,43 @@ $('list').addEventListener('click', e => { const r = e.target.closest('.row'); i
   openOf(byId.get('s:' + s.sid) || byId.get('p:' + s.key)); });
 $('list').addEventListener('mouseover', e => { const r = e.target.closest('.row'); const s = r && data.sessions.find(x => x.sid === r.dataset.sid); const n = s && (byId.get('s:' + s.sid) || byId.get('p:' + s.key)); if (n !== hov) { hov = n || null; draw(); } });
 $('list').addEventListener('mouseleave', () => { hov = null; draw(); });
-$('home').onclick = () => { select(null); fit(); };
-$('q').addEventListener('input', () => { filter = $('q').value.trim().toLowerCase(); paintList(); draw(); });
-$('fit').onclick = fit;
+$('home').onclick = () => { if (mode === 'detail') { selectDetail(-1); dMoved = false; fitDetail(); draw(); } else { select(null); fit(); } };
+$('q').addEventListener('input', () => { filter = $('q').value.trim().toLowerCase(); matchDetail(); paintList(); draw(); });
+$('fit').onclick = () => { if (mode === 'detail') { dMoved = false; fitDetail(); draw(); } else fit(); };
 $('reload').onclick = () => load();
-addEventListener('keydown', e => { if (e.key === 'Escape') select(null); });
+addEventListener('keydown', e => { if (e.key === 'Escape') { if (mode === 'detail') selectDetail(-1); else select(null); } });
 
 // ---------------- load ----------------
 let timer = null;
-async function load() {
-  const d = await window.cmap.hub().catch(e => ({ ok: false, err: e.message }));
-  if (!d || !d.ok) { $('meta').textContent = (d && d.err) || 'Could not read the maps'; return; }
-  data = d;
+// what the maps are now: a Detail picture is laid out again only when one of them changed
+const sigOf = d => d.projects.map(p => p.key + ':' + p.built + ':' + (p.at || 0)).join('|');
+function metaSimple(d) {
   const built = d.projects.filter(p => p.built).length, nl = d.links.length + (d.slinks || []).length;
   $('meta').textContent = `${d.projects.length} project${d.projects.length === 1 ? '' : 's'} · ${d.sessions.length} session${d.sessions.length === 1 ? '' : 's'} · ${built} mapped · ${nl} connection${nl === 1 ? '' : 's'} between them`;
-  const used = new Set([...d.links, ...(d.slinks || [])].map(l => l.type)); if (d.projects.some(p => p.sessions.length > 1)) used.add('same');
+}
+function legend() {
+  if (!data) return; const d = data, used = new Set([...d.links, ...(d.slinks || [])].map(l => l.type)); if (mode === 'simple' && d.projects.some(p => p.sessions.length > 1)) used.add('same');
   $('legend').innerHTML = [...used].map(t => `<span><i style="border-color:${LINK[t][0]};${t === 'names' ? 'border-top-style:dashed' : t === 'lineage' ? 'border-top-style:dotted' : ''}"></i>${LINK[t][1]}</span>`).join('')
-    + '<span>· grey dashed hub = no map yet · dots = code areas (size = items)</span>';
+    + (mode === 'detail' ? '<span>· dots = items, coloured by area · click one for its neighbours · double-click a cluster to open its map</span>' : '<span>· grey dashed hub = no map yet · dots = code areas (size = items)</span>');
+}
+async function load(poll) {
+  const want = mode === 'detail' && !poll;
+  if (want) { perf.t0 = performance.now(); perf.first = perf.done = 0; $('meta').textContent = 'Reading every map…'; }
+  const d = await (want ? window.cmap.hubDetail() : window.cmap.hub()).catch(e => ({ ok: false, err: e.message }));
+  if (!d || !d.ok) { $('meta').textContent = (d && d.err) || 'Could not read the maps'; return; }
+  // a status poll while in Detail keeps the picture unless a map changed
+  if (poll && mode === 'detail' && data && data.detail) { if (sigOf(d) !== sigOf(data)) return load();
+    const now = new Map(d.projects.map(p => [p.key, p])); for (const p of data.projects) { const q = now.get(p.key); if (q) { p.running = q.running; p.queued = q.queued; } } }
+  else data = d;
+  if (mode === 'simple') metaSimple(d); legend();
   $('empty').hidden = !!d.projects.length; $('empty').textContent = d.projects.length ? '' : 'No session works in a project folder yet.';
-  graphOf(d);
-  if (sel) { const s2 = byId.get(sel.id); select(s2 || null); } else paintList();
-  clearTimeout(timer); if (d.projects.some(p => p.running || p.queued)) timer = setTimeout(load, 2000);
+  if (!(poll && mode === 'detail')) graphOf(d);
+  if (want) startDetail(d);
+  if (mode === 'simple' && sel) { const s2 = byId.get(sel.id); select(s2 || null); } else paintList();
+  clearTimeout(timer); if (d.projects.some(p => p.running || p.queued)) timer = setTimeout(() => load(true), 2000);
 }
 window.cmap.show(null, document.querySelector('header').getBoundingClientRect().bottom);   // back from a project's map: hide its graph
-window.cmap.onChanged(() => load());
+window.cmap.onChanged(() => load(mode === 'detail'));
 window.cmap.onTheme(t => applyTheme(t));
 window.cmap.theme().then(applyTheme).catch(() => { });
 applyTheme(theme); size(); load();

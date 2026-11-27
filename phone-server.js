@@ -34,7 +34,7 @@ function createPhoneServer(ctx) {
 
   // static files: phone/ app + the shared renderer engine + xterm
   const STATIC = {
-    '/': 'phone/index.html', '/app-name.js': 'renderer/app-name.js', '/phone.js': 'phone/phone.js', '/phone-viz.js': 'phone/phone-viz.js', '/phone.css': 'phone/phone.css', '/usage-view.js': 'renderer/usage-view.js', '/live-view.js': 'renderer/live-view.js', '/live-view.css': 'renderer/live-view.css', '/avatars.js': 'renderer/avatars.js', '/usage-view.css': 'renderer/usage-view.css', '/icon.png': 'renderer/icon.png',
+    '/': 'phone/index.html', '/app-name.js': 'renderer/app-name.js', '/phone.js': 'phone/phone.js', '/phone-room.js': 'phone/phone-room.js', '/phone-viz.js': 'phone/phone-viz.js', '/phone.css': 'phone/phone.css', '/usage-view.js': 'renderer/usage-view.js', '/live-view.js': 'renderer/live-view.js', '/live-view.css': 'renderer/live-view.css', '/avatars.js': 'renderer/avatars.js', '/usage-view.css': 'renderer/usage-view.css', '/icon.png': 'renderer/icon.png',
     '/apple-touch-icon.png': 'build/icon-ios.png',
     '/mesh.js': 'renderer/mesh.js', '/mother.js': 'renderer/mother.js', '/bubbles.js': 'renderer/bubbles.js', '/sun.js': 'renderer/sun.js', '/organism.js': 'renderer/organism.js', '/portal.js': 'renderer/portal.js', '/probe.js': 'renderer/probe.js', '/probe/probe_sheet.png': 'renderer/probe/probe_sheet.png', '/blackhole.js': 'renderer/blackhole.js', '/endurance.js': 'renderer/endurance.js', '/handles.js': 'renderer/handles.js', '/probe-life.js': 'renderer/probe-life.js', '/probe-tidy.js': 'renderer/probe-tidy.js', '/probe/probe.glb': 'renderer/probe/probe.glb', '/endurance/endurance_sheet.webp': 'renderer/endurance/endurance_sheet.webp', '/endurance/endurance.json': 'renderer/endurance/endurance.json', '/endurance/endurance.glb': 'renderer/endurance/endurance.glb', '/three3d.js': 'renderer/three3d.js',
     // three.js (the 3-D Endurance + black hole): every file by name, no folder serving
@@ -88,7 +88,7 @@ function createPhoneServer(ctx) {
       return fs.readFile(r.path, (err, data) => { if (err) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'Content-Type': r.type, 'Cache-Control': 'private, max-age=31536000, immutable' }); res.end(data); });
     }
     if (p === '/api/history') return json(res, 200, await ctx.getHistory());
-    if (p === '/api/codemap-hub' && ctx.codemapHub && req.method === 'GET') return json(res, 200, await ctx.codemapHub());   // this Mac's half of the all-projects map
+    if (p === '/api/codemap-hub' && ctx.codemapHub && req.method === 'GET') return json(res, 200, await ctx.codemapHub({ detail: u.searchParams.get('detail') === '1' }));   // this Mac's half of the all-projects map
     if ((p === '/api/codemap' || p === '/api/codemap/html') && ctx.codemap && req.method === 'GET') {     // Code maps, for the other Mac (codemap.js)
       const sid = u.searchParams.get('sid') || '';
       return json(res, 200, await (p === '/api/codemap' ? ctx.codemap.status(sid) : ctx.codemap.html(sid)));

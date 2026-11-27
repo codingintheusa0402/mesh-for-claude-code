@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('cmap', {
   onChanged: cb => ipcRenderer.on('codemap:changed', () => cb()),
   // the all-projects view (codemap-hub.html) and the theme it follows
   hub: () => ipcRenderer.invoke('codemap:hub'),
+  hubDetail: () => ipcRenderer.invoke('codemap:hubDetail'),     // the Detail view: every project's items and links (sampled)
   theme: () => ipcRenderer.invoke('codemap:hubTheme'),
   onTheme: cb => ipcRenderer.on('codemap:theme', (_e, t) => cb(t)),
 });

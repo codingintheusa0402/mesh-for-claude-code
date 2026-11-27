@@ -934,7 +934,7 @@ nativeTheme.on('updated', () => { if (chatThemeMode === 'system') cmHubThemeChan
 ipcMain.handle('codemap:hubOpen', () => openCodemapHub());
 ipcMain.handle('codemap:hubTheme', () => ({ theme: cmHubTheme(), kind: chatThemeMode === 'default' ? 'default' : 'chat' }));
 // this Mac's half (its own sessions and maps); the window merges in the other Mac's half (GET /api/codemap-hub)
-async function cmHubLocal() {
+async function cmHubLocal(opts = {}) {
   const qa = cmQaSessions(), av = (lastSnap && lastSnap.avatars) || {};
   const list = qa.length ? qa : ((lastSnap && lastSnap.sessions) || []).filter(s => s.sid && !s.onPeer);
   const local = list.filter(s => !s.onPeer);
@@ -948,7 +948,7 @@ async function cmHubLocal() {
       avatar: pic && pic.file && pic.v ? `meshav://img/${encodeURIComponent(pic.file)}?s=128&v=${pic.v}` : null, color: FAM[s.family] || null,
       relays: st && st.relays ? st.relays.filter(r => r.t > Date.now() - 864e5 && r.dir === 'out') : qa.length ? s.relays || [] : [] };
   });
-  try { return { ok: true, ...(await require('./codemap-hub').build({ sessions, where: codemap.where, jobs: codemap.jobs, home: HOME })) }; }
+  try { return { ok: true, ...(await require('./codemap-hub').build({ sessions, where: codemap.where, jobs: codemap.jobs, home: HOME, detail: !!opts.detail })) }; }
   catch (e) { return { ok: false, err: e.message }; }
 }
 ipcMain.handle('codemap:hub', async () => {
@@ -956,6 +956,14 @@ ipcMain.handle('codemap:hub', async () => {
     ? peerLink.forward('GET', '/api/codemap-hub', undefined, undefined, 15000).catch(() => null) : null]);
   if (!mine.ok) return mine;
   return { ...require('./codemap-hub').mergePeer(mine, theirs && theirs.ok ? theirs : null), peer: peerLink ? peerLink.label() : '', peerMissing: !!(peerLink && peerLink.online() && !(theirs && theirs.ok)) };
+});
+// the Detail view: the same, plus each project's sampled items and links (both Macs share one budget: trimDetail)
+ipcMain.handle('codemap:hubDetail', async () => {
+  const H = require('./codemap-hub');
+  const [mine, theirs] = await Promise.all([cmHubLocal({ detail: true }), peerLink && peerLink.online() && !cmQaSessions().length
+    ? peerLink.forward('GET', '/api/codemap-hub', undefined, { detail: '1' }, 30000).catch(() => null) : null]);
+  if (!mine.ok) return mine;
+  return { ...H.trimDetail(H.mergePeer(mine, theirs && theirs.ok ? theirs : null)), peer: peerLink ? peerLink.label() : '', peerMissing: !!(peerLink && peerLink.online() && !(theirs && theirs.ok)) };
 });
 ipcMain.handle('folder:open', (_e, p) => projFolders.safe(p) ? shell.openPath(p).then(err => ({ ok: !err, err })) : { ok: false, err: 'not a folder in your home folder' });
 let mcpSources = new Map(), mcpPicked = null;
@@ -1313,7 +1321,7 @@ function initPhone() {
     }),
     avatars,
     getHistory: () => scanHistory(),
-    codemapHub: () => cmHubLocal(),
+    codemapHub: opts => cmHubLocal(opts),
     codemap: { status: sid => cmCall(sid, 'status'), html: sid => cmCall(sid, 'html'), op: (sid, op) => ['generate', 'cancel'].includes(op) ? cmCall(sid, op) : { ok: false } },
     details: sid => sessionDetails(sid),
     stamps: sid => stampsFor(core.findTranscript(sid)),
