@@ -235,7 +235,7 @@ c.addEventListener('wheel', e => { e.preventDefault(); const r = c.getBoundingCl
   const k = Math.max(.15, Math.min(5, T.k * Math.exp(-e.deltaY * (e.ctrlKey ? .01 : .0018)))); T.x = mx - (mx - T.x) * k / T.k; T.y = my - (my - T.y) * k / T.k; T.k = k; draw(); }, { passive: false });
 c.addEventListener('mouseleave', () => { hov = hovE = null; $('tip').hidden = true; draw(); });
 
-function status(p) { return p.peer ? 'on ' + (data.peer || 'the other Mac') : p.running ? 'building now…' : p.queued ? 'waiting to build' : p.built ? `${nn(p.nodes)} items · ${nn(p.edges)} links · ${p.areas} areas · built ${ago(p.at)}` : 'not built'; }
+function status(p) { return p.peer && !p.built ? 'on ' + (data.peer || 'the other Mac') : p.peer ? `${nn(p.nodes)} items · ${nn(p.edges)} links · on ${data.peer || 'the other Mac'}` : p.running ? 'building now…' : p.queued ? 'waiting to build' : p.built ? `${nn(p.nodes)} items · ${nn(p.edges)} links · ${p.areas} areas · built ${ago(p.at)}` : 'not built'; }
 function tipOf(n) {
   if (n.kind === 'area') return `<b>${esc(n.label)}</b><span>${n.c.size} items · an area of ${esc(n.p.name)}<br>double-click: open ${esc(n.p.name)}'s map</span>`;
   const p = n.p, who = n.kind === 'sess' ? n.s.name : n.ss.map(s => s.name).join(', ');

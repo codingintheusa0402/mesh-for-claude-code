@@ -88,6 +88,7 @@ function createPhoneServer(ctx) {
       return fs.readFile(r.path, (err, data) => { if (err) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'Content-Type': r.type, 'Cache-Control': 'private, max-age=31536000, immutable' }); res.end(data); });
     }
     if (p === '/api/history') return json(res, 200, await ctx.getHistory());
+    if (p === '/api/codemap-hub' && ctx.codemapHub && req.method === 'GET') return json(res, 200, await ctx.codemapHub());   // this Mac's half of the all-projects map
     if ((p === '/api/codemap' || p === '/api/codemap/html') && ctx.codemap && req.method === 'GET') {     // Code maps, for the other Mac (codemap.js)
       const sid = u.searchParams.get('sid') || '';
       return json(res, 200, await (p === '/api/codemap' ? ctx.codemap.status(sid) : ctx.codemap.html(sid)));

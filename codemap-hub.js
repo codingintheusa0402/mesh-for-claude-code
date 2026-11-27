@@ -131,4 +131,33 @@ async function build({ sessions, where, jobs, home }) {
   };
 }
 
-module.exports = { build, summarize };
+// the other Mac's half (its build() result) merged into this one: its projects keep their maps (opened and built there);
+// a folder both Macs work in (same path under home) is one hub; a folder inside another counts across Macs too
+function mergePeer(mine, theirs) {
+  if (!theirs) return mine;
+  const out = { ...mine, projects: mine.projects.slice(), links: mine.links.slice(), slinks: (mine.slinks || []).concat(theirs.slinks || []), sessions: mine.sessions.slice() };
+  const byPath = new Map(out.projects.map(P => [P.path, P])), remap = new Map();
+  const STAT = ['built', 'at', 'nodes', 'edges', 'areas', 'comms', 'clinks'];
+  for (const T of theirs.projects || []) {
+    const same = byPath.get(T.path);
+    if (same) {
+      same.sessions = same.sessions.concat(T.sessions); remap.set(T.key, same.key);
+      if (!same.built && T.built) for (const k of STAT) same[k] = T[k];
+      continue;
+    }
+    const key = 'peer:' + T.key; remap.set(T.key, key);
+    const P = { ...T, key, peer: true }; out.projects.push(P); byPath.set(P.path, P);
+  }
+  const rk = k => remap.get(k) || k;
+  for (const l of theirs.links || []) out.links.push({ ...l, a: rk(l.a), b: rk(l.b) });
+  for (const s of theirs.sessions || []) out.sessions.push({ ...s, key: s.key ? rk(s.key) : s.key, peer: true });
+  // folder inside another, across the two Macs (paths are written from home: ~/…)
+  const mineKeys = new Set(mine.projects.map(P => P.key)), has = (a, b) => out.links.some(l => (l.a === a && l.b === b) || (l.a === b && l.b === a));
+  for (const A of out.projects) for (const B of out.projects) {
+    if (A === B || mineKeys.has(A.key) === mineKeys.has(B.key) || !A.path || !B.path) continue;
+    if (B.path.startsWith(A.path.replace(/\/$/, '') + '/') && !has(A.key, B.key)) out.links.push({ a: A.key, b: B.key, type: 'folder', label: `${B.name} is a folder inside ${A.name}`, w: 2 });
+  }
+  return out;
+}
+
+module.exports = { build, summarize, mergePeer };

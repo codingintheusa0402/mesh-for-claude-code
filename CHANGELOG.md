@@ -2,6 +2,9 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-27 — Code map, all projects: both Macs
+- The all-projects map showed only the sessions of the Mac it was opened on. Each Mac now serves its half (GET /api/codemap-hub, its own sessions and maps) and the window merges the other Mac's in: its projects with their areas, a folder both Macs work in as one hub, and folder-inside links across the two Macs.
+
 ## 2026-11-27 — A session tab tears off when dragged out of the Terminals panel
 - Chat theme: a session tab dragged outside the Terminals panel (onto the session board, the sidebar, anywhere else in the window) now opens its room in a window of its own when let go; before, only dragging it outside the whole window did. Inside the panel a drag still just reorders the tabs.
 
