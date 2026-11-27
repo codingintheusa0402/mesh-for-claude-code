@@ -421,7 +421,7 @@ function renderHeader() {
     ${c('waiting') + c('quiet') ? `<span class="hpill cnt" style="border-color:#6b5a1a">attention <i>${c('waiting') + c('quiet')}</i></span>` : ''}
     <span class="hpill cnt" ${errs ? 'style="border-color:#6b2a2a"' : ''}>API errors 1h <i>${errs}</i></span>
     ${snap.peer && snap.peer.online && snap.peer.build && snap.build && snap.peer.build !== snap.build
-      ? `<span class="hpill ver" style="border-color:#6b5a1a" title="This Mac runs build ${esc(snap.build)}, ${esc(snap.peer.label)} runs ${esc(snap.peer.build)}. Install the same " + APP_NAME + " on both and restart it.">versions differ</span>` : ''}
+      ? `<span class="hpill ver" style="border-color:#6b5a1a" title="This Mac runs build ${esc(snap.build)}, ${esc(snap.peer.label)} runs ${esc(snap.peer.build)}. Install the same ${esc(APP_NAME)} on both and restart it.">versions differ</span>` : ''}
     ${leftPills(snap.usage)}${memPill(snap.peer ? 'This Mac' : 'RAM', snap.mem)}${snap.peer && snap.peer.mem ? memPill(snap.peer.label, snap.peer.mem) : ''}`;
 }
 
@@ -738,7 +738,7 @@ function renderCtl() {
       ${canMove(s) ? `<button id="cMove" title="Stop it here, copy it to the other Mac and resume it there">⇄ ${peer ? 'Move to this Mac' : 'Move to ' + esc(snap.peer.label)}</button>` : ''}
       ${owned ? '<button class="danger" id="cKill">Kill</button>' : ''}
     </div>
-    <div class="note">${peer ? (live ? `Runs on ${esc(s.hostLabel)}: prompts are passed to it over Tailscale.` : `${esc(s.hostLabel)} is offline or this session can’t be reached.`) : owned ? 'Runs inside ${APP_NAME} — keystrokes go straight to its terminal.' :
+    <div class="note">${peer ? (live ? `Runs on ${esc(s.hostLabel)}: prompts are passed to it over Tailscale.` : `${esc(s.hostLabel)} is offline or this session can’t be reached.`) : owned ? `Runs inside ${esc(APP_NAME)} — keystrokes go straight to its terminal.` :
       ext && s.pane ? 'Runs in a tmux pane on this Mac (keeps running when ' + APP_NAME + ' restarts). Prompts are typed into it with tmux send-keys.' :
       ext ? 'Lives in a Terminal.app window. Prompts are typed into that tab via AppleScript (first use asks for Automation permission). Multi-line text is sent as one line.' :
       'Background job — view only.'}</div></div>`;

@@ -2,6 +2,9 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-27 — Two texts showed a raw placeholder
+- The Details panel's note for a session in this app read "Runs inside ${APP_NAME}", and the "versions differ" tooltip showed "\" + APP_NAME + \""; both now show the app's name.
+
 ## 2026-11-27 — README: chat theme screenshots and GIF
 - New **Chat theme** part of the Tour: light and dark side by side, a GIF of a prompt sent in a room (pending bubble, "…", tool calls, reply), a room in its own window and the iPhone room. Linked from the feature list and the top links. Made with demo sessions only (a throwaway instance with made-up projects and generated pictures).
 - New files in docs/media: chat-light.png, chat-dark.png, chat-room.gif, chat-popout.png, phone-chat.png.
