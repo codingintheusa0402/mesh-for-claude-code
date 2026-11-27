@@ -2,6 +2,9 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-27 — A session tab tears off when dragged out of the Terminals panel
+- Chat theme: a session tab dragged outside the Terminals panel (onto the session board, the sidebar, anywhere else in the window) now opens its room in a window of its own when let go; before, only dragging it outside the whole window did. Inside the panel a drag still just reorders the tabs.
+
 ## 2026-11-27 — Detached chat windows load their own data and report errors
 - A room dragged out of the window could open blank. The window now asks for the snapshot itself once it has loaded (and again 1.5 s later) instead of relying only on the push, shows any error in the window, and logs errors, hangs and crashes to chatwin.log in the app's data folder; a crashed page reloads.
 

@@ -1351,11 +1351,15 @@ function tabDragStart(e, el) {
   try { el.setPointerCapture(e.pointerId); } catch { }   // keep getting the pointer when it leaves the window (a tab dragged out = its own window)
   const CT = () => window.chatTheme && window.chatTheme.on;
   const tabsEl = $('#tabs'), others = () => [...tabsEl.querySelectorAll('.tab[data-id]')].filter(t => t !== el);
+  // the Terminals panel: its dock panel (dock.js) or the bottom dock; a few px of slack so the edge itself doesn't tear
+  const panelEl = tabsEl.closest('.dk-node') || tabsEl.closest('#dock') || null;
+  const outsidePanel = ev => { if (!panelEl) return false; const r = panelEl.getBoundingClientRect(), m = 8;
+    return ev.clientX < r.left - m || ev.clientX > r.right + m || ev.clientY < r.top - m || ev.clientY > r.bottom + m; };
   const mv = ev => {
     if (!on) { if (Math.abs(ev.clientX - x0) < 6 && !(CT() && Math.abs(ev.clientY - y0) > 14)) return; on = true; tabDrag = { id }; el.classList.add('dragging'); document.body.classList.add('tab-dragging'); }
-    // chat theme: outside the window, letting go opens the room in a window of its own
-    out = CT() && window.chatTheme.outside(ev); document.body.classList.toggle('ct-tearing', out);
-    el.style.transform = CT() ? `translate(${ev.clientX - x0}px, ${Math.max(-40, Math.min(60, ev.clientY - y0))}px)` : `translateX(${ev.clientX - x0}px)`;
+    // chat theme: outside the Terminals panel (not only outside the window), letting go opens the room in a window of its own
+    out = CT() && (window.chatTheme.outside(ev) || outsidePanel(ev)); document.body.classList.toggle('ct-tearing', out);
+    el.style.transform = CT() ? `translate(${ev.clientX - x0}px, ${out ? ev.clientY - y0 : Math.max(-40, Math.min(60, ev.clientY - y0))}px)` : `translateX(${ev.clientX - x0}px)`;
     const list = others(); slot = list.length;
     for (let i = 0; i < list.length; i++) { const r = list[i].getBoundingClientRect(); if (ev.clientX < r.left + r.width / 2) { slot = i; break; } }
     list.forEach((t, i) => t.classList.toggle('drop-before', i === slot)); tabsEl.classList.toggle('drop-end', slot === list.length);
