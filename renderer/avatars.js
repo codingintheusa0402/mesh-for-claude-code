@@ -13,7 +13,18 @@
   const map = () => { const s = snapNow(); return (s && s.avatars) || {}; };
   const url = (file, v, size) => APP ? `meshav://img/${encodeURIComponent(file)}?s=${size}&v=${v}`
     : `/api/avatar?f=${encodeURIComponent(file)}&s=${size}&v=${v}&t=${encodeURIComponent(tok())}`;
-  function src(name, size = 256) { const e = map()[name]; return e && e.file && e.v ? url(e.file, e.v, size) : null; }
+  // A list or board rebuilt with innerHTML makes new <img>s; when the last <img> of a GIF goes, Chromium resets its animation,
+  // so a list that re-renders every second or two never got past the first part of the loop. One 1 px copy per GIF URL in
+  // use stays on the page and keeps the animation running across rebuilds; it is dropped when nothing on screen shows it.
+  const keep = new Map(); let kbox = null;
+  function hold(u) {
+    if (keep.has(u) || !document.body) return;
+    if (!kbox) { kbox = document.createElement('div'); kbox.setAttribute('aria-hidden', 'true');
+      kbox.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;opacity:.01;pointer-events:none;z-index:-1'; document.body.appendChild(kbox); }
+    const i = new Image(1, 1); i.alt = ''; i.dataset.keep = '1'; i.src = u; kbox.appendChild(i); keep.set(u, i);
+  }
+  setInterval(() => { for (const [u, i] of keep) if (![...document.querySelectorAll('img')].some(x => x !== i && x.src === u)) { i.remove(); keep.delete(u); } }, 5000);
+  function src(name, size = 256) { const e = map()[name]; if (!(e && e.file && e.v)) return null; const u = url(e.file, e.v, size); if (/\.gif$/i.test(e.file)) hold(u); return u; }
   const initial = s => { const m = String((s && s.name) || '?').trim().match(/[\p{L}\p{N}]/u); return m ? m[0].toUpperCase() : '?'; };
   const colorOf = s => { try { if (s.color && typeof ORB_PAL !== 'undefined' && ORB_PAL[s.color]) return ORB_PAL[s.color].rim; } catch { } return ((typeof FAMILY_COLOR !== 'undefined' && FAMILY_COLOR) || window.FAMILY_COLOR || {})[s && s.family] || '#9fb4d8'; };
   function html(s, { cls = '', click = false, size = 256, letter = true } = {}) {
@@ -67,7 +78,7 @@ body.chat-theme:not(.ct-dark) .avp { --bg: #fff; --fg: #1d1d1f; --dim: #6e7480; 
     if (!P) return;
     const d = P.data || { files: [] }, cur = (map()[P.s.name] || {}).file || null, sy = d.sync;
     const tiles = [`<div class="avp-i${cur ? '' : ' on'}" data-f="" title="The initial letter"><span class="mav" style="--av:${esc(colorOf(P.s))}"><b>${esc(initial(P.s))}</b></span><em>Letter</em></div>`]
-      .concat(d.files.map(x => `<div class="avp-i${x.file === cur ? ' on' : ''}" data-f="${esc(x.file)}" title="${esc(x.file)}">${x.v ? `<img src="${esc(url(x.file, x.v, 256))}" alt="" loading="lazy" draggable="false">` : '<span class="spin"></span>'}<em>${esc(x.file.replace(/\.[^.]+$/, ''))}</em></div>`));
+      .concat(d.files.map(x => `<div class="avp-i${x.file === cur ? ' on' : ''}" data-f="${esc(x.file)}" title="${esc(x.file)}">${x.v ? `<img src="${esc(tileUrl(x))}" alt="" loading="lazy" draggable="false">` : '<span class="spin"></span>'}<em>${esc(x.file.replace(/\.[^.]+$/, ''))}</em></div>`));
     const empty = d.files.length ? '' : `<div class="avp-empty">No pictures yet. Put pictures or GIFs into ${d.source ? `<b>${esc(d.source)}</b>` : 'the pictures folder'}${d.canSync ? '; they arrive here every 15 minutes, or now with Sync now' : ''}. Wide GIFs are cropped to their centre.</div>`;
     const status = P.syncing ? 'Syncing…' : P.msg ? P.msg : sy ? (sy.ok === false ? `Sync failed ${agoTxt(sy.at)}: ${sy.error || ''}` : `${d.files.length} picture${d.files.length === 1 ? '' : 's'} · synced ${agoTxt(sy.at)}`) : `${d.files.length} picture${d.files.length === 1 ? '' : 's'}`;
     P.el.querySelector('.avp-g').innerHTML = tiles.join('') + empty;
@@ -76,6 +87,7 @@ body.chat-theme:not(.ct-dark) .avp { --bg: #fff; --fg: #1d1d1f; --dim: #6e7480; 
     const sb = P.el.querySelector('[data-sync]'); sb.hidden = !d.canSync; sb.disabled = !!P.syncing;
     P.el.querySelector('[data-drive]').hidden = !d.sourceUrl;
   }
+  const tileUrl = x => { const u = url(x.file, x.v, 256); if (/\.gif$/i.test(x.file)) hold(u); return u; };
   async function load() { if (!P) return; try { P.data = await window.api.avatars.list(); } catch { } draw(); }
   function close() { if (P) { P.el.remove(); P = null; } }
   function pick(s) {
