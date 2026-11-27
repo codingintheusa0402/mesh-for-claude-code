@@ -58,6 +58,7 @@ function setThemeMode(v, from) {
   v = themeMode(v); if (v === chatThemeMode) return; chatThemeMode = v;
   for (const w of [win, ...chatWins.values()]) if (w && !w.isDestroyed() && w.webContents !== from) w.webContents.send('theme:set', v);
   if (v === 'default') for (const w of [...chatWins.values()]) try { w.close(); } catch { }
+  try { cmHubThemeChanged(); } catch { }
   try { buildMenu(); } catch { }
 }
 ipcMain.on('theme:state', (e, v) => setThemeMode(v, e.sender));
@@ -669,6 +670,7 @@ function buildMenu() {
     { label: 'View', submenu: [{ role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' }, { type: 'separator' },
       { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' }, { type: 'separator' },
       { label: 'Mesh', enabled: false }, ...meshShow, { type: 'separator' },
+      { label: 'Code Map (All Projects)', accelerator: 'CmdOrCtrl+Shift+M', click: () => openCodemapHub() }, { type: 'separator' },
       { label: 'Play Screen Saver (in 5 s)', accelerator: 'CmdOrCtrl+Shift+S', click: () => win && win.webContents.send('cine:play') },
       { label: 'Screen Saver Stories', submenu: [
         { label: 'Play All Stories (skip the intro)', click: () => win && win.webContents.send('cine:play', { stories: true }) }, { type: 'separator' },
@@ -838,13 +840,17 @@ ipcMain.handle('cards:ask', (_e, sid) => sendToSession(sid, CARD_ASK));
 const codemap = require('./codemap').createCodemap({
   home: HOME, env: () => cleanEnv(),
   projectOf: (sid, cwd) => { if (process.env.MESH_CODEMAP_PROJECT) return process.env.MESH_CODEMAP_PROJECT;   // QA
+    const q = cmQaSessions().find(x => x.sid === sid); if (q) return q.project || null;
     const a = refresher ? refresher.aliasOf(sid) : sid; const f = projFolders.folders([{ sid: a, cwd: cwd || (liveSession(sid) || {}).cwd }])[a]; return f ? f.path : null; },
   onChange: (project, ev) => {
-    for (const w of cmWins.values()) if (!w.isDestroyed()) w.webContents.send('codemap:changed');
+    for (const w of [...cmWins.values(), cmHub]) if (w && !w.isDestroyed()) w.webContents.send('codemap:changed');
     if (ev && ev.error && ev.error !== 'Cancelled' && Notification.isSupported()) new Notification({ title: 'Code map', body: `${path.basename(project)}: ${ev.error}`.slice(0, 200) }).show();
   },
 });
 const cmWins = new Map();       // sid -> viewer window
+let cmHub = null;               // the all-projects window (codemap-hub.html; it opens each project's map in place)
+// QA: MESH_CODEMAP_HUB_QA = a JSON file of [{ sid, name, project }] used as the sessions (a throwaway instance has none)
+const cmQaSessions = () => { if (!process.env.MESH_CODEMAP_HUB_QA) return []; try { return JSON.parse(fs.readFileSync(process.env.MESH_CODEMAP_HUB_QA, 'utf8')) || []; } catch { return []; } };
 const cmAllowed = new Set();    // files the viewer may show / open: only the graph and report Mesh itself reported
 const cmCall = (sid, op) => {
   if (peerSess(sid)) return op === 'status' || op === 'html' ? peerLink.forward('GET', op === 'html' ? '/api/codemap/html' : '/api/codemap', undefined, { sid }, 60e3).catch(e => ({ ok: false, err: `${peerLink.label()}: ${e.message}` }))
@@ -880,26 +886,69 @@ ipcMain.handle('codemap:cancel', (_e, sid) => cmCall(sid, 'cancel'));
 ipcMain.handle('codemap:reveal', (_e, p) => { if (cmOk(p)) shell.showItemInFolder(p); });
 ipcMain.handle('codemap:browser', (_e, p) => { if (cmOk(p)) return /\.html$/.test(p) ? shell.openExternal(require('url').pathToFileURL(p).href) : shell.openPath(p); });
 // open the viewer; a project without a map, or with commits newer than its map, is (re)built right away (seconds)
+// a viewer window: the header page (codemap.html / codemap-hub.html) plus the graph itself in its own view below the
+// header, with no preload and its own session, so its scripts (third-party, generated) can use storage and load their
+// library normally but can't reach Mesh. The header page says what to show (codemap:show).
+function cmWindow(title, page, query, extra = {}) {
+  const w = new BrowserWindow({ width: 1280, height: 860, title, backgroundColor: extra.bg || '#0b0d14',
+    webPreferences: { preload: path.join(__dirname, 'codemap-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  w.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+  const { WebContentsView } = require('electron');
+  const view = new WebContentsView({ webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'codemap' } });
+  view.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+  view.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); } });
+  // a window that follows Mesh's theme (the all-projects one) also sets the graph page's own Light / Dark
+  view.webContents.on('did-finish-load', () => cmGraphTheme(w));
+  view.setVisible(false); w.contentView.addChildView(view); w.cmView = { view, top: 64, file: null };
+  const lay = () => { if (w.isDestroyed()) return; const [cw, ch] = w.getContentSize(); view.setBounds({ x: 0, y: w.cmView.top, width: cw, height: Math.max(0, ch - w.cmView.top) }); };
+  w.on('resize', lay); lay();
+  w.loadFile(path.join(__dirname, 'renderer', page), { query });
+  return w;
+}
+const cmGraphTheme = w => { if (!w || w.isDestroyed() || !w.cmTheme) return;
+  w.cmView.view.webContents.executeJavaScript(`(b => b && b.getAttribute('aria-pressed') !== 'true' && b.click())(document.querySelector('[data-theme-choice="${w.cmTheme}"]'))`).catch(() => { }); };
+// open the viewer; a project without a map, or with commits newer than its map, is (re)built right away (seconds)
 ipcMain.handle('codemap:open', async (_e, sid, name) => {
   const w0 = cmWins.get(sid); if (w0 && !w0.isDestroyed()) { w0.show(); w0.focus(); return { ok: true }; }
   const st = await cmStatus(null, sid);
   if (st && st.ok === false && !st.project) return st;
   if (st && st.ok && (!st.html || st.behind > 0) && !st.running && !st.queued) await cmCall(sid, 'generate');
-  const w = new BrowserWindow({ width: 1280, height: 860, title: 'Code map · ' + (name || ''), backgroundColor: '#0b0d14',
-    webPreferences: { preload: path.join(__dirname, 'codemap-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  const w = cmWindow('Code map · ' + (name || ''), 'codemap.html', { sid, name: name || '' });
   cmWins.set(sid, w); w.on('closed', () => cmWins.delete(sid));
-  w.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
-  // the graph itself: its own view below the header, no preload and its own session, so its scripts (third-party,
-  // generated) can use storage and load their library normally but can't reach Mesh. The header page says what to show.
-  const { WebContentsView } = require('electron');
-  const view = new WebContentsView({ webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'codemap' } });
-  view.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
-  view.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); } });
-  view.setVisible(false); w.contentView.addChildView(view); w.cmView = { view, top: 64, file: null };
-  const lay = () => { if (w.isDestroyed()) return; const [cw, ch] = w.getContentSize(); view.setBounds({ x: 0, y: w.cmView.top, width: cw, height: Math.max(0, ch - w.cmView.top) }); };
-  w.on('resize', lay); lay();
-  w.loadFile(path.join(__dirname, 'renderer', 'codemap.html'), { query: { sid, name: name || '' } });
   return { ok: true };
+});
+// ---- Code map, all projects (codemap-hub.js): the rail's Code map icon and View ▸ Code map ----
+const cmHubTheme = () => chatThemeMode === 'light' || (chatThemeMode === 'system' && !nativeTheme.shouldUseDarkColors) ? 'light' : 'dark';
+function openCodemapHub() {
+  if (cmHub && !cmHub.isDestroyed()) { if (cmHub.isMinimized()) cmHub.restore(); cmHub.show(); cmHub.focus(); return { ok: true }; }
+  const t = cmHubTheme();
+  cmHub = cmWindow('Code map · All projects', 'codemap-hub.html', { theme: t, kind: chatThemeMode === 'default' ? 'default' : 'chat' }, { bg: t === 'light' ? '#f5f6f8' : '#0b0d14' });
+  cmHub.cmTheme = t; cmHub.on('closed', () => { cmHub = null; });
+  return { ok: true };
+}
+function cmHubThemeChanged() {
+  if (!cmHub || cmHub.isDestroyed()) return; const t = cmHubTheme(); cmHub.cmTheme = t;
+  cmHub.webContents.send('codemap:theme', { theme: t, kind: chatThemeMode === 'default' ? 'default' : 'chat' }); cmGraphTheme(cmHub);
+}
+nativeTheme.on('updated', () => { if (chatThemeMode === 'system') cmHubThemeChanged(); });
+ipcMain.handle('codemap:hubOpen', () => openCodemapHub());
+ipcMain.handle('codemap:hubTheme', () => ({ theme: cmHubTheme(), kind: chatThemeMode === 'default' ? 'default' : 'chat' }));
+ipcMain.handle('codemap:hub', async () => {
+  const qa = cmQaSessions(), av = (lastSnap && lastSnap.avatars) || {};
+  const list = qa.length ? qa : ((lastSnap && lastSnap.sessions) || []).filter(s => s.sid);
+  const local = list.filter(s => !s.onPeer);
+  const folders = qa.length ? {} : projFolders.folders(local.map(s => ({ sid: refresher ? refresher.aliasOf(s.sid) : s.sid, cwd: s.cwd })));
+  const FAM = { opus: '#7d7bff', sonnet: '#2ef0a8', haiku: '#ffb347' };
+  const sessions = list.map(s => {
+    const a = refresher ? refresher.aliasOf(s.sid) : s.sid, pic = av[s.name];
+    const project = qa.length ? s.project || null : s.onPeer ? (s.cwd ? String(s.cwd).replace(/^~(?=\/|$)/, HOME) : null) : (folders[a] || {}).path || null;
+    const st = collector.stats && collector.stats.get(s.sid);
+    return { sid: s.sid, name: s.name || s.sid.slice(0, 8), project, peer: !!s.onPeer, pid: s.pid || 0, lineage: s.lineage || null, health: s.health || '',
+      avatar: pic && pic.file && pic.v ? `meshav://img/${encodeURIComponent(pic.file)}?s=128&v=${pic.v}` : null, color: FAM[s.family] || null,
+      relays: st && st.relays ? st.relays.filter(r => r.t > Date.now() - 864e5 && r.dir === 'out') : qa.length ? s.relays || [] : [] };
+  });
+  try { return { ok: true, ...(await require('./codemap-hub').build({ sessions, where: codemap.where, jobs: codemap.jobs, home: HOME })), peer: peerLink ? peerLink.label() : '' }; }
+  catch (e) { return { ok: false, err: e.message }; }
 });
 ipcMain.handle('folder:open', (_e, p) => projFolders.safe(p) ? shell.openPath(p).then(err => ({ ok: !err, err })) : { ok: false, err: 'not a folder in your home folder' });
 let mcpSources = new Map(), mcpPicked = null;
@@ -1449,17 +1498,31 @@ function openChatWin(key, at) {
   const wake = () => { if (lastShown && !w.isDestroyed()) sendChatWin(key, w, lastShown); };
   w.on('restore', wake); w.on('show', wake);
   w.webContents.on('did-finish-load', wake);
+  const cwLog = m => { try { fs.appendFileSync(path.join(app.getPath('userData'), 'chatwin.log'), `${new Date().toISOString()} ${key} ${m}\n`); } catch { } };
+  w.on('unresponsive', () => cwLog('window stopped responding'));
+  w.webContents.on('render-process-gone', (_e, d) => { cwLog('page gone: ' + (d && d.reason)); if (!w.isDestroyed()) w.webContents.reload(); });
+  w.webContents.on('did-fail-load', (_e, code, desc) => cwLog(`load failed: ${code} ${desc}`));
   w.on('closed', () => { if (chatWins.get(key) === w) chatWins.delete(key); cwTell(); });
   cwTell();
   return true;
 }
 let lastShown = null;
+function chatWinData(key, snap) {
+  if (key === 'sessions') return snap;
+  const sid = key.slice(5);
+  return { ready: snap.ready, machine: snap.machine, peer: snap.peer, avatars: snap.avatars, sessions: (snap.sessions || []).filter(s => s.sid === sid) };
+}
 function sendChatWin(key, w, snap) {
   if (w.isDestroyed() || !w.isVisible() || w.isMinimized()) return;
-  if (key === 'sessions') return w.webContents.send('telemetry', snap);
-  const sid = key.slice(5);
-  w.webContents.send('telemetry', { ready: snap.ready, machine: snap.machine, peer: snap.peer, avatars: snap.avatars, sessions: (snap.sessions || []).filter(s => s.sid === sid) });
+  w.webContents.send('telemetry', chatWinData(key, snap));
 }
+// a detached window asks for the snapshot itself once its page has loaded (the push on 'show' can come before its
+// listener exists), and reports its errors here instead of staying blank (2026-11-27: a torn-off room opened empty)
+const chatWinKeyOf = sender => { for (const [k, w] of chatWins) if (!w.isDestroyed() && w.webContents === sender) return k; return null; };
+ipcMain.handle('chatwin:snap', e => { const k = chatWinKeyOf(e.sender); return k && lastShown ? chatWinData(k, lastShown) : null; });
+ipcMain.on('chatwin:error', (e, msg) => {
+  try { fs.appendFileSync(path.join(app.getPath('userData'), 'chatwin.log'), `${new Date().toISOString()} ${chatWinKeyOf(e.sender) || '?'} ${String(msg).slice(0, 2000)}\n`); } catch { }
+});
 function sendChatWins(snap) { lastShown = snap; for (const [k, w] of chatWins) sendChatWin(k, w, snap); }
 ipcMain.handle('chatwin:open', (_e, key, at) => openChatWin(key, at));
 ipcMain.handle('chatwin:list', () => cwKeys());

@@ -2,6 +2,12 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-27 — Detached chat windows load their own data and report errors
+- A room dragged out of the window could open blank. The window now asks for the snapshot itself once it has loaded (and again 1.5 s later) instead of relying only on the push, shows any error in the window, and logs errors, hangs and crashes to chatwin.log in the app's data folder; a crashed page reloads.
+
+## 2026-11-27 — Code map: all projects in one picture
+- **Code map** is now a view of its own: the new graph icon in the chat theme's left rail, or **View ▸ Code Map (All Projects)** (⌘⇧M) in any theme. Its home page, **All projects**, draws every session's project as a hub (its picture or initial and name) with its code areas (Graphify communities, sized by how many items they hold) hanging off it. Hubs are linked where they really connect: a project folder inside another (with how many files the outer map shares), one project importing a module that is another's file, the same distinct code file names, messages between their sessions in the last 24 h, and sessions of the same handed-off lineage. Several sessions on one folder share its hub. Hover a link for what it is; click a hub for its details; double-click it, or click a session in the side list, to open that session's own map in the same window with **‹ All projects** to come back. Only maps that already exist are read (never a build); a project without one is a grey dashed hub with **Build map**. It follows Mesh's theme (light / dark) and sets the per-project map's own Light / Dark to match. Summaries are cached per graph.json, so twenty projects with thousands of items each stay smooth.
+
 ## 2026-11-27 — A sent message no longer shows twice in a chat room
 - The "sending" bubble stays until the session's transcript has the message, matched by exact text. The terminal sometimes changes spacing (a double space came back single) or adds the attached files' paths, so the match failed and the message showed twice for a minute. The match now ignores spacing, file paths and [Image #n] tags.
 

@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('api', {
     close: key => ipcRenderer.send('chatwin:close', key),
     dock: () => ipcRenderer.send('chatwin:dock'),
     select: sid => ipcRenderer.send('chatwin:select', sid),
+    snap: () => ipcRenderer.invoke('chatwin:snap'),                     // the latest snapshot for this window (it asks once it has loaded)
+    error: msg => ipcRenderer.send('chatwin:error', msg),
     onState: cb => ipcRenderer.on('chatwin:state', (_e, keys) => cb(keys)),
     onSelect: cb => ipcRenderer.on('chatwin:select', (_e, sid) => cb(sid)),
   },
@@ -122,7 +124,7 @@ contextBridge.exposeInMainWorld('api', {
   handoff: { move: sid => ipcRenderer.invoke('handoff:move', sid), onStart: cb => ipcRenderer.on('handoff:start', (_e, x) => cb(x)), onProgress: cb => ipcRenderer.on('handoff:progress', (_e, x) => cb(x)) },
   pathForFile: f => webUtils.getPathForFile(f),
   history: () => ipcRenderer.invoke('hist:list'),
-  codemap: { open: (sid, name) => ipcRenderer.invoke('codemap:open', sid, name) },
+  codemap: { open: (sid, name) => ipcRenderer.invoke('codemap:open', sid, name), hub: () => ipcRenderer.invoke('codemap:hubOpen') },
   historyTrash: sid => ipcRenderer.invoke('hist:trash', sid),
   sched: {
     list: () => ipcRenderer.invoke('sched:list'),

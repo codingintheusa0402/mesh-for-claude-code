@@ -49,6 +49,7 @@
     chats: '<svg viewBox="0 0 24 24" class="fill"><path d="M12 3.8c-5.2 0-9 3.2-9 7.2 0 2.5 1.5 4.7 3.8 6l-.9 3.4 3.8-2.3c.7.1 1.5.2 2.3.2 5.2 0 9-3.2 9-7.3S17.2 3.8 12 3.8z"/></svg>',
     people: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 19.5c0-3.6 2.9-5.8 6.5-5.8s6.5 2.2 6.5 5.8"/><path d="M15.5 5.3a3.4 3.4 0 0 1 0 6.4M18 14.2c2.2.6 3.5 2.5 3.5 5.3"/></svg>',
     usage: '<svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+    codemap: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.6"/><circle cx="5" cy="6" r="1.8"/><circle cx="19" cy="5.5" r="1.8"/><circle cx="18.5" cy="18.5" r="1.8"/><circle cx="5.5" cy="18" r="1.8"/><path d="M10 10.4L6.4 7.2M13.9 10.3l3.7-3.4M14 13.8l3.2 3.3M10.1 13.9l-3.3 2.9"/></svg>',
     more: '<svg viewBox="0 0 24 24" class="fill"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
     moon: '<svg viewBox="0 0 24 24"><path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/></svg>',
     sun: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>',
@@ -488,7 +489,7 @@
   function railHtml() {
     const dk = isDark(), b = (a, ic, title, cls = '') => `<span class="ct-ri${cls}" data-r="${a}" title="${esc(title)}">${ic}</span>`;
     return b('chats', SVG.chats, 'Chats', ' on')
-      + (DETACHED ? '' : b('new', SVG.plus, 'New session (⌘T)') + b('usage', SVG.usage, 'Token usage'))
+      + (DETACHED ? '' : b('new', SVG.plus, 'New session (⌘T)') + b('usage', SVG.usage, 'Token usage') + b('codemap', SVG.codemap, 'Code map'))
       + '<span class="ct-rsp"></span>'
       + (DETACHED ? b('dock', SVG.dock, 'Back into the main window') : b('pop', SVG.pop, 'Open the chat list in its own window (or drag the Sessions tab out of the window)'))
       + b('mode', dk ? SVG.sun : SVG.moon, dk ? 'Light' : 'Dark')
@@ -507,6 +508,7 @@
         if (a === 'chats') railBox.scrollTop = 0;
         else if (a === 'new') { try { openNew(); } catch { } }
         else if (a === 'usage') { try { openUsage(); } catch { } }
+        else if (a === 'codemap') { try { window.api.codemap.hub(); } catch { } }
         else if (a === 'pop') popSessions(null);
         else if (a === 'dock') window.api.chatWin.dock();
         else if (a === 'mode') set(isDark() ? 'light' : 'dark');

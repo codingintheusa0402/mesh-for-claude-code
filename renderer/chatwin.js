@@ -27,16 +27,30 @@ function sessSend(s, text) {
 }
 // a click in the detached list: it is selected here and in the main window (its room comes to the front there)
 function select(sid) { selected = sid; try { window.api.chatWin.select(sid); } catch { } if (window.chatTheme) window.chatTheme.renderList(); }
+// an error is shown in the window and logged by main (userData/chatwin.log), never a silent blank window
+function showErr(msg) {
+  try { window.api.chatWin.error(msg); } catch { }
+  const gone = $('#cwGone'); if (!gone) return;
+  gone.hidden = false; gone.querySelector('b').textContent = 'Something went wrong in this window';
+  gone.querySelector('span').textContent = String(msg).slice(0, 300);
+}
+addEventListener('error', e => showErr((e.message || 'error') + (e.filename ? ` (${e.filename.split('/').pop()}:${e.lineno})` : '')));
+addEventListener('unhandledrejection', e => showErr('unhandled: ' + ((e.reason && (e.reason.stack || e.reason.message)) || e.reason)));
 addEventListener('DOMContentLoaded', () => {
   $('#cwDockBtn').onclick = () => window.api.chatWin.dock();
-  window.api.onTelemetry(s => {
+  const onSnap = s => {
+    if (!s) return;
     snap = s;
     if (ROOM) {
       const me = (s.sessions || [])[0];
       document.title = me ? me.name : 'Chat';
       const gone = $('#cwGone'); gone.hidden = !s.ready || !!me; if (!gone.hidden && !gone.querySelector('b').textContent) gone.querySelector('b').textContent = document.title;
     } else document.title = 'Chats';
-    if (window.chatTheme) window.chatTheme.update();
-  });
+    try { if (window.chatTheme) window.chatTheme.update(); } catch (e) { showErr(e.stack || e.message); }
+  };
+  window.api.onTelemetry(onSnap);
+  // don't wait for the next push: ask now, and again shortly in case main had nothing yet
+  const ask = () => window.api.chatWin.snap().then(s => { if (s && !snap.ready) onSnap(s); }).catch(e => showErr(e.message));
+  ask(); setTimeout(ask, 1500);
   // ⌘W closes (= docks back) like any window; Esc in a room does nothing special
 });

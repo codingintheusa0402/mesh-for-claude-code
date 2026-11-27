@@ -112,7 +112,10 @@ function createCodemap({ home = os.homedir(), env = () => process.env, projectOf
     return { ok: true };
   }
   const htmlOf = async (sid, cwd) => { const s = await status(sid, cwd); return s.html ? { ok: true, html: fs.readFileSync(s.html, 'utf8'), meta: s.meta } : { ok: false }; };
-  return { status, generate, cancel, htmlOf, OUT, graphifyBin };
+  // for the all-projects view (codemap-hub.js): where a project's graph lives, and what is building right now
+  const where = project => ({ dir: outOf(project), graph: path.join(outOf(project), 'graph.json'), own: owns(project), meta: readJson(path.join(notesOf(project), 'meta.json')) });
+  const jobs = () => ({ running: job ? job.project : null, queued: queue.map(q => q.project) });
+  return { status, generate, cancel, htmlOf, OUT, graphifyBin, where, jobs };
 }
 
 module.exports = { createCodemap };
