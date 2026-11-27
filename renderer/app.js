@@ -467,7 +467,7 @@ const foldBtn = s => { const f = window.sessionFolders && window.sessionFolders[
 // one session row; draggable onto another row (→ new group of both) or onto a group header (→ joins it)
 // relays today (messages to/from other sessions, collector.js) and the sun mark (sun.js)
 const relayChip = s => s.relaysToday ? `<span class="relays" title="${s.relaysToday} message${s.relaysToday > 1 ? 's' : ''} to or from other sessions today">⇄ ${s.relaysToday}</span>` : '';
-const sunTag = s => s.sun ? '<span class="tag sun" title="Runs this app: the star in the middle of the mesh">sun</span>' : s.dupOf ? '<span class="tag dup" title="Another session with the same name; not the one that runs this app">duplicate</span>' : '';
+const sunTag = s => s.sun ? '<span class="tag sun" title="Runs this app: the star in the middle of the mesh">Core</span>' : s.dupOf ? '<span class="tag dup" title="Another session with the same name; not the one that runs this app">duplicate</span>' : '';
 const cardBits = s => window.cardRowBits ? window.cardRowBits(s) : { badges: '', intro: '' };
 const srowHtml = (s, cls, cb = cardBits(s)) => `<div class="srow${cls} ${s.sid === selected ? 'sel' : ''}${doneCls(s.sid)}" data-sid="${s.sid}" draggable="true">
     <div class="n"><span class="hdot h-${s.health}"></span><span class="t">${esc(s.name)}</span>${sunTag(s)}${s.onPeer || s.hostLabel ? peerTag(s) : s.owner ? '<span class="tag">app</span>' : s.kind === 'bg' ? '<span class="tag">bg</span>' : ''}${cb.badges}${foldBtn(s)}<span class="more" data-more="${s.sid}" title="Commands (or right-click)">⋯</span></div>

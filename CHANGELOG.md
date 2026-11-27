@@ -2,6 +2,9 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-27 — The session that runs the app is tagged Core
+- The tag on the session that runs this app (the star in the middle of the mesh) reads Core instead of sun, in the window and on the iPhone page.
+
 ## 2026-11-27 — At most 6 detached chat windows
 - Each detached window is its own page process (about 90 MB, ~0% CPU when idle). At most 6 stay open (MESH_CHATWIN_MAX); opening another docks the one used longest ago back into the main window.
 

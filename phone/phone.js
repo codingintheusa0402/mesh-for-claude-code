@@ -7,7 +7,7 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 const fmtTok = v => { v = Math.max(0, v || 0); const u = v >= 1e9 ? [1e9, 'B'] : v >= 1e6 ? [1e6, 'M'] : v >= 1e3 ? [1e3, 'k'] : null; if (!u) return String(Math.round(v)); const x = v / u[0]; return (x < 10 ? x.toFixed(1).replace(/\.0$/, '') : Math.round(x)) + u[1]; };
 // relays today (collector.js) and the sun / duplicate mark (main.js markSun)
 const RELAYS = s => s.relaysToday ? ` · <span class="relays">⇄ ${s.relaysToday}</span>` : '';
-const SUNTAG = s => s.sun ? ' <span class="stag sun">sun</span>' : s.dupOf ? ' <span class="stag dup">duplicate</span>' : '';
+const SUNTAG = s => s.sun ? ' <span class="stag sun">Core</span>' : s.dupOf ? ' <span class="stag dup">duplicate</span>' : '';
 const ago = s => s < 60 ? Math.round(s) + 's' : s < 3600 ? Math.round(s / 60) + 'm' : s < 86400 ? (s / 3600).toFixed(1) + 'h' : Math.round(s / 86400) + 'd';
 
 // ---------- pairing ----------
