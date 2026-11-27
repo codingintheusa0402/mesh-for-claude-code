@@ -2,6 +2,10 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-27 — README: chat theme screenshots and GIF
+- New **Chat theme** part of the Tour: light and dark side by side, a GIF of a prompt sent in a room (pending bubble, "…", tool calls, reply), a room in its own window and the iPhone room. Linked from the feature list and the top links. Made with demo sessions only (a throwaway instance with made-up projects and generated pictures).
+- New files in docs/media: chat-light.png, chat-dark.png, chat-room.gif, chat-popout.png, phone-chat.png.
+
 ## 2026-11-27 — Terminals panel: up to 4 terminals at once
 - Split view in the Terminals panel: the new split button after ＋ in the tab row (or ⌘\\) shows the current terminal and the last other one side by side; ⌘-click a tab, or drag a tab down onto the terminal area (it outlines), to add one, up to 4; ⌘-click a shown tab or × on its pane label to take it out. Two sit side by side (stacked in a tall panel), three as three columns or one tall pane plus two, four as 2 × 2. Clicking a pane focuses it (outlined, its tab lit); clicking a tab that isn't shown puts it into the focused pane. Tabs on screen are underlined. Works in both themes (each chat room fills its pane); not in Grid view or the mini window. Which terminals are split is kept per machine, so it comes back after a restart.
 

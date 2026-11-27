@@ -14,7 +14,7 @@ See all of them orbiting one living star: who is working, who is stuck waiting f
 [![Build](https://img.shields.io/github/actions/workflow/status/codingintheusa0402/mesh-for-claude-code/build.yml?style=for-the-badge&label=macOS%20%2B%20Windows)](https://github.com/codingintheusa0402/mesh-for-claude-code/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 
-**[⬇ Download for macOS](https://github.com/codingintheusa0402/mesh-for-claude-code/releases/latest)** · **[⬇ Download for Windows](https://github.com/codingintheusa0402/mesh-for-claude-code/releases/latest)** · [Tour](#tour) · [Install](#install) · [Phone](#on-your-phone) · [Build from source](#build-from-source)
+**[⬇ Download for macOS](https://github.com/codingintheusa0402/mesh-for-claude-code/releases/latest)** · **[⬇ Download for Windows](https://github.com/codingintheusa0402/mesh-for-claude-code/releases/latest)** · [Tour](#tour) · [Chat theme](#chat-theme) · [Install](#install) · [Phone](#on-your-phone) · [Build from source](#build-from-source)
 
 <img src="docs/media/hero.gif" alt="Five Claude Code sessions orbiting the mother star; load strands pulse as they work" width="100%">
 
@@ -31,7 +31,7 @@ Running one Claude Code session is easy. Running five, in five folders, across a
 - **Every past session, one click away.** Search everything `claude --resume` knows and reopen it in a terminal.
 - **See the code, too.** A Code map shows any session's project as an interactive graph, and one view shows all your projects together.
 - **Two Macs, one mesh.** Pair a second Mac and both show every session; a session always runs on its own Mac.
-- **Looks like a messenger, if you want.** An optional chat theme (Light, Dark or follows macOS) turns the session list into a chat list and each session into a chat room, with session pictures, and lets you tear rooms off into windows of their own.
+- **Looks like a messenger, if you want.** An optional [chat theme](#chat-theme) (Light, Dark or follows macOS) turns the session list into a chat list and each session into a chat room, with session pictures, on the Mac and on your phone, and lets you tear rooms off into windows of their own.
 - **From your phone.** A private, pairing-key-protected web app shows the same live mesh and controls on your iPhone over Wi-Fi or Tailscale.
 - **It's fun to leave open.** Probes tidy the system, a black hole eats stale sessions on request, and an idle screen saver (off by default, View ▸ Mesh) plays short films starring your sessions.
 - **Local and private.** It reads your own `~/.claude` folder. No account, no telemetry, nothing uploaded.
@@ -44,6 +44,23 @@ Running one Claude Code session is easy. Running five, in five folders, across a
 | <img src="docs/media/control.gif" alt="Typing a prompt into the session panel and watching the terminal respond"> | <img src="docs/media/grid.jpg" alt="Grid view with five Claude Code terminals"> |
 | **Split view: mesh, terminal and live stats** | **Idle? The screen saver starts a film** |
 | <img src="docs/media/split.jpg" alt="Split view with sessions list, mesh, terminals and the details panel"> | <img src="docs/media/screensaver.gif" alt="Probes playing tag around the mother star"> |
+
+<a id="chat-theme"></a>
+### Chat theme
+
+Prefer a messenger to a terminal? Turn on the chat theme (**View ▸ Theme**) and every session becomes a chat room: your prompts in yellow, replies with the session's picture, tool calls folded into one grey line each. Light, Dark or Match System.
+
+| Light | Dark |
+|---|---|
+| <img src="docs/media/chat-light.png" alt="Chat theme, light: a chat list with session pictures and unread badges beside a chat room with a code block, a list and a pasted chart"> | <img src="docs/media/chat-dark.png" alt="The same window in the chat theme's dark mode"> |
+| <sub>Chats on the left with unread badges and typing dots; the room renders markdown, code and pasted pictures.</sub> | <sub>Dark mode, or let it follow macOS.</sub> |
+
+<p align="center"><img src="docs/media/chat-room.gif" alt="Typing a prompt in a chat room: the bubble is sent, the session shows typing dots, tool calls appear, then the reply" width="100%"><br><sub>Type, send, watch it work: "…" while the session thinks, its tool calls as they happen, then the reply.</sub></p>
+
+| A room in its own window | The same room on your iPhone |
+|---|---|
+| <img src="docs/media/chat-popout.png" alt="A chat room torn out of the main window into a window of its own"> | <img src="docs/media/phone-chat.png" alt="The iPhone page showing the same chat room" width="300"> |
+| <sub>Drag a tab out of the window, or double-click a chat, to give it a window of its own.</sub> | <sub>The phone page has the same room, with a Chat / Terminal switch.</sub> |
 
 <a id="install"></a>
 ## Install
@@ -156,6 +173,8 @@ Machine- or team-specific add-ons can go in `local/` (gitignored); `local/main.j
 | **Notifications** | Optional macOS notifications when a session finishes, errors or waits for input. |
 
 ### Chat theme: light, dark and windows of their own
+
+Screenshots: [Chat theme](#chat-theme) in the Tour.
 
 **Look.** Light: white list and header, blue-grey rooms, yellow bubbles for your prompts, white replies with avatar and name. Dark (the messenger's macOS dark mode): a near-black list (#1E1E1E) beside a lighter icon rail, white names with grey previews and times, dark-grey pill filters with the selected one white, a #1C1C1C room with dark-grey replies, yellow bubbles for yours, a dark input bar whose **전송** button turns yellow when there is something to send. In both:
 
