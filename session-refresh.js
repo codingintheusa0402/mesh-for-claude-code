@@ -70,6 +70,23 @@ const TEMPLATE = `# HANDOFF: <session name>  (updated <date time>)
 // written from these files; on a miss the session is told to re-read them, then the refresh fails and the owner is alerted).
 // re-read on every use (2026-11-25), so prompt edits apply without a restart
 const LOCAL_NOW = () => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'local', 'session-refresh.json'), 'utf8')); } catch { return LOCAL; } };
+// Working hours (2026-11-27): local/session-refresh.json "busyHours": [{ "match": "^Name", "schedule": "~/path/mode.json" | { ... },
+// "note": ["cmd", "arg", "{text}"] }]. schedule = { enabled, start "HH:MM", end "HH:MM", days [Mon=0..Sun=6], tz } (a file path
+// is read live, its "schedule" key). Inside those hours no automatic refresh, handoff or park runs for that session (manual ones
+// still do); a due one waits until the hours end. Safety valve: at >= 90 % of the model's window it refreshes anyway and runs "note".
+function busyOf(name, at) {
+  const b = (LOCAL_NOW().busyHours || []).find(x => { try { return new RegExp(x.match, 'i').test(name); } catch { return false; } }); if (!b) return null;
+  let sc = b.schedule;
+  if (typeof sc === 'string') { try { sc = JSON.parse(fs.readFileSync(sc.replace(/^~(?=\/)/, os.homedir()), 'utf8')).schedule; } catch { return null; } }
+  if (!sc || !sc.enabled || !sc.start || !sc.end) return null;
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: sc.tz || undefined, hourCycle: 'h23', weekday: 'short', hour: '2-digit', minute: '2-digit' })
+    .formatToParts(new Date(at || Date.now())).map(p => [p.type, p.value]));
+  const wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(parts.weekday), cur = (+parts.hour % 24) * 60 + +parts.minute;
+  const mins = t => { const [h, m] = String(t).split(':').map(Number); return h * 60 + (m || 0); }, a = mins(sc.start), e = mins(sc.end);
+  const days = Array.isArray(sc.days) && sc.days.length ? sc.days : [0, 1, 2, 3, 4, 5, 6];
+  const inside = a <= e ? days.includes(wd) && cur >= a && cur < e : (days.includes(wd) && cur >= a) || (days.includes((wd + 6) % 7) && cur < e);
+  return inside ? { until: sc.end, note: Array.isArray(b.note) ? b.note : null } : null;
+}
 const EXTRA_OF = L => (L.extra || []).map(x => [new RegExp(x.match, 'i'), { handoff: x.handoff || '', verify: x.verify || '', first: x.first || '', after: x.after || '', flush: x.flush || null, cwd: x.cwd || '', verifyFiles: x.verifyFiles || [] }]);
 // and for every session: local/session-refresh.json "always": { "handoff": "...", "verify": "..." } (standing rules every generation inherits)
 const extraFor = name => { const L = LOCAL_NOW(), ALWAYS = L.always || {}, x = (EXTRA_OF(L).find(([re]) => re.test(name)) || [, {}])[1];
@@ -732,6 +749,14 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
       if ((cfg.flushSkip || {})[s.name] === today) continue;                                  // its flush went unconfirmed today
       if (s.parent && list.some(p => p.sid === s.parent && dueNightly(p, now))) continue;      // its parent goes first
       const why = dueNightly(s, now) ? 'nightly' : overUse(s); if (!why) continue;
+      const busy = busyOf(s.name, now);
+      if (busy) {
+        const full = s.ctx && s.ctxMax && s.ctx >= 0.9 * s.ctxMax;
+        if (!full) { if ((cfg.busyLogged || (cfg.busyLogged = {}))[s.name] !== today + why.slice(0, 7)) { cfg.busyLogged[s.name] = today + why.slice(0, 7); save(); log(`HOLD  ${s.name}: ${why}, but inside its working hours (until ${busy.until}): refresh waits`); } continue; }
+        const text = `${s.name}: refreshed during its working hours, context ${Math.round(100 * s.ctx / s.ctxMax)}% of the window (safety valve at 90%)`;
+        log(`VALVE ${text}`);
+        if (busy.note && !process.env.MESH_QA) { const a = busy.note.map(x => String(x).replace(/^~(?=\/)/, HOME).replace('{text}', text)); require('child_process').execFile(a[0], a.slice(1), { timeout: 30000 }, () => { }); }
+      }
       // the nightly refresh is for sessions that worked: no prompt or reply since the last refresh (or in 24 h) → skip
       // until tomorrow night (2026-11-10). Context/usage triggers still apply.
       if (why === 'nightly') {
@@ -750,6 +775,7 @@ ${txt.slice(0, 20000)}`).catch(e => ({ err: e.message }));
     // idle park: nobody used it for idleHours, nothing of it runs, no loop, no sub-sessions; Claude sessions only
     for (const s of list) {
       if (!idleFor(s, now) || s.parent || s.kind === 'hermes' || matchAny(cfg.noPark, s.name)) continue;
+      if (busyOf(s.name, now)) continue;                                 // never parked inside its working hours
       if (local().some(c => c.parent === s.sid) || draftText(s) || loopInfo(s) || jobsOf(s).length) continue;
       const k = s.name + '|park', tried = cfg.tried[k] || 0; if (now - tried < 6 * 3600e3) continue;
       cfg.tried[k] = now; save();

@@ -2,6 +2,9 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-27 — Session refresh: working hours per session
+- `busyHours` in `local/session-refresh.json` (`match`, `schedule` = a schedule object or a JSON file whose `schedule` key is read live: enabled, start, end, days Mon=0..Sun=6, tz; optional `note` command). Inside a session's working hours no automatic refresh, handoff or idle park runs for it: a due context-cap or nightly refresh waits and runs on the first check after the hours end (log line HOLD). A refresh you start yourself still runs any time. Safety valve: at 90 % or more of the model's context window it refreshes anyway, logs VALVE and runs `note` with the reason.
+
 ## 2026-11-27 — iPhone page: the session panel is a chat room in the chat theme
 - With the chat theme on (Light / Dark / Match System), the open session's panel shows the session as a chat room, like the desktop app: your prompts on the right in yellow bubbles, replies on the left with the session's picture and name (markdown rendered, long ones folded with See more), tool calls as small grey lines (a long run folded to "+ N more tool calls"), times, day dividers, pictures (tap for full size) and a "…" bubble while the session works. It reads the session's transcript (/api/chat, forwarded for a session on the other Mac) every 2 s while it works and every 6 s when idle, never while the page is hidden or on Grid; only changed rows are redrawn and it follows the newest message unless you scrolled up (↓ jumps back). New file phone/phone-room.js.
 - A **Chat / Terminal** switch in the session header goes back to the live terminal (Chat / Status for a session without a terminal here); the choice is kept on the phone. The Default theme shows the terminal as before. The key row and the input bar keep working in the room; a sent message shows as a pending bubble (read mark "1") until the transcript has it, matched ignoring spacing, file paths and [Image #n].
