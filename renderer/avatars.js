@@ -13,22 +13,32 @@
   const map = () => { const s = snapNow(); return (s && s.avatars) || {}; };
   const url = (file, v, size) => APP ? `meshav://img/${encodeURIComponent(file)}?s=${size}&v=${v}`
     : `/api/avatar?f=${encodeURIComponent(file)}&s=${size}&v=${v}&t=${encodeURIComponent(tok())}`;
-  // A list, board or room rebuilt with innerHTML makes new <img>s and Chromium starts each new one at frame 1, so a list that
-  // re-renders on every status change kept restarting its GIFs. When a rebuild drops an animated picture and adds the same
-  // URL back (same mutation batch, before the next paint), the old <img> goes back in place of the new one and keeps playing.
-  const AV = n => n.nodeType === 1 ? (n.tagName === 'IMG' ? [n] : n.firstElementChild ? n.getElementsByTagName('img') : []) : [];
-  const anim = i => /^meshav:/.test(i.src) && /\.gif(\?|%3F|$)/i.test(decodeURIComponent(i.src.split('?')[0])) || i.dataset.anim === '1';
-  const mo = new MutationObserver(recs => {
-    let pool = null;
-    for (const r of recs) for (const n of r.removedNodes) for (const i of AV(n)) if (!i.isConnected && anim(i)) { (pool ||= new Map()); const l = pool.get(i.src); l ? l.push(i) : pool.set(i.src, [i]); }
-    if (!pool) return;
-    for (const r of recs) for (const n of r.addedNodes) for (const i of [...AV(n)]) {
-      if (!i.isConnected) continue; const l = pool.get(i.src), old = l && l.shift(); if (!old) continue;
-      old.className = i.className; if (i.title) old.title = i.title; i.replaceWith(old);
+  // Small animated pictures come from the picture's frame sheet (avatars.js: its loop as 8 x 8 cells in one JPEG) and one
+  // clock picks the frame for all of them, from the time of day plus a per-picture offset. So a list, board or room that
+  // is rebuilt on every status change shows the same frame right away instead of starting the GIF over, all windows agree,
+  // and pictures that started together are not in step. One 10 fps timer, paused while the window is hidden.
+  const phaseOf = f => { let h = 0; for (const c of String(f)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return (h % 1000) / 1000; };
+  const frameAt = (sh, ph) => Math.floor(Date.now() / 1000 * sh.fps + ph * sh.n) % sh.n;
+  const posOf = (i, cols) => { const k = Math.max(1, cols - 1); return `${(i % cols) / k * 100}% ${Math.floor(i / cols) / k * 100}%`; };
+  function sheetHtml(e) {
+    const sh = e.sheet, ph = phaseOf(e.file), u = url(e.file, e.v, 'sheet');
+    return `<i class="avsh" data-n="${sh.n}" data-fps="${sh.fps}" data-cols="${sh.cols}" data-ph="${ph}" style="background-image:url('${esc(u)}');background-size:${sh.cols * 100}% ${sh.cols * 100}%;background-position:${posOf(frameAt(sh, ph), sh.cols)}"></i>`;
+  }
+  const sheets = document.getElementsByClassName('avsh');   // live list
+  setInterval(() => {
+    if (document.hidden || !sheets.length) return;
+    const now = Date.now() / 1000;
+    for (const el of sheets) {
+      const d = el.dataset, n = +d.n, i = Math.floor(now * d.fps + d.ph * n) % n;
+      if (el._f !== i) { el._f = i; el.style.backgroundPosition = posOf(i, +d.cols); }
     }
-    mo.takeRecords();   // our own swaps: not a rebuild, or the two <img>s would swap back and forth forever
-  });
-  mo.observe(document.documentElement, { childList: true, subtree: true });
+  }, 100);
+  // the inside of a round avatar: the frame sheet (small animated pictures), the picture, or null (no picture)
+  function inner(name, size = 128) {
+    const e = map()[name]; if (!(e && e.file && e.v)) return null;
+    if (e.sheet && e.sheet.n && size <= 128) return sheetHtml(e);
+    return `<img src="${esc(url(e.file, e.v, size))}" alt="" draggable="false">`;
+  }
   function src(name, size = 128) { const e = map()[name]; if (!(e && e.file && e.v)) return null; return url(e.file, e.v, size); }
   const initial = s => { const m = String((s && s.name) || '?').trim().match(/[\p{L}\p{N}]/u); return m ? m[0].toUpperCase() : '?'; };
   const colorOf = s => { try { if (s.color && typeof ORB_PAL !== 'undefined' && ORB_PAL[s.color]) return ORB_PAL[s.color].rim; } catch { } return ((typeof FAMILY_COLOR !== 'undefined' && FAMILY_COLOR) || window.FAMILY_COLOR || {})[s && s.family] || '#9fb4d8'; };
@@ -37,7 +47,7 @@
     const pic = src(s.name, size);
     if (!pic && !letter) return '';
     const pick = click && APP ? ` data-avpick="${esc(s.sid)}" title="Profile"` : '';
-    return `<span class="mav${cls ? ' ' + cls : ''}${pic ? ' pic' : ''}" style="--av:${esc(colorOf(s))}"${pick}>${pic ? `<img src="${esc(pic)}" alt="" draggable="false">` : `<b>${esc(initial(s))}</b>`}</span>`;
+    return `<span class="mav${cls ? ' ' + cls : ''}${pic ? ' pic' : ''}" style="--av:${esc(colorOf(s))}"${pick}>${pic ? inner(s.name, size) : `<b>${esc(initial(s))}</b>`}</span>`;
   }
 
   const PF_CSS = `
@@ -68,6 +78,7 @@ body.ct-win .avpf-back, body.ct-win .avp-back { -webkit-app-region: no-drag; }
 .mav b { font: 700 12px/1 -apple-system, system-ui, sans-serif; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.2); }
 .mav.pic { background: #222; }
 .mav img, .ct-av.pic img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit; }
+.avsh { display: block; width: 100%; height: 100%; border-radius: inherit; background-repeat: no-repeat; }
 [data-avpick] { cursor: pointer; }
 [data-avpick]:hover { filter: brightness(1.08); box-shadow: 0 0 0 2px rgba(120,160,255,.55); }
 .avp-back { position: fixed; inset: 0; z-index: 9000; background: rgba(0,0,0,.45); display: grid; place-items: center; }
@@ -183,5 +194,5 @@ body.chat-theme:not(.ct-dark) .avp { --bg: #fff; --fg: #1d1d1f; --dim: #6e7480; 
       const sn = snapNow(), s = sn && (sn.sessions || []).find(x => x.sid === a.dataset.avpick); if (s) profile(s);
     }, true);
   }
-  window.meshAvatars = { src, html, pick, profile, url, close };
+  window.meshAvatars = { src, inner, html, pick, profile, url, close };
 })();

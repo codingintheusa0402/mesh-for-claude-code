@@ -1384,7 +1384,7 @@ const avatars = require('./avatars').createAvatars({ cfg: require('./mesh-name')
 app.whenReady().then(() => {
   require('electron').protocol.handle('meshav', async req => {
     const u = new URL(req.url), f = decodeURIComponent(u.pathname.replace(/^\/+/, ''));
-    const r = await avatars.image(f, +u.searchParams.get('s') || 256).catch(() => null);
+    const sz = u.searchParams.get('s'), r = await avatars.image(f, sz === 'sheet' ? 'sheet' : +sz || 256).catch(() => null);
     if (!r) return new Response('', { status: 404 });
     try { return new Response(await fs.promises.readFile(r.path), { headers: { 'Content-Type': r.type, 'Cache-Control': 'max-age=31536000, immutable' } }); } catch { return new Response('', { status: 404 }); }
   });

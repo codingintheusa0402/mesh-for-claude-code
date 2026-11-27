@@ -83,7 +83,7 @@ function createPhoneServer(ctx) {
     }
     if (p === '/api/local-snapshot') { peerPolledAt = Date.now(); const snapNow = ctx.getSnap(); if (!snapNow) return json(res, 503, { error: 'starting' }); return json(res, 200, { ...snapNow, caps: ['upload', 'resize'] }); }   // caps: what this build accepts from the peer   // for the peer (never merged)
     if (p === '/api/avatar' && ctx.avatars && req.method === 'GET') {    // a session picture, cropped (avatars.js); fetched from the other Mac if only it has it
-      const r = await ctx.avatars.image(u.searchParams.get('f') || '', +u.searchParams.get('s') || 256).catch(() => null);
+      const sz = u.searchParams.get('s'), r = await ctx.avatars.image(u.searchParams.get('f') || '', sz === 'sheet' ? 'sheet' : +sz || 256).catch(() => null);
       if (!r) { res.writeHead(404); return res.end(); }
       return fs.readFile(r.path, (err, data) => { if (err) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'Content-Type': r.type, 'Cache-Control': 'private, max-age=31536000, immutable' }); res.end(data); });
     }

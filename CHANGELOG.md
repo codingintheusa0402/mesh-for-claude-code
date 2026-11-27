@@ -2,6 +2,11 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-28 — Animated pictures never restart: frame sheets on one clock
+- Swapping picture elements back after a rebuild was not enough: the chat list is rebuilt whenever a status or the Unread / Working counts change, and the pictures still started over. Small animated pictures (lists, rooms, tabs, board) now come from a frame sheet instead of a GIF: the picture's forward-then-backward loop at 128 px as one JPEG of 8 x 8 frames, and one 10 fps timer picks the frame from the clock. A rebuilt row shows the right frame at once, all windows show the same frame, and each picture has its own offset so they are not in step. The timer pauses while the window is hidden.
+- Better colour too: a JPEG sheet keeps all colours, where a GIF has 256 (382 KB for a 58-frame sheet against 650 KB for the 128 px GIF).
+- The GIF copies stay for the picker, the orbit pop-up and the profile card. The element-swapping code is gone.
+
 ## 2026-11-28 — Profile card, lighter pictures, pictures out of step
 - **Profile card.** A click on a session's picture (chat list, room header, a message in a room, Simple-board card, detached windows) opens its profile, like a messenger's: the picture large, name, status and machine, then project, model, context used, today's tokens and cost, total cost and turns, how long it has run (and its generation), subagents. **Chat** opens its room, **Change picture** (or a click on the big picture) opens the picture picker. Esc or a click outside closes it.
 - **Pictures at the size they are shown.** A new 128 px copy is used everywhere a picture is small (lists, rooms, tabs, Live panel; at most 64 px on screen, so still sharp on a Retina screen). 256 px is left for the picker and the orbit pop-up, 512 px for the profile card. A 128 px GIF is about a quarter of the 256 px one, so the window holds much less image data.

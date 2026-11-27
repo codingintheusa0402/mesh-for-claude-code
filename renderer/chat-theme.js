@@ -85,7 +85,8 @@
   // a session picture (renderer/avatars.js, keyed by the session name) replaces the initial; click = true opens the picker
   const picOf = (s, size) => (window.meshAvatars && window.meshAvatars.src(s.name, size)) || null;
   const avatar = (s, cls = '', click = false, size = 128) => { const pic = picOf(s, size);
-    return `<span class="ct-av${cls}${pic ? ' pic' : ''}" style="--av:${esc(colorOf(s))}"${click ? ` data-avpick="${esc(s.sid)}" title="Profile"` : ''}>${pic ? `<img src="${esc(pic)}" alt="" draggable="false">` : `<b>${esc(initial(s))}</b>`}</span>`; };
+    const inn = pic && window.meshAvatars.inner ? window.meshAvatars.inner(s.name, size) : pic ? `<img src="${esc(pic)}" alt="" draggable="false">` : null;
+    return `<span class="ct-av${cls}${pic ? ' pic' : ''}" style="--av:${esc(colorOf(s))}"${click ? ` data-avpick="${esc(s.sid)}" title="Profile"` : ''}>${inn || `<b>${esc(initial(s))}</b>`}</span>`; };
   const lastT = s => { const l = s.log || [], t = l.length ? l[l.length - 1].t : 0; const u = s.sinceUse ?? s.sinceWrite; return Math.max(t || 0, u != null ? Date.now() - u * 1000 : 0); };
   // another window (a detached room or list) marked something seen: take it over so badges match everywhere
   addEventListener('storage', e => {

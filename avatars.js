@@ -19,7 +19,7 @@ const tilde = p => String(p || '').replace(/^~(?=\/|$)/, HOME);
 const IMG = /\.(png|jpe?g|gif|webp)$/i;
 const SIZES = [128, 256, 512];   // 128: lists, rooms, tabs (≤ 64 px on screen, sharp at 2x); 256: picker, orbit; 512: the profile card
 // bump when the copies are made differently, so every cached copy is made again (pp = GIFs play forward, then backward)
-const RECIPE = 'pp2';
+const RECIPE = 'pp3';
 const FFMPEG = ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/usr/bin/ffmpeg'].find(p => { try { fs.accessSync(p, fs.constants.X_OK); return true; } catch { return false; } }) || 'ffmpeg';
 const FFPROBE = FFMPEG.replace(/ffmpeg$/, 'ffprobe');
 
@@ -86,7 +86,11 @@ function createAvatars({ cfg = {}, machine = os.hostname(), peer = () => null, o
   const slug = f => f.replace(/[^\w.-]+/g, '_').slice(0, 60) + '-' + crypto.createHash('sha1').update(f).digest('hex').slice(0, 8);
   const outOf = (f, size, ext) => path.join(cache, `${slug(f)}.${size}.${ext}`);
   const saveIndex = () => { try { fs.mkdirSync(cache, { recursive: true }); fs.writeFileSync(indexFile, JSON.stringify(index)); } catch { } };
-  const ready = f => { const e = index[f]; return !!(e && SIZES.every(s => fs.existsSync(outOf(f, s, e.ext)))); };
+  // a GIF also gets a frame sheet: its forward-then-backward loop at 128 px as one JPEG of 8 x 8 cells (cell i = frame i).
+  // The window shows small pictures from it and picks the frame from the clock (renderer/avatars.js), so a list that is
+  // rebuilt on every status change never restarts a picture, and every window shows the same frame.
+  const SHEET = 'sheet128', COLS = 8;
+  const ready = f => { const e = index[f]; return !!(e && SIZES.every(s => fs.existsSync(outOf(f, s, e.ext))) && (!e.sheet || fs.existsSync(outOf(f, SHEET, 'jpg')))); };
   function crop(f) {
     const src = path.join(dir, f), gif = /\.gif$/i.test(f), ext = gif ? 'gif' : 'png';
     fs.mkdirSync(cache, { recursive: true });
@@ -104,9 +108,19 @@ function createAvatars({ cfg = {}, machine = os.hostname(), peer = () => null, o
         : ['-y', '-v', 'error', '-i', src, '-vf', `${sq},scale=${size}:${size}:flags=lanczos`, '-frames:v', '1', tmp];
       execFile(FFMPEG, args, { timeout: 120e3 }, err => { if (err) { try { fs.unlinkSync(tmp); } catch { } return rej(err); } fs.renameSync(tmp, out); res(); });
     });
-    return (gif ? durOf().then(d => { K = d > 0.5 ? phase * (2 * d - 0.3) : 0; }) : Promise.resolve()).then(() => SIZES.reduce((p, s) => p.then(() => one(s)), Promise.resolve())).then(() => {
+    let sheet = null;
+    const makeSheet = () => new Promise(res => {
+      const out = outOf(f, SHEET, 'jpg'), tmp = out + '.tmp.jpg';
+      execFile(FFPROBE, ['-v', 'error', '-select_streams', 'v:0', '-count_frames', '-show_entries', 'stream=nb_read_frames,r_frame_rate', '-of', 'csv=p=0', src], { timeout: 60e3 }, (e, o) => {
+        const [rate, nb] = String(o || '').trim().split(','), [a, b] = String(rate || '').split('/').map(Number), fps = b ? a / b : a, n = 2 * (+nb || 0) - 2;
+        if (e || !(n >= 2 && n <= COLS * COLS) || !(fps > 0 && fps <= 60)) return res();   // too long for one sheet: the GIF copies are used
+        execFile(FFMPEG, ['-y', '-v', 'error', '-i', src, '-filter_complex', `[0:v]${sq},scale=128:128:flags=lanczos,split[f][r];[r]trim=start_frame=1,setpts=PTS-STARTPTS,reverse,trim=start_frame=1,setpts=PTS-STARTPTS[rv];[f][rv]concat=n=2:v=1,tile=${COLS}x${COLS}`, '-frames:v', '1', '-q:v', '2', tmp], { timeout: 120e3 },
+          err => { if (err) { try { fs.unlinkSync(tmp); } catch { } return res(); } fs.renameSync(tmp, out); sheet = { n, fps: Math.round(fps * 100) / 100, cols: COLS }; res(); });
+      });
+    });
+    return (gif ? durOf().then(d => { K = d > 0.5 ? phase * (2 * d - 0.3) : 0; }) : Promise.resolve()).then(() => SIZES.reduce((p, s) => p.then(() => one(s)), Promise.resolve())).then(() => gif && makeSheet()).then(() => {
       const sig = sigOf(f);
-      index[f] = { sig, ext, v: crypto.createHash('sha1').update(f + sig).digest('hex').slice(0, 10), from: 'local' }; saveIndex();
+      index[f] = { sig, ext, sheet, v: crypto.createHash('sha1').update(f + sig).digest('hex').slice(0, 10), from: 'local' }; saveIndex();
     });
   }
   // a picture that lives only on the other Mac: fetch its two cropped copies once
@@ -119,7 +133,10 @@ function createAvatars({ cfg = {}, machine = os.hostname(), peer = () => null, o
       ext = /gif/.test(r.type) ? 'gif' : 'png';
       fs.mkdirSync(cache, { recursive: true }); fs.writeFileSync(outOf(f, s, ext), r.buf);
     }
-    index[f] = { sig: 'peer', ext, v: crypto.createHash('sha1').update(f + 'peer' + Date.now()).digest('hex').slice(0, 10), from: 'peer' }; saveIndex();
+    let sheet = null;   // the frame sheet, when the other Mac has one (its layout comes with its snapshot, see map())
+    const pe = p.avatars && (Object.values(p.avatars() || {}).find(x => x && x.file === f && x.sheet) || {}).sheet;
+    if (ext === 'gif' && pe) { const r = await p.fetchRaw('/api/avatar', { f, s: 'sheet' }).catch(() => null); if (r && r.status === 200 && r.buf.length) { fs.writeFileSync(outOf(f, SHEET, 'jpg'), r.buf); sheet = pe; } }
+    index[f] = { sig: 'peer', ext, sheet, v: crypto.createHash('sha1').update(f + 'peer' + Date.now()).digest('hex').slice(0, 10), from: 'peer' }; saveIndex();
     return true;
   }
   const busy = new Map();
@@ -152,11 +169,12 @@ function createAvatars({ cfg = {}, machine = os.hostname(), peer = () => null, o
   return {
     dir, store,
     // for the snapshot: every pick with the version of its cropped copy here ('' = not ready yet)
-    map() { const o = {}; for (const [k, e] of Object.entries(picks)) o[k] = { file: e.file, t: e.t, v: e.file && index[e.file] && ready(e.file) ? index[e.file].v : '' }; return o; },
+    map() { const o = {}; for (const [k, e] of Object.entries(picks)) { const x = e.file && index[e.file] && ready(e.file) ? index[e.file] : null; o[k] = { file: e.file, t: e.t, v: x ? x.v : '', ...(x && x.sheet ? { sheet: x.sheet } : {}) }; } return o; },
     list() { const fl = files(); setTimeout(warm, 0); return { files: fl, picks: { ...picks }, dir, source: cfg.source || '', sourceUrl: (syncState() || {}).folderUrl || cfg.sourceUrl || '', sync: syncState(), canSync: !!syncCmd }; },
     set, merge: mergeRemote, ensure, warm,
     // a cropped copy for meshav:// and /api/avatar: { path, type } or null
     async image(f, size) {
+      if (size === 'sheet') { const e = await ensure(f); return e && e.sheet ? { path: outOf(path.basename(f), SHEET, 'jpg'), type: 'image/jpeg' } : null; }
       size = SIZES.find(x => x >= +size) || 512;   // the smallest copy at least that big
       const e = await ensure(f); if (!e) return null;
       return { path: outOf(path.basename(f), size, e.ext), type: e.ext === 'gif' ? 'image/gif' : 'image/png' };
