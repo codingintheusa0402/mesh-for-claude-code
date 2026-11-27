@@ -2,7 +2,8 @@
 //   source   a folder of pictures and GIFs (cfg.dir, default ~/.mesh/avatars). A team can fill it from a shared cloud
 //            folder with its own sync command (cfg.syncCmd, run every 15 min by the team's job and by "Sync now").
 //   cache    <dir>/.cache: each picture cropped to a centred square (a 16:9 GIF loses its sides and corner marks) at
-//            256 and 512 px; GIFs stay animated (ffmpeg palettegen/paletteuse). index.json there maps file → version.
+//            256 and 512 px; GIFs stay animated (ffmpeg palettegen/paletteuse) and
+//            play forward then backward (0…N-1, N-2…1) so the loop has no jump back to the first frame. index.json there maps file → version.
 //   picks    cfg.store (default ~/.mesh/avatars.json): { "<session name>": { file, t, by } } — keyed by the session's
 //            NAME, so a handoff, refresh or new generation keeps its picture. file null = back to the initial letter.
 //            Merged by name, last write wins (t), so a pick on either Mac survives: the file is re-read when it changes,
@@ -17,6 +18,8 @@ const HOME = os.homedir();
 const tilde = p => String(p || '').replace(/^~(?=\/|$)/, HOME);
 const IMG = /\.(png|jpe?g|gif|webp)$/i;
 const SIZES = [256, 512];
+// bump when the copies are made differently, so every cached copy is made again (pp = GIFs play forward, then backward)
+const RECIPE = 'pp1';
 const FFMPEG = ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/usr/bin/ffmpeg'].find(p => { try { fs.accessSync(p, fs.constants.X_OK); return true; } catch { return false; } }) || 'ffmpeg';
 
 function createAvatars({ cfg = {}, machine = os.hostname(), peer = () => null, onChange = () => { } } = {}) {
@@ -78,7 +81,7 @@ function createAvatars({ cfg = {}, machine = os.hostname(), peer = () => null, o
   }
 
   // ---------- the cropped copies ----------
-  const sigOf = f => { try { const st = fs.statSync(path.join(dir, f)); return st.isFile() ? `${st.size}-${Math.round(st.mtimeMs)}` : null; } catch { return null; } };
+  const sigOf = f => { try { const st = fs.statSync(path.join(dir, f)); return st.isFile() ? `${RECIPE}-${st.size}-${Math.round(st.mtimeMs)}` : null; } catch { return null; } };
   const slug = f => f.replace(/[^\w.-]+/g, '_').slice(0, 60) + '-' + crypto.createHash('sha1').update(f).digest('hex').slice(0, 8);
   const outOf = (f, size, ext) => path.join(cache, `${slug(f)}.${size}.${ext}`);
   const saveIndex = () => { try { fs.mkdirSync(cache, { recursive: true }); fs.writeFileSync(indexFile, JSON.stringify(index)); } catch { } };
@@ -90,7 +93,7 @@ function createAvatars({ cfg = {}, machine = os.hostname(), peer = () => null, o
     const one = size => new Promise((res, rej) => {
       const out = outOf(f, size, ext), tmp = out + '.tmp.' + ext;
       const args = gif
-        ? ['-y', '-v', 'error', '-i', src, '-filter_complex', `[0:v]${sq},scale=${size}:${size}:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a:diff_mode=rectangle`, '-loop', '0', tmp]
+        ? ['-y', '-v', 'error', '-i', src, '-filter_complex', `[0:v]${sq},scale=${size}:${size}:flags=lanczos,split[f][r];[r]trim=start_frame=1,setpts=PTS-STARTPTS,reverse,trim=start_frame=1,setpts=PTS-STARTPTS[rv];[f][rv]concat=n=2:v=1,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=sierra2_4a:diff_mode=rectangle`, '-loop', '0', tmp]
         : ['-y', '-v', 'error', '-i', src, '-vf', `${sq},scale=${size}:${size}:flags=lanczos`, '-frames:v', '1', tmp];
       execFile(FFMPEG, args, { timeout: 120e3 }, err => { if (err) { try { fs.unlinkSync(tmp); } catch { } return rej(err); } fs.renameSync(tmp, out); res(); });
     });

@@ -2,6 +2,9 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-27 — Animated session pictures loop back and forth
+- A GIF picture now plays forward and then backward (0…N-1, then N-2…1) before it starts again, so the loop has no jump back to the first frame and a 3 s GIF moves smoothly for about 6 s. The cached copies are made again once, by themselves (about 2 s per picture, one at a time).
+
 ## 2026-11-27 — Detached rooms: the header picture opens the picker again
 - In a room in its own window, clicking the session's picture (or letter) in the header did nothing: the header is the window's drag area and took the click. The picture is now outside the drag area, so a click opens the picture picker as in the main window.
 
