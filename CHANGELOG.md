@@ -2,6 +2,9 @@
 
 Newest first. Older changes are in the git log.
 
+## 2026-11-28 — Rooms showed an old copy of the conversation
+- A session's transcript can exist in two project folders under the same session id (it was resumed from another folder, or a move left an old copy). Mesh took the first one it found, so a room could show the conversation as it was weeks ago and skip everything since. It now takes the one written last. This also fixes the session refresh, which could copy the old transcript into its handoff. The folder scan is cached for 5 s per session.
+
 ## 2026-11-28 — Animated pictures never restart: frame sheets on one clock
 - Swapping picture elements back after a rebuild was not enough: the chat list is rebuilt whenever a status or the Unread / Working counts change, and the pictures still started over. Small animated pictures (lists, rooms, tabs, board) now come from a frame sheet instead of a GIF: the picture's forward-then-backward loop at 128 px as one JPEG of 8 x 8 frames, and one 10 fps timer picks the frame from the clock. A rebuilt row shows the right frame at once, all windows show the same frame, and each picture has its own offset so they are not in step. The timer pauses while the window is hidden and only moves pictures that are on screen (scrolled-away messages and hidden panels stay still), so it adds little CPU.
 - Better colour too: a JPEG sheet keeps all colours, where a GIF has 256 (382 KB for a 58-frame sheet against 650 KB for the 128 px GIF).

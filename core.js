@@ -135,10 +135,25 @@ function createCore(opts) {
     return [...histCache.values()].map(c => c.meta).filter(Boolean).sort((a, b) => b.mtime - a.mtime);
   }
   const histEntry = sid => [...histCache.values()].map(c => c.meta).find(m => m && m.sid === sid) || null;
+  // A session id can have a transcript in more than one project folder (a session resumed from another folder, or an
+  // old copy left by a move): the one written last is the live one. Taking the first found showed a room stuck on an
+  // old copy, weeks behind the conversation (2026-11-28).
+  const tCache = new Map();   // sid → { f, at }: one folder scan per session per 5 s (227 folders, called on every poll)
   function findTranscript(sid) {
-    const h = histEntry(sid); if (h) return h.file;
-    try { for (const d of fs.readdirSync(PROJ_DIR)) { const f = path.join(PROJ_DIR, d, sid + '.jsonl'); if (fs.existsSync(f)) return f; } } catch { }
-    return null;
+    const c = tCache.get(sid); if (c && Date.now() - c.at < 5000) return c.f;
+    const f = scanTranscript(sid); tCache.set(sid, { f, at: Date.now() }); if (tCache.size > 300) tCache.delete(tCache.keys().next().value);
+    return f;
+  }
+  function scanTranscript(sid) {
+    let best = null, bt = -1;
+    try {
+      for (const d of fs.readdirSync(PROJ_DIR)) {
+        const f = path.join(PROJ_DIR, d, sid + '.jsonl');
+        try { const t = fs.statSync(f).mtimeMs; if (t > bt) { bt = t; best = f; } } catch { }
+      }
+    } catch { }
+    if (best) return best;
+    const h = histEntry(sid); return h ? h.file : null;
   }
   // Rename = the same record `/rename` writes, appended to the transcript (shows in the /resume picker)
   function renameTranscript(sid, name) {
